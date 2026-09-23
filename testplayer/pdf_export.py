@@ -6,6 +6,7 @@ from pathlib import Path
 from xml.sax.saxutils import escape
 
 from PIL import Image as PILImage
+import pymupdf
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import ParagraphStyle
@@ -14,6 +15,7 @@ from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.platypus import HRFlowable, Image, KeepTogether, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
+from .attachments import attachment_extension, verified_attachment_bytes
 from .storage import now, read_session
 
 
@@ -26,6 +28,17 @@ MUTED = colors.HexColor("#607087")
 LINE = colors.HexColor("#E3EAF2")
 PANEL = colors.HexColor("#F5F9FC")
 TEAL = colors.HexColor("#0A9499")
+
+
+class AttachmentParagraph(Paragraph):
+    def __init__(self, text: str, style: ParagraphStyle, marker: str, positions: dict):
+        super().__init__(text, style)
+        self.marker = marker
+        self.positions = positions
+
+    def drawOn(self, canvas, x, y, _sW=0):
+        self.positions[self.marker] = (canvas.getPageNumber() - 1, x, y, self.width, self.height)
+        return super().drawOn(canvas, x, y, _sW)
 
 
 def _font() -> str:
@@ -98,6 +111,36 @@ def _rich_section(title: str, blocks: list[dict], directory: Path, styles: dict)
     return flow
 
 
+def _embed_step_files(source: Path, target: Path, directory: Path, records: list[dict], positions: dict) -> None:
+    with pymupdf.open(source) as pdf:
+        for record in records:
+            item = record["item"]
+            content = verified_attachment_bytes(directory, item)
+            marker = record["marker"]
+            if marker not in positions:
+                raise ValueError(f"O passo do anexo não foi localizado no PDF: {item['original_name']}")
+            page_no, x, y, width, height = positions[marker]
+            page = pdf[page_no]
+            name = item["original_name"]
+            description = (f"Caso {record['case_position']} | Execucao {record['run_no']} | "
+                           f"Passo {record['step_position']} | {name}")
+            embedded_name = f"{marker}{attachment_extension(name)}"
+            pdf.embfile_add(embedded_name, content, filename=name, ufilename=name, desc=description)
+            # The page annotation gives the reader a visible extraction point beside this step.
+            point = pymupdf.Point(min(x + width - 15, page.rect.width - 30), page.rect.height - y - height / 2)
+            annotation = page.add_file_annot(point, content, name, ufilename=name,
+                                             desc=description, icon="Paperclip")
+            annotation.set_colors(stroke=(0.04, 0.58, 0.60))
+            annotation.update()
+        pdf.save(target, garbage=4, deflate=True)
+    with pymupdf.open(target) as check:
+        for record in records:
+            item = record["item"]
+            embedded_name = f"{record['marker']}{attachment_extension(item['original_name'])}"
+            if check.embfile_get(embedded_name) != verified_attachment_bytes(directory, item):
+                raise ValueError(f"O anexo incorporado ao PDF falhou na verificação: {item['original_name']}")
+
+
 def generate_pdf(directory: Path, selected_case_ids: set[int] | None = None,
                  include_history: bool = False, output_name: str = "relatorio.pdf",
                  report_kind: str = "execution") -> Path:
@@ -113,10 +156,12 @@ def generate_pdf(directory: Path, selected_case_ids: set[int] | None = None,
             for run in sorted(case["previous_runs"], key=lambda item: item["run_no"]):
                 previous = dict(run["snapshot"])
                 previous["report_run_label"] = f"EXECUÇÃO {run['run_no']} · {_time(run['captured_at'])}"
+                previous["report_run_no"] = run["run_no"]
                 report_cases.append(previous)
         current = dict(case)
         current["report_run_label"] = (f"EXECUÇÃO {len(case['previous_runs']) + 1} · ATUAL"
                                        if include_history else "")
+        current["report_run_no"] = len(case["previous_runs"]) + 1
         report_cases.append(current)
     font = _font()
     styles = {
@@ -226,6 +271,8 @@ def generate_pdf(directory: Path, selected_case_ids: set[int] | None = None,
                                       ("RIGHTPADDING", (0, 0), (-1, -1), 0)]))
     story.extend([counts_table, Spacer(1, 6 * mm)])
 
+    attachment_positions: dict = {}
+    attachment_records: list[dict] = []
     for case in report_cases:
         accent = colors.HexColor(STATUS_COLORS[case["status"]])
         case_label = _text(f"CASO {case['position']:02d}  {case['report_run_label']}",
@@ -292,8 +339,16 @@ def generate_pdf(directory: Path, selected_case_ids: set[int] | None = None,
             if step.get("attachments"):
                 story.append(_text("ARQUIVOS ANEXADOS AO PASSO", styles["eyebrow"]))
                 for attachment in step["attachments"]:
-                    story.append(_text(f"{attachment['original_name']} · {attachment['size'] / 1024:.1f} KB",
-                                       styles["small"]))
+                    marker = attachment["id"]
+                    attachment_records.append({"marker": marker, "item": attachment,
+                                               "case_position": case["position"],
+                                               "run_no": case["report_run_no"],
+                                               "step_position": step["position"]})
+                    extension = attachment.get("extension") or attachment_extension(attachment["original_name"])
+                    size_text = (f"{attachment['size']} B" if attachment["size"] < 1024
+                                 else f"{attachment['size'] / 1024:.1f} KB")
+                    label = f"{attachment['original_name']} · {extension or 'sem extensão'} · {size_text}"
+                    story.append(AttachmentParagraph(escape(label), styles["small"], marker, attachment_positions))
             if step["comment"]:
                 story.extend(_section("Comentário do passo", step["comment"], [], directory, styles))
         story.extend(_rich_section("Comentário do caso", case["comment_blocks"], directory, styles))
@@ -302,6 +357,7 @@ def generate_pdf(directory: Path, selected_case_ids: set[int] | None = None,
     report = directory / "relatorios" / output_name
     report.parent.mkdir(parents=True, exist_ok=True)
     temporary = report.with_suffix(".pdf.tmp")
+    embedded_temporary = report.with_suffix(".embedded.pdf.tmp")
     document = SimpleDocTemplate(str(temporary), pagesize=A4, rightMargin=10 * mm, leftMargin=10 * mm,
                                  topMargin=10 * mm, bottomMargin=13 * mm,
                                  title="Relatório de falha" if report_kind == "failure" else "Relatório de execução")
@@ -318,7 +374,12 @@ def generate_pdf(directory: Path, selected_case_ids: set[int] | None = None,
 
     try:
         document.build(story, onFirstPage=footer, onLaterPages=footer)
-        os.replace(temporary, report)
+        if attachment_records:
+            _embed_step_files(temporary, embedded_temporary, directory, attachment_records, attachment_positions)
+            os.replace(embedded_temporary, report)
+        else:
+            os.replace(temporary, report)
     finally:
         temporary.unlink(missing_ok=True)
+        embedded_temporary.unlink(missing_ok=True)
     return report

@@ -31,7 +31,8 @@
       {% for case in group.cases %}
         <button type="button" class="case-nav-item" data-case-button="{{ case.id }}" data-folder="{{ group.name }}" data-status="{{ case.status }}" data-search="{{ (case.name ~ ' ' ~ case.folder)|lower }}">
           <span class="case-nav-number">{{ '%02d'|format(case.position) }}</span>
-          <span class="case-nav-content"><strong>{{ case.name }}</strong><small>{{ case.steps|length }} passos · {{ case.priority or 'Sem prioridade' }}</small><span class="status-tag status-{{ case.status }} case-nav-tag" data-case-tag="{{ case.id }}">{{ status_labels[case.status] }}</span></span>
+          <span class="case-nav-content"><strong>{{ case.name }}</strong><small>{{ case.steps|length }} passos · {{ case.priority or 'Sem prioridade' }}</small></span>
+          <span class="status-tag status-{{ case.status }} case-nav-tag" data-case-tag="{{ case.id }}">{{ status_labels[case.status] }}</span>
         </button>
       {% endfor %}
       {% endfor %}
@@ -66,14 +67,13 @@
           </div>
           <div class="step-execution">
             <div class="evidence-area observed-area" data-upload-url="{{ url_for('upload_image', session_id=meta.id, step_id=step.id) }}">
-              <div class="observed-heading"><strong>Resultado observado</strong><span>{{ 'Escreva ou cole imagens com Ctrl+V; Enter cria outra linha' if writable else 'Resultado registrado nesta sessão' }}</span></div>
+              <div class="observed-heading"><strong>Resultado observado</strong></div>
               {{ rich_editor(step.actual_blocks, 'Resultado observado') }}
-              {% if writable %}<div class="observed-actions"><span>Cole imagens no texto para visualizá-las e redimensioná-las.</span></div>{% endif %}
             </div>
-            <div class="step-attachments" data-attachment-upload-url="{{ url_for('upload_step_attachment', session_id=meta.id, step_id=step.id) }}">
+            <div class="step-attachments" data-attachment-upload-url="{{ url_for('upload_step_attachment', session_id=meta.id, step_id=step.id) }}" data-max-files="5" data-max-bytes="5242880">
               <div class="step-attachments-heading"><strong>Arquivos deste passo</strong><span data-attachment-count>{{ step.attachments|length }} arquivo(s)</span></div>
               <div class="step-attachment-list">{% for attachment in step.attachments %}<div class="step-attachment-item" data-attachment-id="{{ attachment.id }}"><a href="{{ url_for('download_step_attachment', session_id=meta.id, file_id=attachment.id) }}">{{ attachment.original_name }}</a><small>{{ (attachment.size / 1024)|round(1) }} KB</small>{% if writable %}<button type="button" class="remove-step-attachment" data-delete-url="{{ url_for('delete_step_attachment', session_id=meta.id, file_id=attachment.id) }}" aria-label="Remover {{ attachment.original_name }}">Remover</button>{% endif %}</div>{% endfor %}</div>
-              {% if writable %}<div class="step-attachment-actions"><span>Até 20 arquivos de 20 MB cada. Os arquivos são baixados, sem abrir no navegador.</span><button type="button" class="button button-secondary choose-step-attachment">Anexar arquivos</button><input type="file" class="visually-hidden step-attachment-input" multiple></div>{% endif %}
+              {% if writable %}<div class="step-attachment-actions"><button type="button" class="button button-secondary choose-step-attachment">Anexar arquivos</button><input type="file" class="visually-hidden step-attachment-input" multiple></div><p class="attachment-feedback" role="alert" hidden></p>{% endif %}
             </div>
             {% if step.comment %}<div class="legacy-step-comment"><b>Comentário anterior deste passo</b><p>{{ step.comment }}</p></div>{% endif %}
           </div>

@@ -15,6 +15,8 @@ from werkzeug.exceptions import HTTPException
 from PIL import Image, UnidentifiedImageError
 
 from .importer import FIELDS, LABELS, inspect_file
+from .attachments import (MAX_ATTACHMENT_BYTES, MAX_STEP_ATTACHMENTS, attachment_content_type,
+                          attachment_extension, safe_attachment_name, verified_attachment_bytes)
 from .pdf_export import generate_pdf
 from .html_export import generate_html
 from .bug_prompt import build_prompt, failed_case
@@ -25,8 +27,6 @@ from .storage import (create_draft, db, ensure_root, finalize, find_directory, g
 
 MAX_IMPORT_BYTES = 25 * 1024 * 1024
 MAX_IMAGE_BYTES = 10 * 1024 * 1024
-MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024
-MAX_STEP_ATTACHMENTS = 20
 IMAGE_TYPES = {"PNG": ("image/png", ".png"), "JPEG": ("image/jpeg", ".jpg"), "WEBP": ("image/webp", ".webp")}
 STATUSES = ("aprovado", "reprovado", "bloqueado", "em_andamento", "nao_executado")
 
@@ -339,19 +339,24 @@ def create_app(root: Path) -> Flask:
     @app.post("/api/sessao/<session_id>/passo/<int:step_id>/arquivo")
     def upload_step_attachment(session_id: str, step_id: int):
         directory = session_dir(session_id)
+        if request.content_length and request.content_length > MAX_ATTACHMENT_BYTES + 1_000_000:
+            return jsonify(error="Cada arquivo pode ter no máximo 5 MB."), 413
         incoming = request.files.get("arquivo")
         if incoming is None or not incoming.filename:
             return jsonify(error="Escolha um arquivo."), 400
-        original_name = PureWindowsPath(incoming.filename.replace("/", "\\")).name
-        original_name = "".join(ch for ch in original_name if ch.isprintable() and ch not in "\\/\x7f").strip(" .")[:180]
-        if not original_name:
-            return jsonify(error="Nome de arquivo inválido."), 400
+        try:
+            original_name = safe_attachment_name(incoming.filename)
+        except ValueError as exc:
+            return jsonify(error=str(exc)), 400
         content = incoming.read(MAX_ATTACHMENT_BYTES + 1)
         if len(content) > MAX_ATTACHMENT_BYTES:
-            return jsonify(error="Arquivo maior que 20 MB."), 413
+            return jsonify(error="Cada arquivo pode ter no máximo 5 MB."), 413
         if not content:
             return jsonify(error="Arquivo vazio."), 400
+        extension = attachment_extension(original_name)
+        content_type = attachment_content_type(original_name, incoming.mimetype)
         with db(directory) as connection:
+            connection.execute("BEGIN IMMEDIATE")
             step = connection.execute("SELECT s.position,s.case_id FROM steps s WHERE s.id=?", (step_id,)).fetchone()
             if step is None:
                 return jsonify(error="Passo não encontrado."), 404
@@ -368,16 +373,17 @@ def create_app(root: Path) -> Flask:
                 os.replace(temporary, target)
                 with connection:
                     connection.execute(
-                        "INSERT INTO step_attachments(id,step_id,relative_path,original_name,size,sha256,created_at) "
-                        "VALUES (?,?,?,?,?,?,?)",
-                        (file_id, step_id, relative.as_posix(), original_name, len(content),
+                        "INSERT INTO step_attachments(id,step_id,relative_path,original_name,extension,content_type,size,sha256,created_at) "
+                        "VALUES (?,?,?,?,?,?,?,?,?)",
+                        (file_id, step_id, relative.as_posix(), original_name, extension, content_type, len(content),
                          hashlib.sha256(content).hexdigest(), now()),
                     )
             except Exception:
                 temporary.unlink(missing_ok=True)
                 target.unlink(missing_ok=True)
                 raise
-        return jsonify(ok=True, id=file_id, name=original_name, size=len(content),
+        return jsonify(ok=True, id=file_id, name=original_name, extension=extension,
+                       content_type=content_type, size=len(content),
                        url=url_for("download_step_attachment", session_id=session_id, file_id=file_id),
                        delete_url=url_for("delete_step_attachment", session_id=session_id, file_id=file_id)), 201
 
@@ -385,16 +391,18 @@ def create_app(root: Path) -> Flask:
     def download_step_attachment(session_id: str, file_id: str):
         directory = session_dir(session_id)
         with db(directory) as connection:
-            item = connection.execute("SELECT relative_path,original_name FROM step_attachments WHERE id=?", (file_id,)).fetchone()
+            item = connection.execute("SELECT relative_path,original_name,size,sha256 FROM step_attachments WHERE id=?", (file_id,)).fetchone()
             if item is None:
-                item = connection.execute("SELECT relative_path,original_name FROM archived_attachments WHERE id=?", (file_id,)).fetchone()
+                item = connection.execute("SELECT relative_path,original_name,size,sha256 FROM archived_attachments WHERE id=?", (file_id,)).fetchone()
         if item is None:
             abort(404)
-        path = (directory / item["relative_path"]).resolve()
-        if not path.is_relative_to(directory.resolve()) or not path.is_file():
-            abort(404)
-        response = send_file(path, mimetype="application/octet-stream", as_attachment=True,
-                             download_name=item["original_name"])
+        try:
+            name = safe_attachment_name(item["original_name"])
+            content = verified_attachment_bytes(directory, dict(item))
+        except ValueError:
+            abort(409, "Arquivo anexado indisponível ou com integridade divergente.")
+        response = send_file(io.BytesIO(content), mimetype="application/octet-stream", as_attachment=True,
+                             download_name=name)
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["Content-Security-Policy"] = "sandbox; default-src 'none'"
         response.headers["Cache-Control"] = "private, no-store"

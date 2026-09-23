@@ -48,6 +48,16 @@
     const node = (tag, cls='', value='') => {const element=document.createElement(tag);if(cls)element.className=cls;if(value)element.textContent=value;return element;};
     const hasRich = blocks => (blocks||[]).some(block => block.type==='image'||(block.type==='text'&&block.text?.trim()));
     const timeText = value => value ? value.slice(0,19).replace('T',' ') : '';
+    const fileSize = size => size < 1024 ? `${size} B` : `${(size/1024).toFixed(1)} KB`;
+    function downloadAttachment(item){
+      const binary=atob(item.data);
+      const bytes=new Uint8Array(binary.length);
+      for(let i=0;i<binary.length;i++)bytes[i]=binary.charCodeAt(i);
+      const url=URL.createObjectURL(new Blob([bytes],{type:'application/octet-stream'}));
+      const link=document.createElement('a');link.href=url;link.download=item.name;link.hidden=true;
+      document.body.append(link);link.click();link.remove();
+      setTimeout(()=>URL.revokeObjectURL(url),60000);
+    }
     function pill(status){return node('span',`pill pill--${classes[status]||'pending'}`,labels[status]||status);}
     function rich(parent,blocks){
       const box=node('div','rich-blocks');
@@ -77,7 +87,16 @@
         if(hasRich(step.actual)){evidence.append(node('span','media-label','Resultado observado'));rich(evidence,step.actual);}
         if(step.attachments?.length){
           evidence.append(node('span','media-label','Arquivos anexados'));
-          const list=node('ul','attachment-list');for(const item of step.attachments)list.append(node('li','',`${item.name} · ${(item.size/1024).toFixed(1)} KB`));evidence.append(list);
+          const list=node('ul','attachment-list');
+          for(const item of step.attachments){
+            const row=node('li','attachment-entry');
+            const label=node('span','',`${item.name} · ${item.extension||'sem extensão'} · ${fileSize(item.size)}`);
+            const button=node('button','attachment-download','Baixar anexo');button.type='button';
+            button.setAttribute('aria-label',`Baixar anexo ${item.name}`);
+            button.addEventListener('click',()=>downloadAttachment(item));
+            row.append(label,button);list.append(row);
+          }
+          evidence.append(list);
         }
         card.append(evidence);
       }

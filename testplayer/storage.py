@@ -9,6 +9,7 @@ from contextlib import closing, contextmanager
 from datetime import datetime
 from pathlib import Path
 
+from .attachments import attachment_content_type, attachment_extension
 from .bug_prompt import DEFAULT_PROMPT, PROMPT_FILENAME
 
 
@@ -42,6 +43,7 @@ CREATE INDEX IF NOT EXISTS ix_evidence_step ON evidence(step_id);
 CREATE TABLE IF NOT EXISTS step_attachments (
   id TEXT PRIMARY KEY, step_id INTEGER NOT NULL REFERENCES steps(id),
   relative_path TEXT NOT NULL UNIQUE, original_name TEXT NOT NULL,
+  extension TEXT NOT NULL, content_type TEXT NOT NULL,
   size INTEGER NOT NULL, sha256 TEXT NOT NULL, created_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS ix_step_attachments_step ON step_attachments(step_id);
@@ -65,6 +67,8 @@ CREATE INDEX IF NOT EXISTS ix_archived_evidence_run ON archived_evidence(case_id
 CREATE TABLE IF NOT EXISTS archived_attachments (
   id TEXT PRIMARY KEY, case_id INTEGER NOT NULL REFERENCES cases(id),
   run_no INTEGER NOT NULL, relative_path TEXT NOT NULL, original_name TEXT NOT NULL,
+  extension TEXT NOT NULL, content_type TEXT NOT NULL,
+  size INTEGER NOT NULL, sha256 TEXT NOT NULL,
   FOREIGN KEY(case_id,run_no) REFERENCES case_runs(case_id,run_no)
 );
 CREATE INDEX IF NOT EXISTS ix_archived_attachments_run ON archived_attachments(case_id,run_no);
@@ -91,6 +95,7 @@ def migrate_sessions(root: Path) -> None:
     for path in paths:
         try:
             with closing(sqlite3.connect(path)) as connection:
+                connection.row_factory = sqlite3.Row
                 with connection:
                     columns = {row[1] for row in connection.execute("PRAGMA table_info(cases)")}
                     if "manual_status" not in columns:
@@ -127,13 +132,50 @@ def migrate_sessions(root: Path) -> None:
                     connection.execute("CREATE TABLE IF NOT EXISTS step_attachments ("
                                        "id TEXT PRIMARY KEY, step_id INTEGER NOT NULL REFERENCES steps(id),"
                                        "relative_path TEXT NOT NULL UNIQUE, original_name TEXT NOT NULL,"
+                                       "extension TEXT NOT NULL DEFAULT '', content_type TEXT NOT NULL DEFAULT 'application/octet-stream',"
                                        "size INTEGER NOT NULL, sha256 TEXT NOT NULL, created_at TEXT NOT NULL)")
                     connection.execute("CREATE INDEX IF NOT EXISTS ix_step_attachments_step ON step_attachments(step_id)")
                     connection.execute("CREATE TABLE IF NOT EXISTS archived_attachments ("
                                        "id TEXT PRIMARY KEY, case_id INTEGER NOT NULL REFERENCES cases(id),"
                                        "run_no INTEGER NOT NULL, relative_path TEXT NOT NULL, original_name TEXT NOT NULL,"
+                                       "extension TEXT NOT NULL DEFAULT '', content_type TEXT NOT NULL DEFAULT 'application/octet-stream',"
+                                       "size INTEGER NOT NULL DEFAULT 0, sha256 TEXT NOT NULL DEFAULT '',"
                                        "FOREIGN KEY(case_id,run_no) REFERENCES case_runs(case_id,run_no))")
                     connection.execute("CREATE INDEX IF NOT EXISTS ix_archived_attachments_run ON archived_attachments(case_id,run_no)")
+                    step_columns = {row[1] for row in connection.execute("PRAGMA table_info(step_attachments)")}
+                    if "extension" not in step_columns:
+                        connection.execute("ALTER TABLE step_attachments ADD COLUMN extension TEXT NOT NULL DEFAULT ''")
+                    if "content_type" not in step_columns:
+                        connection.execute("ALTER TABLE step_attachments ADD COLUMN content_type TEXT NOT NULL DEFAULT 'application/octet-stream'")
+                    archive_columns = {row[1] for row in connection.execute("PRAGMA table_info(archived_attachments)")}
+                    for name, definition in (
+                        ("extension", "TEXT NOT NULL DEFAULT ''"),
+                        ("content_type", "TEXT NOT NULL DEFAULT 'application/octet-stream'"),
+                        ("size", "INTEGER NOT NULL DEFAULT 0"),
+                        ("sha256", "TEXT NOT NULL DEFAULT ''"),
+                    ):
+                        if name not in archive_columns:
+                            connection.execute(f"ALTER TABLE archived_attachments ADD COLUMN {name} {definition}")
+                    for row in connection.execute("SELECT id,original_name FROM step_attachments WHERE extension=''"):
+                        connection.execute("UPDATE step_attachments SET extension=?,content_type=? WHERE id=?",
+                                           (attachment_extension(row["original_name"]),
+                                            attachment_content_type(row["original_name"]), row["id"]))
+                    for row in connection.execute(
+                        "SELECT case_id,run_no,snapshot_json FROM case_runs WHERE EXISTS ("
+                        "SELECT 1 FROM archived_attachments WHERE archived_attachments.case_id=case_runs.case_id "
+                        "AND archived_attachments.run_no=case_runs.run_no AND archived_attachments.sha256='')"
+                    ):
+                        snapshot = json.loads(row["snapshot_json"])
+                        for step in snapshot.get("steps", []):
+                            for item in step.get("attachments", []):
+                                name = item["original_name"]
+                                connection.execute(
+                                    "UPDATE archived_attachments SET extension=?,content_type=?,size=?,sha256=? "
+                                    "WHERE id=? AND sha256=''",
+                                    (item.get("extension") or attachment_extension(name),
+                                     item.get("content_type") or attachment_content_type(name),
+                                     item.get("size", 0), item.get("sha256", ""), item["id"]),
+                                )
         except (OSError, sqlite3.DatabaseError):
             continue
 
@@ -490,8 +532,12 @@ def start_case_run(directory: Path, case_id: int) -> int:
             )
             attachments = [item for step in snapshot["steps"] for item in step["attachments"]]
             connection.executemany(
-                "INSERT INTO archived_attachments(id,case_id,run_no,relative_path,original_name) VALUES (?,?,?,?,?)",
-                [(item["id"], case_id, run_no, item["relative_path"], item["original_name"])
+                "INSERT INTO archived_attachments(id,case_id,run_no,relative_path,original_name,extension,content_type,size,sha256) "
+                "VALUES (?,?,?,?,?,?,?,?,?)",
+                [(item["id"], case_id, run_no, item["relative_path"], item["original_name"],
+                  item.get("extension") or attachment_extension(item["original_name"]),
+                  item.get("content_type") or attachment_content_type(item["original_name"]),
+                  item["size"], item["sha256"])
                  for item in attachments],
             )
             connection.execute("DELETE FROM evidence WHERE step_id IN (SELECT id FROM steps WHERE case_id=?)", (case_id,))

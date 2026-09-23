@@ -855,11 +855,27 @@
   document.querySelectorAll('.step-attachments').forEach(area => {
     const button = area.querySelector('.choose-step-attachment');
     const picker = area.querySelector('.step-attachment-input');
+    const feedback = area.querySelector('.attachment-feedback');
+    const showAttachmentError = message => { feedback.textContent = message; feedback.hidden = false; setSaveState(message, true); };
     if (!button || !picker) return;
     button.addEventListener('click', () => picker.click());
     picker.addEventListener('change', async () => {
       const files = [...picker.files];
       picker.value = '';
+      if (!files.length) return;
+      const existing = area.querySelectorAll('.step-attachment-item').length;
+      const maxFiles = Number(area.dataset.maxFiles);
+      const maxBytes = Number(area.dataset.maxBytes);
+      if (existing + files.length > maxFiles) {
+        showAttachmentError(`Cada passo aceita até ${maxFiles} arquivos. Remova um anexo antes de continuar.`);
+        return;
+      }
+      const oversized = files.find(file => file.size > maxBytes);
+      if (oversized) {
+        showAttachmentError(`"${oversized.name}" excede o limite de 5 MB por arquivo.`);
+        return;
+      }
+      feedback.hidden = true;
       for (const file of files) {
         const task = (async () => {
           const data = new FormData();
@@ -890,7 +906,7 @@
           setSaveState('Arquivo anexado');
         })();
         pendingUploads.add(task);
-        try { await task; } catch (error) { setSaveState(error.message, true); }
+        try { await task; } catch (error) { showAttachmentError(error.message); break; }
         finally { pendingUploads.delete(task); }
       }
     });
@@ -906,8 +922,9 @@
         if (!response.ok) throw new Error(result.error || 'Falha ao remover arquivo.');
         remove.closest('.step-attachment-item').remove();
         area.querySelector('[data-attachment-count]').textContent = `${area.querySelectorAll('.step-attachment-item').length} arquivo(s)`;
+        feedback.hidden = true;
         setSaveState('Arquivo removido');
-      } catch (error) { remove.disabled = false; setSaveState(error.message, true); }
+      } catch (error) { remove.disabled = false; showAttachmentError(error.message); }
     });
   });
   document.addEventListener('paste', event => {

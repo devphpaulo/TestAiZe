@@ -8,6 +8,7 @@ from pathlib import Path
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
+from .attachments import attachment_extension, verified_attachment_bytes
 from .storage import read_session
 
 
@@ -48,6 +49,11 @@ def render_report_html(directory: Path, selected_case_ids: set[int], include_his
         return result
 
     def run(source: dict, label: str) -> dict:
+        def attachment(item: dict) -> dict:
+            content = verified_attachment_bytes(directory, item)
+            return {"name": item["original_name"], "extension": item.get("extension") or attachment_extension(item["original_name"]),
+                    "size": len(content), "data": base64.b64encode(content).decode("ascii")}
+
         return {
             "label": label, "status": source["status"], "precondition": source["precondition"],
             "notes": blocks(source.get("precondition_notes_blocks", source["precondition_blocks"])),
@@ -56,7 +62,7 @@ def render_report_html(directory: Path, selected_case_ids: set[int], include_his
                        "test_data": step["test_data"], "expected": step["expected"],
                        "status": step["status"], "status_changed_at": step["status_changed_at"],
                        "actual": blocks(step["actual_blocks"]),
-                       "attachments": [{"name": item["original_name"], "size": item["size"]}
+                       "attachments": [attachment(item)
                                        for item in step.get("attachments", [])]} for step in source["steps"]],
         }
 
