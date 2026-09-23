@@ -1,0 +1,37 @@
+name: Sugerir melhoria
+description: Ideia de melhoria ou nova funcionalidade
+title: "[Melhoria] "
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Antes de enviar: a proposta precisa ter **intenção clara, objetivo e valor real**,
+        sem fugir da ideia principal do projeto — ser uma ferramenta **100% local**.
+  - type: textarea
+    attributes:
+      label: Problema ou necessidade
+      description: O que falta ou incomoda hoje?
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Proposta
+      description: O que você sugere, em objetivo claro.
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Valor real
+      description: Quem se beneficia e como isso melhora o uso no dia a dia.
+    validations:
+      required: true
+  - type: dropdown
+    attributes:
+      label: Mantém o app 100% local?
+      options:
+        - Sim
+        - Não
+        - Não sei
+    validations:
+      required: true

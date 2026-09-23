@@ -1,0 +1,30 @@
+name: Reportar bug
+description: Algo não está funcionando como deveria
+title: "[Bug] "
+labels: [bug]
+body:
+  - type: textarea
+    attributes:
+      label: O que aconteceu?
+      description: Descreva o comportamento observado.
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: O que você esperava?
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Passos para reproduzir
+      placeholder: "1. ...\n2. ...\n3. ..."
+    validations:
+      required: true
+  - type: input
+    attributes:
+      label: Versão
+      description: Data do artefato baixado ou commit, se rodou do código-fonte.
+  - type: textarea
+    attributes:
+      label: Evidências
+      description: Prints e/ou trechos do log (Documentos/Executor Local de Testes/logs). Não cole dados sensíveis.
