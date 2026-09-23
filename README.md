@@ -4,7 +4,19 @@
 ![GitHub language count](https://img.shields.io/github/languages/count/devphpaulo/TestAiZe?style=for-the-badge)
 ![GitHub last commit](https://img.shields.io/github/last-commit/devphpaulo/TestAiZe?style=for-the-badge)
 
-Executor local de testes manuais para Windows. Importa planilhas de casos (`.xlsx` / CSV), permite executar passo a passo com status, anotações e evidências, e exporta relatórios em PDF ou HTML. Roda 100% offline em `127.0.0.1`, com ícone na bandeja — usando o `.exe`, não precisa instalar Python.
+<p align="center">
+  <img src="testplayer/static/favicon.svg" alt="Logo TestAiZe" width="128">
+</p>
+
+TestAiZe é uma cópia do Zephyr Scale que roda inteira no seu computador. Sem Jira, sem nuvem, sem mensalidade: você importa a planilha de casos, executa os testes passo a passo com evidências e sai com um relatório em PDF ou HTML pronto para enviar. Tudo offline — os dados nunca saem da sua máquina.
+
+## Por que usar
+
+- **Fluxo que você já conhece** — os mesmos conceitos do Zephyr Scale: casos, passos, status, evidências, ciclos e pastas. Sem precisar de conta Atlassian.
+- **Zero instalação** — um único `.exe`. Dois cliques e o app abre no navegador, quieto na bandeja do Windows.
+- **Privacidade total** — roda 100% offline; planilhas, evidências e relatórios ficam nos seus Documentos.
+- **Relatórios prontos** — PDF e HTML com resumo, distribuição de resultados e evidências. Caso reprovado? Um clique gera o PDF da falha e copia o prompt de bug.
+- **Reteste sem retrabalho** — reexecute um caso sem perder as execuções anteriores, filtre por pasta ou enxergue tudo no modo Kanban.
 
 ## Requisitos
 
@@ -29,7 +41,7 @@ pip install -r requirements.txt
 TestAiZe.exe        # ou: python launcher.py
 ```
 
-O navegador abre e o app fica na bandeja do Windows. Fluxo básico: importar planilha → executar casos no Test Player → exportar relatório (PDF/HTML). O passo a passo completo está no [manual de uso](docs/manual.md).
+Importar planilha → executar casos no Test Player → exportar relatório. O passo a passo completo está no [manual de uso](docs/manual.md).
 
 ## Contribuição
 
