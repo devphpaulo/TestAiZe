@@ -1,0 +1,141 @@
+{% extends 'base.html' %}
+{% block title %}Execução · TestAíZé{% endblock %}
+{% block header_actions %}<a class="view-switch" href="{{ url_for('kanban', session_id=record.meta.id) }}">Modo Kanban</a>{% endblock %}
+{% block content %}
+{% set meta = record.meta %}
+{% macro rich_editor(blocks, placeholder, editable=true) %}
+<div class="rich-editor {% if not editable or not writable %}rich-editor-readonly{% endif %}" {% if editable and writable %}data-rich-editor contenteditable="true" role="textbox" aria-multiline="true" aria-label="{{ placeholder }}"{% endif %}>{%- for block in blocks -%}{%- if block.type == 'text' -%}<p class="rich-paragraph" data-rich-text>{{ block.text }}</p>{%- elif block.type == 'image' -%}<figure class="rich-image" contenteditable="false" data-evidence-id="{{ block.id }}" data-width="{{ block.width }}" style="width:{{ block.width }}%"><a href="{{ url_for('view_image', session_id=meta.id, evidence_id=block.id) }}" target="_blank" rel="noopener" title="Abrir imagem em tamanho original"><img src="{{ url_for('view_image', session_id=meta.id, evidence_id=block.id) }}" alt="{{ block.item.original_name }}"></a><figcaption>{{ block.item.original_name }}</figcaption>{% if writable and editable %}<button type="button" class="rich-image-remove" data-delete-url="{{ url_for('delete_image', session_id=meta.id, evidence_id=block.id) }}" aria-label="Excluir imagem">×</button><span class="rich-image-resize" role="slider" tabindex="0" aria-label="Largura da imagem" aria-valuemin="20" aria-valuemax="100" aria-valuenow="{{ block.width }}" title="Arraste para ajustar a largura">↘</span>{% endif %}</figure>{%- endif -%}{%- endfor -%}</div>
+{% endmacro %}
+<div class="player-shell" data-player data-session-id="{{ meta.id }}" data-writable="{{ 'true' if writable else 'false' }}">
+  <aside class="case-sidebar" aria-label="Casos da execução">
+    <div class="sidebar-head">
+      <a href="{{ url_for('home') }}" class="back-link">← Todas as sessões</a>
+      <div class="sidebar-label">{{ 'EXECUÇÃO CONCLUÍDA · EDITÁVEL' if meta.state == 'concluida' else 'EXECUÇÃO EM ANDAMENTO' }}</div>
+      <h2>Casos de teste</h2>
+      <p>{{ record.cases|length }} casos · {{ record.steps_total }} passos</p>
+      <span class="folder-filter-label">FILTRAR POR CICLO</span>
+      <div class="cycle-picker" data-cycle-picker>
+        <button type="button" class="cycle-trigger" id="cycle-trigger" aria-expanded="false" aria-controls="cycle-popover"><span id="cycle-trigger-label">{{ 'Todas as pastas' if not initial_folders else initial_folders|length ~ ' selecionada(s)' }}</span><span aria-hidden="true">⌄</span></button>
+        <div class="cycle-popover" id="cycle-popover" hidden>
+          <input type="search" id="cycle-search" class="cycle-search" placeholder="Buscar ciclo ou pasta" aria-label="Buscar ciclo ou pasta">
+          <label class="cycle-option cycle-option-all"><input type="checkbox" id="cycle-all" {% if not initial_folders %}checked{% endif %}> Todas as pastas</label>
+          <div class="cycle-options">{% for group in folder_groups %}<label class="cycle-option" data-cycle-option data-search="{{ (group.label ~ ' ' ~ group.name)|lower }}"><input type="checkbox" class="cycle-check" value="{{ group.name }}" data-label="{{ group.label }}" {% if not initial_folders or group.name in initial_folders %}checked{% endif %}><span>{{ group.label }}</span><small>{{ group.total }}</small></label>{% endfor %}</div>
+          <div class="cycle-picker-foot"><span id="cycle-count"></span><button type="button" id="cycle-done">Concluir</button></div>
+        </div>
+      </div>
+      <label class="search-wrap"><span aria-hidden="true">⌕</span><input id="case-search" type="search" placeholder="Buscar caso ou pasta" aria-label="Buscar caso ou pasta"></label>
+    </div>
+    <nav class="case-nav" aria-label="Selecionar caso">
+      {% for group in folder_groups %}
+      <div class="case-folder-group" data-folder-group="{{ group.name }}" data-folder-label="{{ group.label }}"><span class="case-folder-title" title="{{ group.name or group.label }}">▤ {{ group.label }}</span><span class="case-folder-count">{{ group.total }}</span></div>
+      {% for case in group.cases %}
+        <button type="button" class="case-nav-item" data-case-button="{{ case.id }}" data-folder="{{ group.name }}" data-status="{{ case.status }}" data-search="{{ (case.name ~ ' ' ~ case.folder)|lower }}">
+          <span class="case-nav-number">{{ '%02d'|format(case.position) }}</span>
+          <span class="case-nav-content"><strong>{{ case.name }}</strong><small>{{ case.steps|length }} passos · {{ case.priority or 'Sem prioridade' }}</small><span class="status-tag status-{{ case.status }} case-nav-tag" data-case-tag="{{ case.id }}">{{ status_labels[case.status] }}</span></span>
+        </button>
+      {% endfor %}
+      {% endfor %}
+      <p class="case-filter-empty is-hidden" id="case-filter-empty">Nenhum caso encontrado nesta pasta.</p>
+    </nav>
+    <div class="sidebar-foot"><span class="local-indicator"><span></span> Salvo nesta máquina</span></div>
+  </aside>
+  <div class="sidebar-resizer" data-resize="left" role="separator" aria-label="Redimensionar lista de casos" aria-orientation="vertical" tabindex="0"></div>
+
+  <main class="player-main">
+    <div class="player-toolbar">
+      <div class="toolbar-left"><button type="button" class="sidebar-toggle" id="toggle-left" aria-label="Recolher lista de casos" aria-expanded="true" title="Recolher ou abrir lista de casos">☰</button><div class="breadcrumb">Sessões <span>/</span> {{ 'Concluída' if meta.state == 'concluida' else 'Em andamento' }} <span>/</span> <b id="breadcrumb-case">Caso 01</b></div></div>
+      <div class="toolbar-right"><span id="save-state" class="save-state">{{ 'Tudo salvo' if writable else 'Somente leitura' }}</span><span class="toolbar-divider"></span><span class="session-id">#{{ meta.id[:8] }}</span><button type="button" class="sidebar-toggle" id="toggle-right" aria-label="Recolher resumo" aria-expanded="true" title="Recolher ou abrir resumo">▤</button></div>
+    </div>
+
+    <div class="player-content">
+      <div class="progress-strip"><div><strong id="progress-count">{{ record.counts.aprovado + record.counts.reprovado + record.counts.bloqueado }}</strong><span id="progress-total">de {{ record.cases|length }} casos com resultado</span></div><div class="progress-track" id="progress-track" aria-label="Distribuição de casos por status">{% for status in ['aprovado','reprovado','bloqueado','em_andamento','nao_executado'] %}<i class="progress-segment segment-{{ status }}" data-progress-status="{{ status }}"></i>{% endfor %}</div><span id="progress-percent">{{ ((record.counts.aprovado + record.counts.reprovado + record.counts.bloqueado) / (record.cases|length or 1) * 100)|round|int }}%</span></div>
+
+      {% for case in record.cases %}
+      <section class="case-view {% if not loop.first %}is-hidden{% endif %}" data-case-view="{{ case.id }}" data-case-index="{{ loop.index }}" data-manual-status="{{ case.manual_status }}" data-case-save-url="{{ url_for('case_result', session_id=meta.id, case_id=case.id) }}">
+        <div class="case-heading"><div><div class="case-kicker">CASO {{ '%02d'|format(loop.index) }} <span>·</span> {{ case.sheet }}</div><h2>{{ case.name }}</h2><p>{{ case.folder or 'Sem pasta' }}</p></div><div class="case-status-actions"><span class="status-tag status-{{ case.status }}" data-case-status="{{ case.id }}">{{ status_labels[case.status] }}</span><span class="case-status-label">STATUS DO CASO</span><div class="status-button-row case-status-buttons" role="group" aria-label="Status do caso {{ loop.index }}">{% for code, label, icon in [('nao_executado','Não executado','○'),('em_andamento','Em andamento','◐'),('bloqueado','Bloqueado','⊘'),('reprovado','Reprovado','×'),('aprovado','Aprovado','✓')] %}<button type="button" class="status-icon-button status-choice-{{ code }} {% if case.manual_status == code %}selected{% endif %}" data-value="{{ code }}" aria-label="{{ label }}" title="{{ label }}" aria-pressed="{{ 'true' if case.manual_status == code else 'false' }}" {% if not writable %}disabled{% endif %}><span aria-hidden="true">{{ icon }}</span></button>{% endfor %}</div><button type="button" class="auto-status-button {% if not case.manual_status %}selected{% endif %}" aria-pressed="{{ 'false' if case.manual_status else 'true' }}" {% if not writable %}disabled{% endif %}>Automático pelos passos</button></div></div>
+        <div class="case-meta"><span><b>Prioridade</b>{{ case.priority or 'Não informada' }}</span><span><b>Status</b>{{ case.source_status or 'Não informado' }}</span><span><b>Passos</b>{{ case.steps|length }}</span></div>
+        <section class="precondition evidence-area case-evidence-area" data-upload-url="{{ url_for('upload_case_image', session_id=meta.id, case_id=case.id, scope='precondition') }}"><span>PRÉ-CONDIÇÕES</span><div class="precondition-source"><strong>Da planilha</strong><p>{{ case.precondition or 'Sem pré-condições na planilha.' }}</p></div><label class="precondition-notes-label">Anotações e evidências</label>{{ rich_editor(case.precondition_notes_blocks, 'Anotações e evidências nas pré-condições') }}{% if writable %}<div class="observed-actions"><span>Escreva ou cole imagens nesta área.</span></div>{% endif %}</section>
+        <div class="steps-title"><h3>Passos do teste</h3><span>{{ case.steps|length }} etapas</span></div>
+
+        {% for step in case.steps %}
+        <article class="step-card" data-step-id="{{ step.id }}" data-case-id="{{ case.id }}" data-status="{{ step.status }}" data-save-url="{{ url_for('result', session_id=meta.id, step_id=step.id) }}">
+          <div class="step-card-head"><span class="step-number">{{ '%02d'|format(step.position) }}</span><div class="step-action"><span>PASSO {{ step.position }}</span><h4>{{ step.action }}</h4></div><div class="step-status-wrap"><div class="status-button-row step-status-buttons" role="group" aria-label="Status do passo {{ step.position }}">{% for code, label, icon in [('nao_executado','Não executado','○'),('em_andamento','Em andamento','◐'),('bloqueado','Bloqueado','⊘'),('reprovado','Reprovado','×'),('aprovado','Aprovado','✓')] %}<button type="button" class="status-icon-button status-choice-{{ code }} {% if step.status == code %}selected{% endif %}" data-value="{{ code }}" aria-label="{{ label }}" title="{{ label }}" aria-pressed="{{ 'true' if step.status == code else 'false' }}" {% if not writable %}disabled{% endif %}><span aria-hidden="true">{{ icon }}</span></button>{% endfor %}</div><small class="step-status-time" data-status-time>{{ 'Status registrado em ' ~ step.status_changed_at[:19].replace('T', ' ') if step.status_changed_at else '' }}</small></div></div>
+          <div class="step-inputs">
+            <div><label>DADOS DE TESTE</label><p>{{ step.test_data }}</p></div>
+            <div><label>RESULTADO ESPERADO</label><p>{{ step.expected }}</p></div>
+          </div>
+          <div class="step-execution">
+            <div class="evidence-area observed-area" data-upload-url="{{ url_for('upload_image', session_id=meta.id, step_id=step.id) }}">
+              <div class="observed-heading"><strong>Resultado observado</strong><span>{{ 'Escreva ou cole imagens com Ctrl+V; Enter cria outra linha' if writable else 'Resultado registrado nesta sessão' }}</span></div>
+              {{ rich_editor(step.actual_blocks, 'Resultado observado') }}
+              {% if writable %}<div class="observed-actions"><span>Cole imagens no texto para visualizá-las e redimensioná-las.</span></div>{% endif %}
+            </div>
+            <div class="step-attachments" data-attachment-upload-url="{{ url_for('upload_step_attachment', session_id=meta.id, step_id=step.id) }}">
+              <div class="step-attachments-heading"><strong>Arquivos deste passo</strong><span data-attachment-count>{{ step.attachments|length }} arquivo(s)</span></div>
+              <div class="step-attachment-list">{% for attachment in step.attachments %}<div class="step-attachment-item" data-attachment-id="{{ attachment.id }}"><a href="{{ url_for('download_step_attachment', session_id=meta.id, file_id=attachment.id) }}">{{ attachment.original_name }}</a><small>{{ (attachment.size / 1024)|round(1) }} KB</small>{% if writable %}<button type="button" class="remove-step-attachment" data-delete-url="{{ url_for('delete_step_attachment', session_id=meta.id, file_id=attachment.id) }}" aria-label="Remover {{ attachment.original_name }}">Remover</button>{% endif %}</div>{% endfor %}</div>
+              {% if writable %}<div class="step-attachment-actions"><span>Até 20 arquivos de 20 MB cada. Os arquivos são baixados, sem abrir no navegador.</span><button type="button" class="button button-secondary choose-step-attachment">Anexar arquivos</button><input type="file" class="visually-hidden step-attachment-input" multiple></div>{% endif %}
+            </div>
+            {% if step.comment %}<div class="legacy-step-comment"><b>Comentário anterior deste passo</b><p>{{ step.comment }}</p></div>{% endif %}
+          </div>
+        </article>
+        {% endfor %}
+        <div class="failure-actions {% if case.status != 'reprovado' or not (case.steps|selectattr('status', 'equalto', 'reprovado')|list) %}is-hidden{% endif %}" data-failure-actions data-prompt-url="{{ url_for('bug_report_prompt', session_id=meta.id, case_id=case.id) }}">
+          <div><strong>Falha nesta execução</strong><small>Relatório apenas deste caso e da execução atual, com suas evidências.</small></div>
+          <div class="failure-action-buttons"><form action="{{ url_for('failure_report', session_id=meta.id, case_id=case.id) }}" method="post" class="failure-report-form"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button type="submit" class="button button-secondary">Gerar relatório da falha</button></form><button type="button" class="button button-secondary copy-bug-prompt">Copiar prompt de bug</button></div>
+        </div>
+        <div class="case-comment evidence-area case-evidence-area" data-upload-url="{{ url_for('upload_case_image', session_id=meta.id, case_id=case.id, scope='comment') }}"><label>Comentário do caso</label><p>Escreva ou cole evidências no ponto desejado.</p>{{ rich_editor(case.comment_blocks, 'Comentário do caso') }}{% if writable %}<div class="observed-actions"><span>Enter cria outra linha abaixo da imagem.</span></div>{% endif %}</div>
+        <div class="case-run-bar"><div><strong>Execução atual · {{ case.previous_runs|length + 1 }}</strong><span>O histórico deste caso fica nesta sessão.</span></div>{% if writable %}<form action="{{ url_for('new_case_run', session_id=meta.id, case_id=case.id) }}" method="post" class="retest-form"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button type="submit" class="button button-secondary">Iniciar nova execução deste caso</button></form>{% endif %}</div>
+        {% if case.previous_runs %}<section class="case-run-history" aria-label="Execuções anteriores deste caso"><h3>Execuções anteriores <span>{{ case.previous_runs|length }}</span></h3>
+          {% for run in case.previous_runs %}{% set prior = run.snapshot %}<details class="case-run-card"><summary><div class="run-title"><strong>Execução {{ run.run_no }}</strong><time>{{ run.captured_at[:19].replace('T', ' ') }}</time></div><span class="status-tag status-{{ run.status }}">{{ status_labels[run.status] }}</span><span class="run-expand-icon" aria-hidden="true"></span></summary><div class="case-run-detail">
+            <div class="run-section"><h4>Pré-condições da planilha</h4><p class="run-source">{{ prior.precondition }}</p><h4>Anotações e evidências</h4>{{ rich_editor(prior.precondition_notes_blocks if prior.precondition_notes_blocks is defined else prior.precondition_blocks, 'Pré-condições anteriores', false) }}</div>
+            {% for old_step in prior.steps %}<div class="run-step"><div class="run-step-head"><div><span>PASSO {{ old_step.position }}</span><h4>{{ old_step.action }}</h4></div><span class="status-tag status-{{ old_step.status }}">{{ status_labels[old_step.status] }}</span></div>{% if old_step.status_changed_at %}<small>Status registrado em {{ old_step.status_changed_at[:19].replace('T', ' ') }}</small>{% endif %}<div class="run-step-reference"><div><b>Dados de teste</b><p>{{ old_step.test_data }}</p></div><div><b>Resultado esperado</b><p>{{ old_step.expected }}</p></div></div><div class="run-section"><h5>Resultado observado</h5>{{ rich_editor(old_step.actual_blocks, 'Resultado observado anteriormente', false) }}</div>{% if old_step.attachments is defined and old_step.attachments %}<div class="run-section"><h5>Arquivos anexados</h5><div class="step-attachment-list">{% for attachment in old_step.attachments %}<div class="step-attachment-item"><a href="{{ url_for('download_step_attachment', session_id=meta.id, file_id=attachment.id) }}">{{ attachment.original_name }}</a><small>{{ (attachment.size / 1024)|round(1) }} KB</small></div>{% endfor %}</div></div>{% endif %}{% if old_step.comment %}<p class="run-old-comment">{{ old_step.comment }}</p>{% endif %}</div>{% endfor %}
+            <div class="run-section"><h4>Comentário do caso</h4>{{ rich_editor(prior.comment_blocks, 'Comentário anterior', false) }}</div>
+          </div></details>{% endfor %}
+        </section>{% endif %}
+        <div class="case-navigation"><button class="button button-secondary" type="button" data-prev-case {% if loop.first %}disabled{% endif %}>← Caso anterior</button><button class="button button-primary" type="button" data-next-case {% if loop.last %}disabled{% endif %}>Próximo caso →</button></div>
+      </section>
+      {% endfor %}
+    </div>
+  </main>
+  <div class="sidebar-resizer" data-resize="right" role="separator" aria-label="Redimensionar resumo" aria-orientation="vertical" tabindex="0"></div>
+
+  <aside class="execution-sidebar" aria-label="Resumo da sessão">
+    <div class="right-panel-top"><span>VISÃO GERAL</span><span class="right-icon">↗</span></div>
+    <h2>Resumo dos casos</h2>
+    <span id="summary-scope" class="summary-scope">Todas as pastas</span>
+    <p>O status do caso pode ser definido diretamente ou calculado pelos passos. Nada altera a planilha original.</p>
+    <div class="summary-list">
+      {% for status, label in [('aprovado','Aprovados'),('reprovado','Reprovados'),('bloqueado','Bloqueados'),('em_andamento','Em andamento'),('nao_executado','Não executados')] %}<div><span class="summary-dot state-{{ status }}"></span><span>{{ label }}</span><strong data-count="{{ status }}">{{ record.counts[status] }}</strong></div>{% endfor %}
+    </div>
+    <div class="side-rule"></div>
+    <div class="source-info"><span>ARQUIVO DE ORIGEM</span><strong>{{ meta.source_name }}</strong><small>Importado em {{ meta.created_at[:16].replace('T', ' ') }}</small></div>
+    {% if meta.parent_id %}<div class="source-info"><span>EXECUÇÃO ANTERIOR</span><a href="{{ url_for('player', session_id=meta.parent_id) }}">#{{ meta.parent_id[:8] }} →</a></div>{% endif %}
+    <div class="side-spacer"></div>
+    {% if meta.state == 'rascunho' %}
+      <form action="{{ url_for('finish', session_id=meta.id) }}" method="post" id="finish-form"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button type="submit" class="button button-secondary side-action">Finalizar execução</button></form>
+    {% endif %}
+    <small class="side-note">Exportar um relatório não finaliza esta execução.</small>
+    <button type="button" class="button button-primary side-action" id="open-report-modal">Exportar Relatório</button>
+    {% if meta.state == 'concluida' %}<form action="{{ url_for('new_execution', session_id=meta.id) }}" method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button type="submit" class="button button-ghost side-action">Nova execução a partir desta</button></form>{% endif %}
+  </aside>
+</div>
+<dialog id="pdf-modal" class="pdf-modal" aria-labelledby="pdf-modal-title">
+  <form action="{{ url_for('make_pdf', session_id=meta.id) }}" data-pdf-url="{{ url_for('make_pdf', session_id=meta.id) }}" data-html-url="{{ url_for('make_html', session_id=meta.id) }}" method="post" id="pdf-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <div class="pdf-modal-head"><div><span class="modal-eyebrow">EXPORTAÇÃO</span><h2 id="pdf-modal-title">Exportar relatório</h2><p>Escolha o formato, as execuções e os casos.</p></div><button type="button" class="modal-close" id="close-pdf-modal" aria-label="Fechar">×</button></div>
+    <fieldset class="report-scope report-format"><legend>FORMATO DO ARQUIVO</legend><label><input type="radio" name="report_format" value="pdf" checked><span><strong>PDF</strong><small>Documento para compartilhar ou imprimir.</small></span></label><label><input type="radio" name="report_format" value="html"><span><strong>HTML</strong><small>Navegação interativa entre casos e evidências.</small></span></label></fieldset>
+    <fieldset class="report-scope"><legend>EXECUÇÕES DE CADA CASO</legend><label><input type="radio" name="run_scope" value="latest" checked><span><strong>Somente a última</strong><small>Relatório com a execução atual de cada caso.</small></span></label><label><input type="radio" name="run_scope" value="all"><span><strong>Todas as execuções</strong><small>Inclui os retestes anteriores, seus passos e evidências.</small></span></label></fieldset>
+    <div class="pdf-selection-actions"><label><input type="checkbox" id="pdf-all" checked> Todos os casos</label><span id="pdf-selected-count">{{ record.cases|length }} de {{ record.cases|length }} selecionados</span></div>
+    <div class="pdf-folder-list">
+      {% for group in folder_groups %}
+      <section class="pdf-folder" data-pdf-folder="{{ loop.index }}">
+        <label class="pdf-folder-heading"><input type="checkbox" class="pdf-folder-check" checked><span><strong title="{{ group.name or group.label }}">{{ group.label }}</strong><small>{{ group.total }} {{ 'caso' if group.total == 1 else 'casos' }}</small></span></label>
+        <div class="pdf-cases">{% for case in group.cases %}<label class="pdf-case"><input type="checkbox" class="pdf-case-check" name="case_id" value="{{ case.id }}" checked><span>{{ case.name }}</span><span class="status-tag status-{{ case.status }}" data-report-case-tag="{{ case.id }}">{{ status_labels[case.status] }}</span></label>{% endfor %}</div>
+      </section>
+      {% endfor %}
+    </div>
+    <div class="pdf-modal-foot"><span id="pdf-selection-error" role="alert"></span><button type="button" class="button button-secondary" id="cancel-pdf-modal">Cancelar</button><button type="submit" class="button button-primary" id="submit-pdf">Gerar PDF</button></div>
+  </form>
+</dialog>
+{% endblock %}
+

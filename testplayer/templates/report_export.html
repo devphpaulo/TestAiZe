@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>TestAíZé | {{ 'Relatório de Falha' if report_kind == 'failure' else 'Relatório de Execução' }} — {{ meta.id[:8] }}</title>
+  <style>{{ report_css|safe }}</style>
+</head>
+<body>
+  <article class="report" aria-label="{{ 'Relatório de falha' if report_kind == 'failure' else 'Relatório de execução' }} TestAíZé">
+    <header class="brandbar">
+      <div class="brand">
+        <div class="brand-icon"><img src="{{ logo_src }}" alt="Ícone do TestAíZé"></div>
+        <div><div class="brand-name">Test<em>AíZé</em></div><div class="brand-subtitle">Execução de Casos de Teste</div></div>
+      </div>
+      <div class="brand-report"><div class="brand-report-label">RELATÓRIO DE {{ 'FALHA' if report_kind == 'failure' else 'EXECUÇÃO' }}</div><div class="brand-report-id">Sessão {{ meta.id[:8] }}</div></div>
+    </header>
+    <main class="content">
+      <div class="heading-row">
+        <div><h1>{{ 'Relatório de Falha' if report_kind == 'failure' else 'Relatório de Execução' }}</h1><div class="intro">{{ meta.source_name }} &nbsp;·&nbsp; {{ run_count }} execução(ões)</div></div>
+        <span class="pill {{ 'pill--passed' if meta.state == 'concluida' else 'pill--progress' }}">{{ 'Concluída' if meta.state == 'concluida' else 'Em andamento' }}</span>
+      </div>
+      <section class="stats" aria-label="Informações da sessão">
+        <div class="stat"><div class="stat-label">Casos no relatório</div><div class="stat-value stat-value--large">{{ case_count }}</div></div>
+        <div class="stat"><div class="stat-label">Início da sessão</div><div class="stat-value">{{ started_at }}</div></div>
+        <div class="stat"><div class="stat-label">Gerado em</div><div class="stat-value">{{ generated_at }}</div></div>
+      </section>
+      <section class="distribution" aria-label="Distribuição dos resultados">
+        <div class="section-title">Distribuição dos resultados</div>
+        <div class="results" id="report-results"></div>
+      </section>
+      <nav class="case-switcher" id="case-switcher" aria-label="Selecionar caso de teste"></nav>
+      <div id="case-detail"></div>
+    </main>
+    <footer class="footer"><strong>TestAíZé</strong><span>Sessão {{ meta.id[:8] }} &nbsp;·&nbsp; Relatório de {{ 'Falha' if report_kind == 'failure' else 'Execução' }}</span></footer>
+  </article>
+  <script type="application/json" id="report-data">{{ payload|safe }}</script>
+  <script>
+  (() => {
+    const cases = JSON.parse(document.getElementById('report-data').textContent);
+    const printAll = {{ 'true' if print_all else 'false' }};
+    const nav = document.getElementById('case-switcher');
+    const detail = document.getElementById('case-detail');
+    const labels = {aprovado:'Aprovado',reprovado:'Reprovado',bloqueado:'Bloqueado',em_andamento:'Em andamento',nao_executado:'Não executado'};
+    const classes = {aprovado:'passed',reprovado:'failed',bloqueado:'blocked',em_andamento:'progress',nao_executado:'pending'};
+    const order = ['aprovado','reprovado','bloqueado','em_andamento','nao_executado'];
+    const node = (tag, cls='', value='') => {const element=document.createElement(tag);if(cls)element.className=cls;if(value)element.textContent=value;return element;};
+    const hasRich = blocks => (blocks||[]).some(block => block.type==='image'||(block.type==='text'&&block.text?.trim()));
+    const timeText = value => value ? value.slice(0,19).replace('T',' ') : '';
+    function pill(status){return node('span',`pill pill--${classes[status]||'pending'}`,labels[status]||status);}
+    function rich(parent,blocks){
+      const box=node('div','rich-blocks');
+      for(const block of blocks||[]){
+        if(block.type==='text'&&block.text?.trim())box.append(node('p','',block.text));
+        if(block.type==='image'){
+          const figure=node('figure');figure.style.width=`${Math.max(20,Math.min(100,Number(block.width)||100))}%`;
+          if(block.src){const img=node('img');img.src=block.src;img.alt=block.name||'Evidência';figure.append(img);}
+          else figure.append(node('p','empty-note','Imagem indisponível'));
+          figure.append(node('figcaption','',block.name||'Imagem'));box.append(figure);
+        }
+      }
+      parent.append(box);
+    }
+    function stepCard(step){
+      const card=node('div',`step step--${classes[step.status]||'pending'}`);
+      const top=node('div','step-top');top.append(node('span','step-label',`PASSO ${String(step.position).padStart(2,'0')}`));
+      top.append(node('span','step-status',labels[step.status]+(step.status_changed_at?`  ·  ${timeText(step.status_changed_at)}`:'')));
+      card.append(top,node('div','step-action',step.action));
+      const data=node('div','step-data');
+      for(const [label,value] of [['DADOS DE TESTE',step.test_data],['RESULTADO ESPERADO',step.expected]]){
+        const field=node('div');field.append(node('span','step-data-label',label),node('div',`step-data-value${value?'':' step-data-value--empty'}`,value||'Não informado'));data.append(field);
+      }
+      card.append(data);
+      if(hasRich(step.actual)||step.attachments?.length){
+        const evidence=node('div','step-evidence');
+        if(hasRich(step.actual)){evidence.append(node('span','media-label','Resultado observado'));rich(evidence,step.actual);}
+        if(step.attachments?.length){
+          evidence.append(node('span','media-label','Arquivos anexados'));
+          const list=node('ul','attachment-list');for(const item of step.attachments)list.append(node('li','',`${item.name} · ${(item.size/1024).toFixed(1)} KB`));evidence.append(list);
+        }
+        card.append(evidence);
+      }
+      return card;
+    }
+    function runSection(run,showLabel){
+      const group=node('section','run-group');
+      if(showLabel){const line=node('div','case-top');line.append(node('div','run-label',run.label),pill(run.status));group.append(line);}
+      const pre=node('section','preconditions');pre.append(node('strong','','Pré-condições'));
+      const preContent=node('div','precondition-content');preContent.append(node('p','',run.precondition||'Não informado'));
+      if(hasRich(run.notes)){preContent.append(node('span','media-label','Anotações e evidências'));rich(preContent,run.notes);}
+      pre.append(preContent);group.append(pre);
+      const heading=node('div','steps-heading');heading.append(node('div','section-title','Passos do caso'));
+      const failed=run.steps.filter(step=>step.status==='reprovado').length;
+      heading.append(node('span','',`${run.steps.length} passos  ·  ${failed} reprovado(s)`));group.append(heading);
+      for(const step of run.steps)group.append(stepCard(step));
+      if(hasRich(run.comment)){
+        const comment=node('section','commentary');comment.append(node('div','section-title','Comentário do caso'));rich(comment,run.comment);group.append(comment);
+      }
+      return group;
+    }
+    function casePage(item){
+      const page=node('section','case-page');
+      const head=node('section',`case case--${classes[item.status]||'pending'}`);
+      const top=node('div','case-top');const title=node('div');title.append(node('div','case-id',`CASO ${String(item.position).padStart(2,'0')}`),node('h2','',item.name));top.append(title,pill(item.status));head.append(top);
+      head.append(node('div','case-info',`Pasta: ${item.folder||'Sem pasta'}`));
+      head.append(node('div','case-info',`Prioridade: ${item.priority||'Não informada'}  ·  Status importado: ${item.source_status||'Não informado'}`));page.append(head);
+      for(const run of item.runs)page.append(runSection(run,item.runs.length>1));
+      return page;
+    }
+    const results=document.getElementById('report-results');
+    for(const status of order){
+      const count=cases.filter(item=>item.status===status).length;
+      const card=node('div',`result result--${classes[status]}`);
+      const numbers=node('div','result-numbers');numbers.append(node('span','result-count',String(count)),node('span','result-percent',`${Math.round(count/(cases.length||1)*100)}%`));
+      card.append(node('div','result-mark'),numbers,node('div','result-name',labels[status]));results.append(card);
+    }
+    function show(index){
+      detail.replaceChildren(casePage(cases[index]));
+      nav.querySelectorAll('button').forEach((button,i)=>button.setAttribute('aria-current',String(i===index)));
+    }
+    if(printAll){for(const item of cases)detail.append(casePage(item));}
+    else{
+      if(cases.length>1){cases.forEach((item,index)=>{const button=node('button','',`Caso ${String(item.position).padStart(2,'0')} · ${item.name}`);button.type='button';button.addEventListener('click',()=>show(index));nav.append(button);});}
+      else nav.hidden=true;
+      if(cases.length)show(0);
+    }
+  })();
+  </script>
+</body>
+</html>

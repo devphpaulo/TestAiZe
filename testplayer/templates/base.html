@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="csrf-token" content="{{ csrf_token }}">
+  <meta name="color-scheme" content="light dark">
+  <title>{% block title %}TestAíZé{% endblock %}</title>
+  <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
+  <script>try { document.documentElement.dataset.theme = localStorage.getItem('executor-theme') === 'light' ? 'light' : 'dark'; const accent = localStorage.getItem('testaize-accent'); document.documentElement.dataset.accent = ['roxo','verde','vermelho','amarelo'].includes(accent) ? accent : 'neutro'; } catch (_) { document.documentElement.dataset.theme = 'dark'; document.documentElement.dataset.accent = 'neutro'; }</script>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <script defer src="{{ url_for('static', filename='app.js') }}"></script>
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="{{ url_for('home') }}" aria-label="Página inicial do TestAíZé">
+      <img class="brand-mark" src="{{ url_for('static', filename='favicon.svg') }}" alt="">
+      <span>TestAíZé</span>
+    </a>
+    <nav class="top-links" aria-label="Navegação principal">
+      <a href="{{ url_for('home') }}">Sessões</a>
+      {% block header_actions %}{% endblock %}
+      <div class="accent-picker" id="accent-picker">
+        <button type="button" class="accent-trigger" id="accent-trigger" aria-label="Escolher cor do aplicativo" aria-haspopup="true" aria-expanded="false" aria-controls="accent-options"><span class="palette-mark" aria-hidden="true"></span><span class="accent-trigger-label">Cores</span><span class="accent-trigger-chevron" aria-hidden="true"></span></button>
+        <div class="accent-options" id="accent-options" role="group" aria-label="Cores do aplicativo" hidden>
+          <div class="accent-popover-header"><span>PERSONALIZAÇÃO</span><strong>Cor de destaque</strong><p>Escolha uma cor para o modo atual.</p></div>
+          <div class="accent-grid">{% for code, name in [('neutro','Neutro'),('roxo','Roxo'),('verde','Verde'),('vermelho','Vermelho'),('amarelo','Amarelo')] %}<button type="button" class="accent-option" data-accent-choice="{{ code }}" aria-pressed="false"><span class="accent-swatch swatch-{{ code }}" aria-hidden="true"></span><span>{{ name }}</span></button>{% endfor %}</div>
+        </div>
+      </div>
+      <button type="button" id="theme-toggle" class="theme-toggle" aria-label="Ativar modo claro">☼ Modo claro</button>
+      <span class="local-indicator"><span></span> Nesta máquina</span>
+    </nav>
+  </header>
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      <div class="flash-stack" role="status">
+        {% for category, message in messages %}<div class="flash {{ category }}">{{ message }}</div>{% endfor %}
+      </div>
+    {% endif %}
+  {% endwith %}
+  {% block content %}{% endblock %}
+</body>
+</html>

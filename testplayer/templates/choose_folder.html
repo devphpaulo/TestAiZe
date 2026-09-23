@@ -1,0 +1,37 @@
+{% extends 'base.html' %}
+{% block title %}Escolher pasta · TestAíZé{% endblock %}
+{% block header_actions %}<a class="view-switch" href="{{ url_for('kanban', session_id=record.meta.id) }}">Modo Kanban</a>{% endblock %}
+{% block content %}
+{% set meta = record.meta %}
+{% set status_names = [('aprovado','Aprovados'),('reprovado','Reprovados'),('bloqueado','Bloqueados'),('em_andamento','Em andamento'),('nao_executado','Não executados')] %}
+{% macro progress(group) %}
+  <div class="folder-progress" tabindex="0" aria-label="Distribuição dos {{ group.total }} casos por status">
+    <div class="folder-progress-track">
+      {% for status, label in status_names %}{% if group.counts[status] %}<span class="progress-segment segment-{{ status }}" style="width:{{ group.counts[status] / group.total * 100 }}%"></span>{% endif %}{% endfor %}
+    </div>
+    <div class="progress-tooltip" role="tooltip"><strong>{{ group.total }} casos nesta seleção</strong>
+      {% for status, label in status_names %}<span><i class="state-{{ status }}"></i>{{ label }} <b>{{ group.counts[status] }}/{{ group.total }} · {{ (group.counts[status] / (group.total or 1) * 100)|round|int }}%</b></span>{% endfor %}
+    </div>
+  </div>
+{% endmacro %}
+<main class="page folder-page">
+  <a href="{{ url_for('home') }}" class="back-link">← Todas as sessões</a>
+  <div class="eyebrow"><span class="eyebrow-line"></span> ABRIR EXECUÇÃO</div>
+  <div class="folder-intro"><div><h1>Escolha o que abrir.</h1><p>{{ meta.source_name }} · {{ record.cases|length }} casos em {{ folder_groups|length }} {{ 'pasta' if folder_groups|length == 1 else 'pastas' }}</p></div><span class="status-tag {{ 'status-em_andamento' if meta.state == 'rascunho' else 'status-aprovado' }}">{{ 'Em andamento' if meta.state == 'rascunho' else 'Concluída' }}</span></div>
+  <div class="folder-list-heading"><span>PASTA</span><span>PROGRESSO POR STATUS</span><span>RESULTADOS</span></div>
+  <a class="folder-row all-folders" href="{{ url_for('player', session_id=meta.id) }}">
+    <span class="folder-row-main"><span class="folder-icon">▦</span><span><strong>Todas as pastas</strong><small>{{ record.cases|length }} casos · visão completa da sessão</small></span></span>
+    {{ progress(all_progress) }}
+    <span class="folder-row-end"><b>{{ (all_progress.done / (all_progress.total or 1) * 100)|round|int }}%</b><span>Abrir →</span></span>
+  </a>
+  {% for group in folder_groups %}
+  <a class="folder-row" href="{{ url_for('player', session_id=meta.id, pasta=group.name) }}">
+    <span class="folder-row-main"><span class="folder-icon">▤</span><span><strong title="{{ group.name or group.label }}">{{ group.label }}</strong><small>{{ group.total }} {{ 'caso' if group.total == 1 else 'casos' }} · {{ group.done }} com resultado</small></span></span>
+    {{ progress(group) }}
+    <span class="folder-row-end"><b>{{ group.percent }}%</b><span>Abrir →</span></span>
+  </a>
+  {% endfor %}
+  <p class="folder-hint">Passe o mouse sobre a barra de progresso para ver quantos casos há em cada status.</p>
+</main>
+{% endblock %}
+

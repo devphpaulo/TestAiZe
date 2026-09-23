@@ -1,0 +1,45 @@
+{% extends 'base.html' %}
+{% block title %}Prévia da importação · TestAíZé{% endblock %}
+{% block content %}
+<main class="page preview-page">
+  <a class="back-link" href="{{ url_for('home') }}">← Voltar para sessões</a>
+  <div class="eyebrow"><span class="eyebrow-line"></span> IMPORTAÇÃO <span class="eyebrow-index">02 / 03</span></div>
+  <div class="page-heading"><div><h1>Revise antes de executar.</h1><p>{{ parsed.filename }}</p></div><span class="count-pill">{{ selected_cases }} casos · {{ selected_steps }} passos</span></div>
+
+  <form method="post" class="preview-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    {% if parsed.errors or selected_errors %}
+      <section class="notice error" role="alert"><strong>Há pontos para revisar.</strong><ul>{% for error in selected_errors[:12] %}<li>{{ error }}</li>{% endfor %}</ul></section>
+    {% endif %}
+    <section class="panel mapping-panel">
+      <div class="panel-topline"><span>MAPEAMENTO DE COLUNAS</span><span>01</span></div>
+      <h2>Campos reconhecidos</h2>
+      <p>O layout de oito colunas da sua planilha é identificado automaticamente. Ajuste somente se outro arquivo usar cabeçalhos diferentes.</p>
+      <div class="mapping-grid">
+        {% for field in fields %}
+          <label class="mapping-field"><span>{{ labels[field] }}{% if field in ['name', 'step'] %} <b>*</b>{% endif %}</span>
+            <select name="map_{{ field }}"><option value="">Não mapear</option>
+            {% for header in parsed.headers %}<option value="{{ loop.index0 }}" {% if parsed.mapping.get(field) == loop.index0 %}selected{% endif %}>{{ header or 'Coluna ' ~ loop.index }}</option>{% endfor %}</select>
+          </label>
+        {% endfor %}
+      </div>
+      <button type="submit" name="action" value="map" class="button button-secondary">Aplicar mapeamento</button>
+    </section>
+    <section class="panel sheet-panel">
+      <div class="panel-topline"><span>ABAS E CASOS</span><span>02</span></div>
+      <h2>O que será importado</h2>
+      <div class="sheet-list">
+        {% for sheet in parsed.sheets %}
+        <div class="sheet-item">
+          <label class="sheet-header"><input type="checkbox" name="sheet" value="{{ sheet.name }}" {% if sheet.name in selected %}checked{% endif %}><span class="sheet-name">{{ sheet.name }}</span><span class="sheet-count">{{ sheet.cases|length }} casos · {{ sheet.steps }} passos</span></label>
+          {% if sheet.errors %}<div class="sheet-errors">{% for error in sheet.errors[:5] %}<p>{{ error }}</p>{% endfor %}</div>{% endif %}
+          {% if sheet.cases %}<div class="sheet-sample"><span>PRIMEIROS CASOS</span>{% for case in sheet.cases[:3] %}<p><b>{{ '%02d'|format(loop.index) }}</b> {{ case.name }} <small>{{ case.steps|length }} passos</small></p>{% endfor %}</div>{% endif %}
+        </div>
+        {% endfor %}
+      </div>
+    </section>
+    <div class="preview-actions"><p>O arquivo original será copiado para a execução local.</p><button type="submit" name="action" value="start" class="button button-primary" {% if selected_errors or not selected_cases %}disabled{% endif %}>Iniciar execução <span aria-hidden="true">→</span></button></div>
+  </form>
+</main>
+{% endblock %}
+

@@ -1,0 +1,89 @@
+{% extends 'base.html' %}
+{% block title %}Sessões · TestAíZé{% endblock %}
+{% block content %}
+<main class="page home-page">
+  <div class="eyebrow"><span class="eyebrow-line"></span> WORKSPACE LOCAL <span class="eyebrow-index">01 / 03</span></div>
+  <section class="home-hero">
+    <div>
+      <h1>Execute seus testes.<br><span>Guarde cada resultado.</span></h1>
+      <p>Importe seus casos, acompanhe passo a passo e retome qualquer execução nesta máquina.</p>
+    </div>
+    <div class="hero-side" aria-hidden="true"><span>CT</span><span>↗</span></div>
+  </section>
+
+  <div class="home-grid">
+    <section class="panel import-panel" aria-labelledby="import-title">
+      <div class="panel-topline"><span>NOVA EXECUÇÃO</span><span>01</span></div>
+      <h2 id="import-title">Comece pela planilha</h2>
+      <p>CSV em UTF-8 ou Excel .xlsx. Seus casos e passos aparecem no player após a prévia.</p>
+      <form action="{{ url_for('upload') }}" method="post" enctype="multipart/form-data" class="import-form">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <label class="dropzone" for="arquivo">
+          <span class="drop-icon">↑</span>
+          <strong>Escolher arquivo</strong>
+          <span class="drop-subtitle">ou arraste para esta área</span>
+          <span class="file-name" data-file-name>Nenhum arquivo selecionado</span>
+        </label>
+        <input id="arquivo" name="arquivo" type="file" accept=".xlsx,.csv" required class="visually-hidden">
+        <button class="button button-primary" type="submit">Ver prévia <span aria-hidden="true">→</span></button>
+      </form>
+    </section>
+    <aside class="panel how-panel" aria-labelledby="how-title">
+      <div class="panel-topline"><span>COMO FUNCIONA</span><span>02</span></div>
+      <h2 id="how-title">Um fluxo claro, do começo ao fim.</h2>
+      <ol class="how-list">
+        <li><span>01</span><div><strong>Importe</strong><small>Revise as abas, os casos e os passos.</small></div></li>
+        <li><span>02</span><div><strong>Execute</strong><small>Marque resultados e cole imagens em cada passo.</small></div></li>
+        <li><span>03</span><div><strong>Finalize</strong><small>Abra depois ou exporte o relatório em PDF.</small></div></li>
+      </ol>
+    </aside>
+  </div>
+
+  <section class="sessions-section" aria-labelledby="sessions-title">
+    <div class="section-heading">
+      <div><div class="eyebrow section-eyebrow">HISTÓRICO LOCAL</div><h2 id="sessions-title">Suas execuções</h2></div>
+      <span class="count-pill">{{ drafts|length + completed|length }} sessões</span>
+    </div>
+    {% if drafts %}
+      <h3 class="list-label">Em andamento <span>{{ drafts|length }}</span></h3>
+      <div class="session-list">
+        {% for item in drafts %}
+          <div class="session-row">
+            <a class="session-open" href="{{ url_for('choose_folder', session_id=item.id) }}"><span class="session-symbol">↗</span><span class="session-main"><strong>{{ item.source_name }}</strong><small>{{ item.cases }} casos · {{ item.steps }} passos · iniciada em {{ item.created_at[:16].replace('T', ' ') }}</small></span><span class="status-tag status-nao_executado">Rascunho</span><span class="row-arrow">→</span></a>
+            <button type="button" class="session-delete" data-delete-session data-delete-url="{{ url_for('delete_session', session_id=item.id) }}" data-session-name="{{ item.source_name }}" aria-label="Excluir sessão {{ item.source_name }}">Excluir</button>
+          </div>
+        {% endfor %}
+      </div>
+    {% endif %}
+    {% if completed %}
+      <h3 class="list-label">Concluídas <span>{{ completed|length }}</span></h3>
+      <div class="session-list">
+        {% for item in completed %}
+          <div class="session-row">
+            <a class="session-open" href="{{ url_for('choose_folder', session_id=item.id) }}"><span class="session-symbol">✓</span><span class="session-main"><strong>{{ item.source_name }}</strong><small>{{ item.cases }} casos · {{ item.steps }} passos · finalizada em {{ item.finalized_at[:16].replace('T', ' ') }}</small></span><span class="status-tag status-aprovado">Concluída</span><span class="row-arrow">→</span></a>
+            <button type="button" class="session-delete" data-delete-session data-delete-url="{{ url_for('delete_session', session_id=item.id) }}" data-session-name="{{ item.source_name }}" aria-label="Excluir sessão {{ item.source_name }}">Excluir</button>
+          </div>
+        {% endfor %}
+      </div>
+    {% endif %}
+    {% if not drafts and not completed %}
+      <div class="empty-state"><span class="empty-mark">[ 0 ]</span><strong>Nenhuma execução ainda.</strong><p>Importe uma planilha para começar. Seu trabalho será salvo aqui automaticamente.</p></div>
+    {% endif %}
+  </section>
+</main>
+<dialog id="delete-session-modal" class="delete-session-modal" aria-labelledby="delete-session-title">
+  <form method="post" id="delete-session-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <div class="delete-modal-header"><span class="delete-modal-eyebrow">GERENCIAR SESSÃO</span><button type="button" id="cancel-session-delete-top" class="delete-modal-close" aria-label="Fechar">×</button></div>
+    <h2 id="delete-session-title">Excluir esta sessão?</h2>
+    <p class="delete-session-name" id="delete-session-name"></p>
+    <p class="delete-modal-intro">Você deseja excluir também os arquivos da pasta? Escolha como remover a sessão da lista.</p>
+    <div class="delete-choices">
+      <label class="delete-choice"><input type="radio" name="action" value="move" checked><span><strong>Não, guardar os arquivos</strong><small>Mover a sessão e suas evidências para a pasta <b>excluidas/</b>.</small></span></label>
+      <label class="delete-choice delete-choice-permanent"><input type="radio" name="action" value="delete"><span><strong>Sim, excluir também os arquivos</strong><small>Apagar a pasta da sessão, imagens e PDFs do disco.</small></span></label>
+    </div>
+    <div class="delete-modal-actions"><button type="button" class="button button-secondary" id="cancel-session-delete">Cancelar</button><button type="submit" class="button button-primary" id="confirm-session-delete">Mover para Excluídas</button></div>
+  </form>
+</dialog>
+{% endblock %}
+

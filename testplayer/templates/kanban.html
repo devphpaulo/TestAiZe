@@ -1,0 +1,15 @@
+{% extends 'base.html' %}
+{% block title %}Kanban · TestAíZé{% endblock %}
+{% block header_actions %}<a class="view-switch active" href="{{ url_for('choose_folder', session_id=record.meta.id) }}">Modo lista</a>{% endblock %}
+{% block content %}
+<main class="kanban-page">
+  <div class="kanban-intro"><div><a href="{{ url_for('choose_folder', session_id=record.meta.id) }}" class="back-link">← Ciclos e pastas</a><div class="eyebrow"><span class="eyebrow-line"></span> VISÃO KANBAN</div><h1>Casos por status</h1><p>{{ record.meta.source_name }} · {{ record.cases|length }} casos na sessão</p></div><a class="button button-secondary" href="{{ url_for('player', session_id=record.meta.id) }}">Abrir Test Player</a></div>
+  <nav class="kanban-filters" aria-label="Filtrar ciclos"><a class="kanban-filter {% if not chosen %}active{% endif %}" href="{{ url_for('kanban', session_id=record.meta.id) }}">Todos os ciclos</a>{% for group in folder_groups %}<a class="kanban-filter {% if group.name in chosen %}active{% endif %}" href="{{ url_for('kanban', session_id=record.meta.id, pasta=group.name) }}" title="{{ group.name }}">{{ group.label }} <span>{{ group.total }}</span></a>{% endfor %}</nav>
+  <div class="kanban-board">
+    {% for status, label, cases in columns %}
+    <section class="kanban-column status-column-{{ status }}"><div class="kanban-column-head"><span class="summary-dot state-{{ status }}"></span><h2>{{ label }}</h2><b>{{ cases|length }}</b></div><div class="kanban-stack">{% for case in cases %}<article class="kanban-card"><span class="kanban-case-index">CASO {{ '%02d'|format(case.position) }}</span><h3>{{ case.name }}</h3><p title="{{ case.folder }}">{{ case.folder or 'Sem pasta' }}</p><div class="kanban-case-foot"><span>{{ case.steps|length }} passos</span><a href="{{ url_for('player', session_id=record.meta.id, pasta=case.folder) }}#caso-{{ case.id }}">Ver no player</a></div></article>{% endfor %}{% if not cases %}<div class="kanban-empty">Nenhum caso neste status.</div>{% endif %}</div></section>
+    {% endfor %}
+  </div>
+</main>
+{% endblock %}
+
