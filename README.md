@@ -8,7 +8,7 @@
   <img src="testplayer/static/favicon.svg" alt="Logo TestAiZe" width="128">
 </p>
 
-TestAiZe é uma cópia do Zephyr Scale que roda inteira no seu computador. Sem Jira, sem nuvem, sem mensalidade: você importa a planilha de casos, executa os testes passo a passo com evidências e sai com um relatório em PDF ou HTML pronto para enviar. Tudo offline — os dados nunca saem da sua máquina.
+TestAiZe é uma cópia do Zephyr Scale que roda inteira no seu computador — 100% local e gratuita. Sem Jira, sem nuvem, sem mensalidade: você importa a planilha de casos, executa os testes passo a passo com evidências e sai com um relatório em PDF ou HTML pronto para enviar. Tudo offline — os dados nunca saem da sua máquina.
 
 ## Por que usar
 
@@ -43,9 +43,11 @@ TestAiZe.exe        # ou: python launcher.py
 
 Importar planilha → executar casos no Test Player → exportar relatório. O passo a passo completo está no [manual de uso](docs/manual.md).
 
+> Por enquanto os casos de teste entram somente via planilha. A criação e edição manual de casos dentro do app está em idealização para uma versão futura.
+
 ## Contribuição
 
-Issues e pull requests são bem-vindos: faça um fork, crie um branch, commite e abra o PR.
+Contribuições são muito bem-vindas — em código ou em issues com sugestões de melhoria. Abra issues com intenção clara, objetivo e valor real, sem fugir da ideia principal do projeto: ser uma ferramenta 100% local. Para contribuir com código: faça um fork, crie um branch, commite e abra o PR.
 
 ## Autor
 
