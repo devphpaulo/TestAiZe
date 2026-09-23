@@ -3,6 +3,7 @@
 ![GitHub repo size](https://img.shields.io/github/repo-size/devphpaulo/TestAiZe?style=for-the-badge)
 ![GitHub language count](https://img.shields.io/github/languages/count/devphpaulo/TestAiZe?style=for-the-badge)
 ![GitHub last commit](https://img.shields.io/github/last-commit/devphpaulo/TestAiZe?style=for-the-badge)
+![GitHub license](https://img.shields.io/github/license/devphpaulo/TestAiZe?style=for-the-badge)
 
 <p align="center">
   <img src="testplayer/static/favicon.svg" alt="Logo TestAiZe" width="128">
@@ -56,3 +57,7 @@ Contribuições são muito bem-vindas — em código ou em issues com sugestões
 ## Autor
 
 **Paulo Henrique** — [@devphpaulo](https://github.com/devphpaulo)
+
+## Licença
+
+MIT — veja [LICENSE](LICENSE).
