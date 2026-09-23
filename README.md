@@ -45,6 +45,10 @@ Importar planilha → executar casos no Test Player → exportar relatório. O p
 
 > Por enquanto os casos de teste entram somente via planilha. A criação e edição manual de casos dentro do app está em idealização para uma versão futura.
 
+## Planilha de casos
+
+O app importa `.xlsx` ou CSV UTF-8 no layout do Zephyr Scale: 8 colunas fixas (`Nome`, `Precondição`, `Status`, `Prioridade`, `Passo`, `Resultado Esperado`, `Dados do teste`, `Pasta`), uma linha por passo, com os dados do caso preenchidos só na primeira linha. O guia completo — colunas, formato das linhas, nomenclatura por trilha e formatação — está em [docs/planilha.md](docs/planilha.md).
+
 ## Contribuição
 
 Contribuições são muito bem-vindas — em código ou em issues com sugestões de melhoria. Abra issues com intenção clara, objetivo e valor real, sem fugir da ideia principal do projeto: ser uma ferramenta 100% local. Para contribuir com código: faça um fork, crie um branch, commite e abra o PR.
