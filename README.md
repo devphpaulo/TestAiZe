@@ -26,7 +26,7 @@ TestAiZe é uma cópia do Zephyr Scale que roda inteira no seu computador — 10
 
 ## Instalação
 
-Baixe o artefato `TestAiZe-windows` gerado pelo workflow **Build exe** na aba [Actions](https://github.com/devphpaulo/TestAiZe/actions). Dentro dele está o pacote `TestAiZe-windows-01.00.03.zip`, com o executável único `TestAiZe-01.00.03.exe`. Descompacte o ZIP em qualquer pasta.
+Baixe o artefato `TestAiZe-windows-01.00.03` gerado pelo workflow **Build exe** na aba [Actions](https://github.com/devphpaulo/TestAiZe/actions). O download já vem como `TestAiZe-windows-01.00.03.zip`, com o executável único `TestAiZe-01.00.03.exe` dentro. Descompacte em qualquer pasta.
 
 Ou rode a partir do código-fonte:
 

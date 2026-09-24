@@ -12,15 +12,15 @@ jobs:
         with:
           python-version: "3.12"
       - run: python -m pip install -r requirements.txt pyinstaller
-      - name: Gerar executável e pacote versionados
+      - name: Gerar executável versionado
+        id: pkg
         shell: pwsh
         run: |
           $version = python -c "from testplayer.version import PACKAGE_VERSION; print(PACKAGE_VERSION)"
-          $name = "TestAiZe-$version"
-          python -m PyInstaller --noconfirm --clean --onefile --windowed --name $name --icon assets/testaize.ico --add-data "testplayer/templates;testplayer/templates" --add-data "testplayer/static;testplayer/static" --hidden-import pystray._win32 launcher.py
+          "version=$version" >> $env:GITHUB_OUTPUT
+          python -m PyInstaller --noconfirm --clean --onefile --windowed --name "TestAiZe-$version" --icon assets/testaize.ico --add-data "testplayer/templates;testplayer/templates" --add-data "testplayer/static;testplayer/static" --hidden-import pystray._win32 launcher.py
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          Compress-Archive -LiteralPath "dist/$name.exe" -DestinationPath "dist/TestAiZe-windows-$version.zip" -Force
       - uses: actions/upload-artifact@v4
         with:
-          name: TestAiZe-windows
-          path: dist/TestAiZe-windows-*.zip
+          name: TestAiZe-windows-${{ steps.pkg.outputs.version }}
+          path: dist/TestAiZe-*.exe
