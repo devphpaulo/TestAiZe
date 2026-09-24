@@ -313,6 +313,12 @@
       pdfModal.showModal();
     });
     ['close-pdf-modal', 'cancel-pdf-modal'].forEach(id => document.getElementById(id).addEventListener('click', () => pdfModal.close()));
+    pdfModal.addEventListener('click', event => {
+      if (event.target !== pdfModal) return;
+      const bounds = pdfModal.getBoundingClientRect();
+      if (event.clientX < bounds.left || event.clientX > bounds.right ||
+          event.clientY < bounds.top || event.clientY > bounds.bottom) pdfModal.close();
+    });
     allCheck.addEventListener('change', () => { caseChecks.forEach(check => { check.checked = allCheck.checked; }); updatePdfSelection(); });
     pdfModal.querySelectorAll('.pdf-folder-check').forEach(check => check.addEventListener('change', () => {
       check.closest('.pdf-folder').querySelectorAll('.pdf-case-check').forEach(item => { item.checked = check.checked; });
