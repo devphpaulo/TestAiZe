@@ -20,7 +20,8 @@ def _format_time(value: str) -> str:
 
 
 def render_report_html(directory: Path, selected_case_ids: set[int], include_history: bool = False,
-                       report_kind: str = "execution", print_all: bool = False) -> str:
+                       report_kind: str = "execution", print_all: bool = False,
+                       pdf_mode: bool = False) -> str:
     session = read_session(directory)
     chosen = [case for case in session["cases"] if case["id"] in selected_case_ids]
     if not chosen:
@@ -50,8 +51,13 @@ def render_report_html(directory: Path, selected_case_ids: set[int], include_his
 
     def run(source: dict, label: str) -> dict:
         def attachment(item: dict) -> dict:
+            if pdf_mode:
+                return {"name": item["original_name"],
+                        "extension": item.get("extension") or attachment_extension(item["original_name"]),
+                        "size": item["size"]}
             content = verified_attachment_bytes(directory, item)
-            return {"name": item["original_name"], "extension": item.get("extension") or attachment_extension(item["original_name"]),
+            return {"id": item["id"], "name": item["original_name"],
+                    "extension": item.get("extension") or attachment_extension(item["original_name"]),
                     "size": len(content), "data": base64.b64encode(content).decode("ascii")}
 
         return {
@@ -87,7 +93,7 @@ def render_report_html(directory: Path, selected_case_ids: set[int], include_his
         started_at=_format_time(session["meta"].get("created_at", "")),
         generated_at=_format_time(datetime.now().astimezone().isoformat()),
         report_css=(static / "report.css").read_text(encoding="utf-8"),
-        logo_src=logo_src, print_all=print_all,
+        logo_src=logo_src, print_all=print_all, pdf_mode=pdf_mode,
     )
 
 

@@ -16,17 +16,17 @@ TestAiZe é uma cópia do Zephyr Scale que roda inteira no seu computador — 10
 - **Fluxo que você já conhece** — os mesmos conceitos do Zephyr Scale: casos, passos, status, evidências, ciclos e pastas. Sem precisar de conta Atlassian.
 - **Zero instalação** — um único `.exe`. Dois cliques e o app abre no navegador, quieto na bandeja do Windows.
 - **Privacidade total** — roda 100% offline; planilhas, evidências e relatórios ficam nos seus Documentos.
-- **Relatórios prontos** — PDF e HTML com resumo, distribuição de resultados e evidências. Caso reprovado? Um clique gera o PDF da falha e copia o prompt de bug.
+- **Relatórios prontos** — PDF e HTML com resumo, distribuição de resultados e evidências. O HTML permite baixar os arquivos anexados; o PDF lista esses arquivos sem incorporá-los. Caso reprovado? Um clique gera o PDF da falha e copia o prompt de bug.
 - **Reteste sem retrabalho** — reexecute um caso sem perder as execuções anteriores, filtre por pasta ou enxergue tudo no modo Kanban.
 
 ## Requisitos
 
-- **Executável:** Windows 10/11, nada mais.
+- **Executável:** Windows 10/11 com Edge ou Chrome para a geração de PDF.
 - **Código-fonte:** Python 3.12+ com `pip`.
 
 ## Instalação
 
-Baixe o artefato `TestAiZe-windows` gerado pelo workflow **Build exe** na aba [Actions](https://github.com/devphpaulo/TestAiZe/actions) e descompacte em qualquer pasta.
+Baixe o artefato `TestAiZe-windows` gerado pelo workflow **Build exe** na aba [Actions](https://github.com/devphpaulo/TestAiZe/actions). Dentro dele está o pacote `TestAiZe-windows-01.00.03.zip`, com o executável único `TestAiZe-01.00.03.exe`. Descompacte o ZIP em qualquer pasta.
 
 Ou rode a partir do código-fonte:
 
@@ -39,10 +39,10 @@ pip install -r requirements.txt
 ## Uso
 
 ```
-TestAiZe.exe        # ou: python launcher.py
+TestAiZe-01.00.03.exe        # ou: python launcher.py
 ```
 
-Importar planilha → executar casos no Test Player → exportar relatório. O passo a passo completo está no [manual de uso](docs/manual.md).
+Importar planilha → executar casos no Test Player → exportar relatório. O aplicativo salva sessões, evidências, relatórios e logs em **Documentos/TestAiZe**. O passo a passo completo está no [manual de uso](docs/manual.md).
 
 > Por enquanto os casos de teste entram somente via planilha. A criação e edição manual de casos dentro do app está em idealização para uma versão futura.
 

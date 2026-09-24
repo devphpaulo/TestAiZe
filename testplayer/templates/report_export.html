@@ -7,7 +7,7 @@
   <title>TestAíZé | {{ 'Relatório de Falha' if report_kind == 'failure' else 'Relatório de Execução' }} — {{ meta.id[:8] }}</title>
   <style>{{ report_css|safe }}</style>
 </head>
-<body>
+<body{% if pdf_mode %} class="pdf-export"{% endif %}>
   <article class="report" aria-label="{{ 'Relatório de falha' if report_kind == 'failure' else 'Relatório de execução' }} TestAíZé">
     <header class="brandbar">
       <div class="brand">
@@ -40,6 +40,7 @@
   (() => {
     const cases = JSON.parse(document.getElementById('report-data').textContent);
     const printAll = {{ 'true' if print_all else 'false' }};
+    const pdfMode = {{ 'true' if pdf_mode else 'false' }};
     const nav = document.getElementById('case-switcher');
     const detail = document.getElementById('case-detail');
     const labels = {aprovado:'Aprovado',reprovado:'Reprovado',bloqueado:'Bloqueado',em_andamento:'Em andamento',nao_executado:'Não executado'};
@@ -91,10 +92,14 @@
           for(const item of step.attachments){
             const row=node('li','attachment-entry');
             const label=node('span','',`${item.name} · ${item.extension||'sem extensão'} · ${fileSize(item.size)}`);
-            const button=node('button','attachment-download','Baixar anexo');button.type='button';
-            button.setAttribute('aria-label',`Baixar anexo ${item.name}`);
-            button.addEventListener('click',()=>downloadAttachment(item));
-            row.append(label,button);list.append(row);
+            row.append(label);
+            if(!pdfMode){
+              const control=node('button','attachment-download','Baixar anexo');control.type='button';
+              control.addEventListener('click',()=>downloadAttachment(item));
+              control.setAttribute('aria-label',`Baixar anexo ${item.name}`);
+              row.append(control);
+            }
+            list.append(row);
           }
           evidence.append(list);
         }
@@ -136,13 +141,22 @@
     }
     function show(index){
       detail.replaceChildren(casePage(cases[index]));
-      nav.querySelectorAll('button').forEach((button,i)=>button.setAttribute('aria-current',String(i===index)));
+      nav.querySelectorAll('button').forEach(button=>button.setAttribute('aria-current',String(button.dataset.caseIndex===String(index))));
+    }
+    function showAll(){
+      detail.replaceChildren(...cases.map(casePage));
+      nav.querySelectorAll('button').forEach(button=>button.setAttribute('aria-current',String(button.dataset.caseIndex==='all')));
     }
     if(printAll){for(const item of cases)detail.append(casePage(item));}
     else{
-      if(cases.length>1){cases.forEach((item,index)=>{const button=node('button','',`Caso ${String(item.position).padStart(2,'0')} · ${item.name}`);button.type='button';button.addEventListener('click',()=>show(index));nav.append(button);});}
-      else nav.hidden=true;
-      if(cases.length)show(0);
+      if(cases.length>1){
+        const allButton=node('button','',`Todos os casos (${cases.length})`);allButton.type='button';allButton.dataset.caseIndex='all';allButton.addEventListener('click',showAll);nav.append(allButton);
+        cases.forEach((item,index)=>{const button=node('button','',`Caso ${String(item.position).padStart(2,'0')} · ${item.name}`);button.type='button';button.dataset.caseIndex=String(index);button.addEventListener('click',()=>show(index));nav.append(button);});
+        showAll();
+      }else{
+        nav.hidden=true;
+        if(cases.length)detail.append(casePage(cases[0]));
+      }
     }
   })();
   </script>

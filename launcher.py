@@ -20,15 +20,37 @@ from waitress.server import create_server
 
 from testplayer.backup import make_backup
 from testplayer.storage import ensure_root
+from testplayer.version import APP_VERSION
 from testplayer.web import create_app
 
 
-def default_data_dir() -> Path:
+_base_log_record_factory = logging.getLogRecordFactory()
+
+
+def _versioned_log_record(*args, **kwargs) -> logging.LogRecord:
+    record = _base_log_record_factory(*args, **kwargs)
+    record.app_version = APP_VERSION
+    return record
+
+
+logging.setLogRecordFactory(_versioned_log_record)
+
+
+def documents_dir() -> Path:
+    configured = Path.home() / "Documents"
     if os.name == "nt":
         buffer = ctypes.create_unicode_buffer(32768)
         if ctypes.windll.shell32.SHGetFolderPathW(None, 5, None, 0, buffer) == 0 and buffer.value:
-            return Path(buffer.value) / "Executor Local de Testes"
-    return Path.home() / "Documents" / "Executor Local de Testes"
+            configured = Path(buffer.value)
+    for candidate in (Path.home() / "OneDrive" / "Documentos",
+                      Path.home() / "OneDrive" / "Documents"):
+        if candidate.is_dir():
+            return candidate
+    return configured
+
+
+def default_data_dir() -> Path:
+    return documents_dir() / "TestAiZe"
 
 
 def _message(message: str, title: str = "TestAíZé", error: bool = False) -> None:
@@ -126,6 +148,12 @@ def main():
                                     backupCount=3, encoding="utf-8")]
     if sys.stdout:
         handlers.append(logging.StreamHandler(sys.stdout))
+    formatter = logging.Formatter(
+        "%(asctime)s | TestAíZé v%(app_version)s | %(levelname)s | %(name)s | %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
+    for handler in handlers:
+        handler.setFormatter(formatter)
     logging.basicConfig(level=logging.INFO, handlers=handlers, force=True)
     lock = _lock(root)
     runtime_file = root / "config" / "runtime.json"
@@ -155,7 +183,7 @@ def main():
         sock.listen(128)
         port = sock.getsockname()[1]
         runtime_file.write_text(json.dumps({"port": port, "pid": os.getpid()}), encoding="utf-8")
-        _notice(f"TestAíZé iniciado: http://127.0.0.1:{port}/")
+        _notice(f"TestAíZé v{APP_VERSION} iniciado: http://127.0.0.1:{port}/")
         server = create_server(app, sockets=[sock], threads=4, expose_tracebacks=False)
         if not args.no_browser:
             threading.Thread(target=_open_browser, args=(port,), daemon=True).start()

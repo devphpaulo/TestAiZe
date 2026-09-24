@@ -23,8 +23,8 @@ body:
   - type: input
     attributes:
       label: Versão
-      description: Data do artefato baixado ou commit, se rodou do código-fonte.
+      description: Versão exibida no nome do executável ou commit, se rodou do código-fonte.
   - type: textarea
     attributes:
       label: Evidências
-      description: Prints e/ou trechos do log (Documentos/Executor Local de Testes/logs). Não cole dados sensíveis.
+      description: Prints e/ou trechos do log (Documentos/TestAiZe/logs). Não cole dados sensíveis.
