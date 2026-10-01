@@ -10,6 +10,7 @@ import uuid
 from contextlib import closing, contextmanager
 from datetime import datetime, timedelta
 from pathlib import Path
+from urllib.parse import unquote, urlsplit
 
 from .attachments import attachment_content_type, attachment_extension
 from .bug_prompt import DEFAULT_PROMPT, PROMPT_FILENAME
@@ -74,6 +75,10 @@ CREATE TABLE IF NOT EXISTS archived_attachments (
   FOREIGN KEY(case_id,run_no) REFERENCES case_runs(case_id,run_no)
 );
 CREATE INDEX IF NOT EXISTS ix_archived_attachments_run ON archived_attachments(case_id,run_no);
+CREATE TABLE IF NOT EXISTS folder_links (
+  folder_path TEXT PRIMARY KEY, card_url TEXT NOT NULL,
+  provider TEXT, updated_at TEXT NOT NULL
+);
 """
 STATUSES = {"nao_executado", "em_andamento", "aprovado", "reprovado", "bloqueado"}
 
@@ -144,6 +149,9 @@ def migrate_sessions(root: Path) -> None:
                                        "size INTEGER NOT NULL DEFAULT 0, sha256 TEXT NOT NULL DEFAULT '',"
                                        "FOREIGN KEY(case_id,run_no) REFERENCES case_runs(case_id,run_no))")
                     connection.execute("CREATE INDEX IF NOT EXISTS ix_archived_attachments_run ON archived_attachments(case_id,run_no)")
+                    connection.execute("CREATE TABLE IF NOT EXISTS folder_links ("
+                                       "folder_path TEXT PRIMARY KEY, card_url TEXT NOT NULL,"
+                                       "provider TEXT, updated_at TEXT NOT NULL)")
                     step_columns = {row[1] for row in connection.execute("PRAGMA table_info(step_attachments)")}
                     if "extension" not in step_columns:
                         connection.execute("ALTER TABLE step_attachments ADD COLUMN extension TEXT NOT NULL DEFAULT ''")
@@ -199,6 +207,69 @@ def set_meta(connection: sqlite3.Connection, key: str, value: str) -> None:
 
 def get_meta(connection: sqlite3.Connection) -> dict[str, str]:
     return {row["key"]: row["value"] for row in connection.execute("SELECT key,value FROM meta")}
+
+
+def folder_card_details(card_url: str) -> dict[str, str]:
+    if (not isinstance(card_url, str) or not card_url or card_url != card_url.strip()
+            or any(character.isspace() or ord(character) < 32 or ord(character) == 127 for character in card_url)):
+        raise ValueError("Informe um link completo iniciado por http:// ou https://.")
+    try:
+        parsed = urlsplit(card_url)
+        host = parsed.hostname
+        parsed.port
+    except ValueError as exc:
+        raise ValueError("Informe um link completo iniciado por http:// ou https://.") from exc
+    if (parsed.scheme.lower() not in {"http", "https"} or not parsed.netloc
+            or not host or not host.strip(".")):
+        raise ValueError("Informe um link completo iniciado por http:// ou https://.")
+    lowered_host = host.casefold()
+    provider = ("Jira" if "atlassian" in lowered_host or "jira" in lowered_host
+                else "ClickUp" if "clickup" in lowered_host else "Link")
+    path_parts = [unquote(part).strip() for part in parsed.path.split("/") if part.strip()]
+    label = (path_parts[-1] if path_parts else host)[:80]
+    return {"url": card_url, "provider": provider, "label": label or host[:80]}
+
+
+def get_folder_links(directory: Path) -> dict[str, dict[str, str]]:
+    with db(directory) as connection:
+        try:
+            rows = connection.execute(
+                "SELECT folder_path,card_url,provider,updated_at FROM folder_links"
+            )
+            links = {}
+            for row in rows:
+                try:
+                    details = folder_card_details(row["card_url"])
+                except ValueError:
+                    continue
+                links[row["folder_path"]] = details | {"updated_at": row["updated_at"]}
+            return links
+        except sqlite3.OperationalError as exc:
+            if "no such table" not in str(exc):
+                raise
+            return {}
+
+
+def save_folder_link(directory: Path, folder_path: str, card_url: str, provider: str) -> None:
+    details = folder_card_details(card_url)
+    with db(directory) as connection:
+        with connection:
+            if connection.execute("SELECT 1 FROM cases WHERE folder=? LIMIT 1", (folder_path,)).fetchone() is None:
+                raise LookupError("Pasta não encontrada nesta sessão.")
+            connection.execute(
+                "INSERT INTO folder_links(folder_path,card_url,provider,updated_at) VALUES (?,?,?,?) "
+                "ON CONFLICT(folder_path) DO UPDATE SET card_url=excluded.card_url,"
+                "provider=excluded.provider,updated_at=excluded.updated_at",
+                (folder_path, details["url"], details["provider"], now()),
+            )
+
+
+def delete_folder_link(directory: Path, folder_path: str) -> None:
+    with db(directory) as connection:
+        with connection:
+            if connection.execute("SELECT 1 FROM cases WHERE folder=? LIMIT 1", (folder_path,)).fetchone() is None:
+                raise LookupError("Pasta não encontrada nesta sessão.")
+            connection.execute("DELETE FROM folder_links WHERE folder_path=?", (folder_path,))
 
 
 def _write_manifest(directory: Path) -> None:
@@ -406,10 +477,15 @@ def _hydrate_case(connection: sqlite3.Connection, case: dict) -> dict:
 
 
 def read_session(directory: Path) -> dict:
+    folder_links = get_folder_links(directory)
     with db(directory) as connection:
         meta = get_meta(connection)
         cases = [_hydrate_case(connection, dict(row)) for row in connection.execute("SELECT * FROM cases ORDER BY position")]
         for case in cases:
+            link = folder_links.get(case["folder"])
+            case["folder_card_url"] = link["url"] if link else None
+            case["folder_card_provider"] = link["provider"] if link else None
+            case["folder_card_label"] = link["label"] if link else None
             case["previous_runs"] = [
                 {"run_no": row["run_no"], "captured_at": row["captured_at"], "status": row["status"],
                  "snapshot": json.loads(row["snapshot_json"])}
@@ -420,7 +496,8 @@ def read_session(directory: Path) -> dict:
         counts = {key: 0 for key in ("nao_executado", "em_andamento", "aprovado", "reprovado", "bloqueado")}
         for case in cases:
             counts[case["status"]] += 1
-        return {"meta": meta, "cases": cases, "counts": counts, "steps_total": sum(len(c["steps"]) for c in cases)}
+        return {"meta": meta, "cases": cases, "counts": counts,
+                "folder_links": folder_links, "steps_total": sum(len(c["steps"]) for c in cases)}
 
 
 def aggregate(statuses: list[str]) -> str:

@@ -22,7 +22,8 @@ from .pdf_export import generate_pdf
 from .html_export import generate_html
 from .bug_prompt import build_prompt, failed_case
 from .storage import (create_draft, db, ensure_root, finalize, find_directory, get_meta,
-                       find_sync_targets, list_sessions, migrate_sessions, now, read_session,
+                       delete_folder_link, find_sync_targets, folder_card_details, list_sessions,
+                       migrate_sessions, now, read_session, save_folder_link,
                        recover_promotions, remove_session, rerun, save_case, save_result,
                        start_case_run, sync_step_evidence)
 
@@ -55,6 +56,9 @@ def folder_groups(cases: list[dict]) -> list[dict]:
         group["total"] = total
         group["done"] = sum(group["counts"][status] for status in STATUSES[:3])
         group["percent"] = round(group["done"] / total * 100) if total else 0
+        first = group["cases"][0]
+        group["card"] = ({"url": first["folder_card_url"], "provider": first["folder_card_provider"],
+                          "label": first["folder_card_label"]} if first.get("folder_card_url") else None)
     return list(groups.values())
 
 
@@ -251,7 +255,39 @@ def create_app(root: Path) -> Flask:
                                                               ("em_andamento", "Em andamento"),
                                                               ("aprovado", "Aprovado"),
                                                               ("reprovado", "Reprovado"),
-                                                              ("bloqueado", "Bloqueado"))])
+                                                               ("bloqueado", "Bloqueado"))])
+
+    @app.post("/api/sessao/<session_id>/pasta/vinculo")
+    def save_folder_card(session_id: str):
+        body = request.get_json(silent=True)
+        if not isinstance(body, dict):
+            return jsonify(error="Envie um objeto JSON válido."), 400
+        folder_path = body.get("folder_path")
+        card_url = body.get("card_url")
+        if not isinstance(folder_path, str) or not isinstance(card_url, str):
+            return jsonify(error="Pasta e link do card são obrigatórios."), 422
+        try:
+            card = folder_card_details(card_url)
+            save_folder_link(session_dir(session_id), folder_path, card["url"], card["provider"])
+            return jsonify(ok=True, card=card)
+        except LookupError as exc:
+            return jsonify(error=str(exc)), 404
+        except ValueError as exc:
+            return jsonify(error=str(exc)), 422
+
+    @app.delete("/api/sessao/<session_id>/pasta/vinculo")
+    def remove_folder_card(session_id: str):
+        body = request.get_json(silent=True)
+        if not isinstance(body, dict):
+            return jsonify(error="Envie um objeto JSON válido."), 400
+        folder_path = body.get("folder_path")
+        if not isinstance(folder_path, str):
+            return jsonify(error="Pasta é obrigatória."), 422
+        try:
+            delete_folder_link(session_dir(session_id), folder_path)
+            return jsonify(ok=True)
+        except LookupError as exc:
+            return jsonify(error=str(exc)), 404
 
     @app.post("/api/sessao/<session_id>/passo/<int:step_id>")
     def result(session_id: str, step_id: int):

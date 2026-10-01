@@ -81,7 +81,10 @@ def render_report_html(directory: Path, selected_case_ids: set[int], include_his
         runs.append(run(case, f"Execução atual · {len(case['previous_runs']) + 1}"))
         cases.append({"id": case["id"], "position": case["position"], "name": case["name"],
                       "folder": case["folder"], "priority": case["priority"],
-                      "source_status": case["source_status"], "status": case["status"], "runs": runs})
+                      "source_status": case["source_status"], "status": case["status"],
+                      "folder_card_url": case["folder_card_url"],
+                      "folder_card_provider": case["folder_card_provider"],
+                      "folder_card_label": case["folder_card_label"], "runs": runs})
     payload = json.dumps(cases, ensure_ascii=False).replace("<", "\\u003c").replace(">", "\\u003e").replace("&", "\\u0026")
     templates = Path(__file__).resolve().parent / "templates"
     static = Path(__file__).resolve().parent / "static"

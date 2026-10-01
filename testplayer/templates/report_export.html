@@ -129,7 +129,12 @@
       const head=node('section',`case case--${classes[item.status]||'pending'}`);
       const top=node('div','case-top');const title=node('div');title.append(node('div','case-id',`CASO ${String(item.position).padStart(2,'0')}`),node('h2','',item.name));top.append(title,pill(item.status));head.append(top);
       head.append(node('div','case-info',`Pasta: ${item.folder||'Sem pasta'}`));
-      head.append(node('div','case-info',`Prioridade: ${item.priority||'Não informada'}  ·  Status importado: ${item.source_status||'Não informado'}`));page.append(head);
+      head.append(node('div','case-info',`Prioridade: ${item.priority||'Não informada'}  ·  Status importado: ${item.source_status||'Não informado'}`));
+      if(item.folder_card_url){
+        const card=node('a','report-card-link',`Card vinculado: ${item.folder_card_provider} · ${item.folder_card_label} ↗`);
+        card.href=item.folder_card_url;card.target='_blank';card.rel='noopener noreferrer';head.append(card);
+      }
+      page.append(head);
       for(const run of item.runs)page.append(runSection(run,item.runs.length>1));
       return page;
     }
