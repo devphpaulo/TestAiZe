@@ -26,7 +26,7 @@ TestAiZe é uma cópia do Zephyr Scale que roda inteira no seu computador — 10
 
 ## Instalação
 
-Baixe o artefato `TestAiZe-windows-01.00.03` gerado pelo workflow **Build exe** na aba [Actions](https://github.com/devphpaulo/TestAiZe/actions). O download já vem como `TestAiZe-windows-01.00.03.zip`, com o executável único `TestAiZe-01.00.03.exe` dentro. Descompacte em qualquer pasta.
+Baixe o artefato `TestAiZe-windows-01.005.000` gerado pelo workflow **Build exe** na aba [Actions](https://github.com/devphpaulo/TestAiZe/actions). O download já vem como `TestAiZe-windows-01.005.000.zip`, com o executável único `TestAiZe-01.005.000.exe` dentro. Descompacte em qualquer pasta.
 
 Ou rode a partir do código-fonte:
 
@@ -39,7 +39,7 @@ pip install -r requirements.txt
 ## Uso
 
 ```
-TestAiZe-01.00.03.exe        # ou: python launcher.py
+TestAiZe-01.005.000.exe      # ou: python launcher.py
 ```
 
 Importar planilha → executar casos no Test Player → exportar relatório. O aplicativo salva sessões, evidências, relatórios e logs em **Documentos/TestAiZe**. O passo a passo completo está no [manual de uso](docs/manual.md).
