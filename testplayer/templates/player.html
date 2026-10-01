@@ -59,7 +59,7 @@
         <div class="steps-title"><h3>Passos do teste</h3><span>{{ case.steps|length }} etapas</span></div>
 
         {% for step in case.steps %}
-        <article class="step-card" data-step-id="{{ step.id }}" data-case-id="{{ case.id }}" data-status="{{ step.status }}" data-save-url="{{ url_for('result', session_id=meta.id, step_id=step.id) }}">
+        <article class="step-card" data-step-id="{{ step.id }}" data-case-id="{{ case.id }}" data-status="{{ step.status }}" data-status-saved="{{ 'true' if step.status_changed_at else 'false' }}" data-sync-url="{{ url_for('sync_preview', session_id=meta.id, step_id=step.id) }}" data-save-url="{{ url_for('result', session_id=meta.id, step_id=step.id) }}">
           <div class="step-card-head"><span class="step-number">{{ '%02d'|format(step.position) }}</span><div class="step-action"><span>PASSO {{ step.position }}</span><h4>{{ step.action }}</h4></div><div class="step-status-wrap"><div class="status-button-row step-status-buttons" role="group" aria-label="Status do passo {{ step.position }}">{% for code, label, icon in [('nao_executado','Não executado','○'),('em_andamento','Em andamento','◐'),('bloqueado','Bloqueado','⊘'),('reprovado','Reprovado','×'),('aprovado','Aprovado','✓')] %}<button type="button" class="status-icon-button status-choice-{{ code }} {% if step.status == code %}selected{% endif %}" data-value="{{ code }}" aria-label="{{ label }}" title="{{ label }}" aria-pressed="{{ 'true' if step.status == code else 'false' }}" {% if not writable %}disabled{% endif %}><span aria-hidden="true">{{ icon }}</span></button>{% endfor %}</div><small class="step-status-time" data-status-time>{{ 'Status registrado em ' ~ step.status_changed_at[:19].replace('T', ' ') if step.status_changed_at else '' }}</small></div></div>
           <div class="step-inputs">
             <div class="step-test-data"><label>DADOS DE TESTE</label><div class="reference-source"><p>{{ step.test_data }}</p></div></div>
@@ -67,7 +67,7 @@
           </div>
           <div class="step-execution">
             <div class="evidence-area observed-area" data-upload-url="{{ url_for('upload_image', session_id=meta.id, step_id=step.id) }}">
-              <div class="observed-heading"><strong>Resultado observado</strong></div>
+              <div class="observed-heading"><strong>Resultado observado</strong>{% if writable %}<button type="button" class="step-sync-action" data-step-sync aria-label="Sincronizar evidência deste passo" title="Sincronizar evidência deste passo" {% if not step.action|trim or not step.evidence or not step.status_changed_at %}disabled{% endif %}>⟳ Sincronizar</button>{% endif %}</div>
               {{ rich_editor(step.actual_blocks, 'Resultado observado') }}
             </div>
             <div class="step-attachments" data-attachment-upload-url="{{ url_for('upload_step_attachment', session_id=meta.id, step_id=step.id) }}" data-max-files="5" data-max-bytes="5242880">
@@ -115,6 +115,7 @@
       <form action="{{ url_for('finish', session_id=meta.id) }}" method="post" id="finish-form"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button type="submit" class="button button-secondary side-action">Finalizar execução</button></form>
     {% endif %}
     <small class="side-note">Exportar um relatório não finaliza esta execução.</small>
+    {% if writable %}<button type="button" class="button button-secondary side-action sync-side-action" id="open-sync-modal" aria-label="Sincronizar evidência do passo selecionado" aria-describedby="sync-side-help" title="Selecione um passo com evidência e status salvos" disabled>⟳ Sincronizar evidência</button><small class="side-note" id="sync-side-help">Selecione um passo com descrição, evidência e status salvos.</small>{% endif %}
     <button type="button" class="button button-primary side-action" id="open-report-modal">Exportar Relatório</button>
     {% if meta.state == 'concluida' %}<form action="{{ url_for('new_execution', session_id=meta.id) }}" method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button type="submit" class="button button-ghost side-action">Nova execução a partir desta</button></form>{% endif %}
   </aside>
@@ -137,5 +138,21 @@
     <div class="pdf-modal-foot"><span id="pdf-selection-error" role="alert"></span><button type="button" class="button button-secondary" id="cancel-pdf-modal">Cancelar</button><button type="submit" class="button button-primary" id="submit-pdf">Gerar PDF</button></div>
   </form>
 </dialog>
+{% if writable %}
+<dialog id="sync-modal" class="pdf-modal sync-modal" aria-labelledby="sync-modal-title">
+  <div class="sync-modal-layout">
+    <div class="pdf-modal-head"><div><span class="modal-eyebrow">SINCRONIZAÇÃO</span><h2 id="sync-modal-title">Sincronizar evidência</h2><p id="sync-source-label">Carregando passo de origem…</p></div><button type="button" class="modal-close" id="close-sync-modal" aria-label="Fechar">×</button></div>
+    <div class="sync-modal-scroll">
+      <section class="sync-source-summary" aria-labelledby="sync-source-title"><strong id="sync-source-title">Evidência de origem</strong><span id="sync-evidence-summary"></span><ul id="sync-evidence-list"></ul></section>
+      <p class="sync-match-note" id="sync-match-note">O matching ignora maiúsculas, acentos e espaços repetidos, preservando a pontuação.</p>
+      <div class="pdf-selection-actions sync-selection-actions"><span id="sync-selected-count">0 destinos selecionados</span><span><button type="button" class="sync-text-action" id="sync-select-all">Selecionar todos</button><button type="button" class="sync-text-action" id="sync-clear-all">Limpar seleção</button></span></div>
+      <div id="sync-target-list" class="sync-target-list"></div>
+      <p id="sync-empty" class="sync-empty" hidden>Nenhum passo equivalente foi encontrado nesta sessão.</p>
+    </div>
+    <p id="sync-feedback" class="sync-feedback" role="status" aria-live="polite"></p>
+    <div class="pdf-modal-foot sync-modal-foot"><label class="sync-status-toggle"><input type="checkbox" id="sync-replicate-status"><span>Replicar status do passo de origem</span></label><button type="button" class="button button-secondary" id="cancel-sync-modal">Cancelar</button><button type="button" class="button button-primary" id="confirm-sync" disabled>Sincronizar evidência</button></div>
+  </div>
+</dialog>
+{% endif %}
 {% endblock %}
 
