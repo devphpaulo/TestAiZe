@@ -357,7 +357,6 @@
   if (!writable) return;
 
   const syncModal = document.getElementById('sync-modal');
-  const syncSideButton = document.getElementById('open-sync-modal');
   let syncSource = null;
   let syncBusy = false;
   function syncCardEligible(card) {
@@ -381,12 +380,6 @@
       action.title = eligible ? 'Sincronizar evidência deste passo'
         : 'Salve uma descrição, uma evidência e o status deste passo';
     });
-    if (syncSideButton) {
-      const eligible = syncCardEligible(syncSource) && syncCardIsCurrent(syncSource);
-      syncSideButton.disabled = !eligible || syncBusy;
-      syncSideButton.title = eligible ? 'Sincronizar evidência do passo selecionado'
-        : 'Selecione um passo com evidência e status salvos';
-    }
   }
   function clearSyncSource() {
     syncSource?.classList.remove('sync-source-selected');
@@ -410,7 +403,6 @@
   });
   caseViewChanged = revalidateSyncSource;
   window.addEventListener('hashchange', clearSyncSource);
-  syncSideButton?.addEventListener('click', () => openSyncModal(syncSource));
 
   function syncTargetChecks() { return [...syncModal.querySelectorAll('.sync-target-check')]; }
   function updateSyncSelection() {
@@ -535,7 +527,6 @@
     const confirm = document.getElementById('confirm-sync');
     const cancel = document.getElementById('cancel-sync-modal');
     confirm.disabled = true; cancel.disabled = true; confirm.textContent = 'Sincronizando…';
-    syncSideButton.textContent = '⟳ Sincronizando…';
     document.getElementById('sync-feedback').textContent = 'Copiando evidências…';
     try {
       const response = await fetch(syncSource.dataset.syncUrl, {
@@ -554,7 +545,6 @@
     } catch (error) {
       syncBusy = false;
       cancel.disabled = false; confirm.textContent = 'Sincronizar evidência';
-      syncSideButton.textContent = '⟳ Sincronizar evidência';
       document.getElementById('sync-feedback').className = 'sync-feedback error';
       document.getElementById('sync-feedback').textContent = error.message;
       setSaveState(error.message, true);
