@@ -2,11 +2,11 @@
 
 ## Abrir
 
-Dê dois cliques em `TestAiZe-01.00.03.exe`. O aplicativo inicia discretamente, abre o navegador e fica na bandeja do Windows, perto do relógio. Não é necessário instalar Python nem manter uma janela de terminal aberta. O ZIP da mesma versão se chama `TestAiZe-windows-01.00.03.zip`.
+Dê dois cliques em `TestAiZe-01.00.04.exe`. O aplicativo inicia discretamente, abre o navegador e fica na bandeja do Windows, perto do relógio. Não é necessário instalar Python nem manter uma janela de terminal aberta. O ZIP da mesma versão se chama `TestAiZe-windows-01.00.04.zip`.
 
 No ícone da bandeja, use **Abrir aplicativo**, **Abrir pasta de dados** ou **Encerrar aplicativo**. Se o aplicativo já estiver aberto, dar dois cliques no `.exe` novamente apenas reabre o navegador.
 
-O arquivo `logs/aplicativo.log` registra cada linha com data, hora, versão do TestAíZé, nível, origem e mensagem. O formato é `AAAA-MM-DD HH:MM:SS | TestAíZé v1.0.3 | NÍVEL | origem | mensagem`, inclusive para erros de relatório e avisos do servidor.
+O arquivo `logs/aplicativo.log` registra cada linha com data, hora, versão do TestAíZé, nível, origem e mensagem. O formato é `AAAA-MM-DD HH:MM:SS | TestAíZé v1.0.4 | NÍVEL | origem | mensagem`, inclusive para erros de relatório e avisos do servidor.
 
 O servidor aceita conexões somente em `127.0.0.1`; não precisa de internet. No cabeçalho, escolha o modo claro ou escuro e a cor **Neutro**, **Roxo**, **Verde**, **Vermelho** ou **Amarelo**. As duas preferências são lembradas pelo navegador. As cores dos status dos testes continuam fixas para facilitar a leitura dos resultados.
 

@@ -7,6 +7,7 @@ import json
 import os
 import secrets
 import shutil
+import sqlite3
 import uuid
 from pathlib import Path, PureWindowsPath
 
@@ -21,8 +22,9 @@ from .pdf_export import generate_pdf
 from .html_export import generate_html
 from .bug_prompt import build_prompt, failed_case
 from .storage import (create_draft, db, ensure_root, finalize, find_directory, get_meta,
-                      list_sessions, migrate_sessions, now, read_session, recover_promotions,
-                      remove_session, rerun, save_case, save_result, start_case_run)
+                       find_sync_targets, list_sessions, migrate_sessions, now, read_session,
+                       recover_promotions, remove_session, rerun, save_case, save_result,
+                       start_case_run, sync_step_evidence)
 
 
 MAX_IMPORT_BYTES = 25 * 1024 * 1024
@@ -254,7 +256,9 @@ def create_app(root: Path) -> Flask:
     @app.post("/api/sessao/<session_id>/passo/<int:step_id>")
     def result(session_id: str, step_id: int):
         directory = session_dir(session_id)
-        body = request.get_json(silent=True) or {}
+        body = request.get_json(silent=True)
+        if not isinstance(body, dict):
+            return jsonify(error="Envie um objeto JSON válido."), 400
         try:
             comment = body.get("comment")
             changed_at = save_result(directory, step_id, body.get("status", ""), str(body.get("actual", "")),
@@ -268,10 +272,43 @@ def create_app(root: Path) -> Flask:
         except ValueError as exc:
             return jsonify(error=str(exc)), 422
 
+    @app.get("/api/sessao/<session_id>/passo/<int:step_id>/sincronizacao")
+    def sync_preview(session_id: str, step_id: int):
+        try:
+            return jsonify(find_sync_targets(session_dir(session_id), step_id))
+        except LookupError as exc:
+            return jsonify(error=str(exc)), 404
+        except ValueError as exc:
+            return jsonify(error=str(exc)), 422
+        except (OSError, sqlite3.DatabaseError):
+            app.logger.exception("Falha ao ler evidências da sessão %s", session_id)
+            return jsonify(error="Não foi possível ler a evidência de origem."), 409
+
+    @app.post("/api/sessao/<session_id>/passo/<int:step_id>/sincronizacao")
+    def sync_confirm(session_id: str, step_id: int):
+        body = request.get_json(silent=True)
+        if not isinstance(body, dict):
+            return jsonify(error="Envie um objeto JSON válido."), 400
+        targets = body.get("target_step_ids")
+        replicate_status = body.get("replicate_status", False)
+        if type(replicate_status) is not bool:
+            return jsonify(error="A opção de replicar status é inválida."), 422
+        try:
+            return jsonify(sync_step_evidence(session_dir(session_id), step_id, targets, replicate_status))
+        except LookupError as exc:
+            return jsonify(error=str(exc)), 404
+        except ValueError as exc:
+            return jsonify(error=str(exc)), 422
+        except (OSError, sqlite3.DatabaseError):
+            app.logger.exception("Falha ao sincronizar evidências na sessão %s", session_id)
+            return jsonify(error="Não foi possível copiar todas as evidências. Nenhuma alteração foi salva."), 409
+
     @app.post("/api/sessao/<session_id>/caso/<int:case_id>")
     def case_result(session_id: str, case_id: int):
         directory = session_dir(session_id)
-        body = request.get_json(silent=True) or {}
+        body = request.get_json(silent=True)
+        if not isinstance(body, dict):
+            return jsonify(error="Envie um objeto JSON válido."), 400
         try:
             save_case(directory, case_id, str(body.get("status", "")), str(body.get("comment", "")),
                       comment_doc=body.get("comment_doc"), precondition_doc=body.get("precondition_doc"))

@@ -55,19 +55,19 @@
       <section class="case-view {% if not loop.first %}is-hidden{% endif %}" data-case-view="{{ case.id }}" data-case-index="{{ loop.index }}" data-manual-status="{{ case.manual_status }}" data-case-save-url="{{ url_for('case_result', session_id=meta.id, case_id=case.id) }}">
         <div class="case-heading"><div><div class="case-kicker">CASO {{ '%02d'|format(loop.index) }} <span>·</span> {{ case.sheet }}</div><h2>{{ case.name }}</h2><p>{{ case.folder or 'Sem pasta' }}</p></div><div class="case-status-actions"><span class="status-tag status-{{ case.status }}" data-case-status="{{ case.id }}">{{ status_labels[case.status] }}</span><span class="case-status-label">STATUS DO CASO</span><div class="status-button-row case-status-buttons" role="group" aria-label="Status do caso {{ loop.index }}">{% for code, label, icon in [('nao_executado','Não executado','○'),('em_andamento','Em andamento','◐'),('bloqueado','Bloqueado','⊘'),('reprovado','Reprovado','×'),('aprovado','Aprovado','✓')] %}<button type="button" class="status-icon-button status-choice-{{ code }} {% if case.manual_status == code %}selected{% endif %}" data-value="{{ code }}" aria-label="{{ label }}" title="{{ label }}" aria-pressed="{{ 'true' if case.manual_status == code else 'false' }}" {% if not writable %}disabled{% endif %}><span aria-hidden="true">{{ icon }}</span></button>{% endfor %}</div><button type="button" class="auto-status-button {% if not case.manual_status %}selected{% endif %}" aria-pressed="{{ 'false' if case.manual_status else 'true' }}" {% if not writable %}disabled{% endif %}>Automático pelos passos</button></div></div>
         <div class="case-meta"><span><b>Prioridade</b>{{ case.priority or 'Não informada' }}</span><span><b>Status</b>{{ case.source_status or 'Não informado' }}</span><span><b>Passos</b>{{ case.steps|length }}</span></div>
-        <section class="precondition evidence-area case-evidence-area" data-upload-url="{{ url_for('upload_case_image', session_id=meta.id, case_id=case.id, scope='precondition') }}"><span>PRÉ-CONDIÇÕES</span><div class="precondition-source"><strong>Da planilha</strong><p>{{ case.precondition or 'Sem pré-condições na planilha.' }}</p></div><label class="precondition-notes-label">Anotações e evidências</label>{{ rich_editor(case.precondition_notes_blocks, 'Anotações e evidências nas pré-condições') }}{% if writable %}<div class="observed-actions"><span>Escreva ou cole imagens nesta área.</span></div>{% endif %}</section>
+        <section class="precondition evidence-area case-evidence-area" data-upload-url="{{ url_for('upload_case_image', session_id=meta.id, case_id=case.id, scope='precondition') }}"><span>PRÉ-CONDIÇÕES</span><div class="precondition-source"><p>{{ case.precondition or 'Sem pré-condições na planilha.' }}</p><label class="precondition-notes-label">Anotações e evidências</label>{{ rich_editor(case.precondition_notes_blocks, 'Anotações e evidências nas pré-condições') }}{% if writable %}<div class="observed-actions"><span>Escreva ou cole imagens nesta área.</span></div>{% endif %}</div></section>
         <div class="steps-title"><h3>Passos do teste</h3><span>{{ case.steps|length }} etapas</span></div>
 
         {% for step in case.steps %}
-        <article class="step-card" data-step-id="{{ step.id }}" data-case-id="{{ case.id }}" data-status="{{ step.status }}" data-save-url="{{ url_for('result', session_id=meta.id, step_id=step.id) }}">
+        <article class="step-card" data-step-id="{{ step.id }}" data-case-id="{{ case.id }}" data-status="{{ step.status }}" data-status-saved="{{ 'true' if step.status_changed_at else 'false' }}" data-sync-url="{{ url_for('sync_preview', session_id=meta.id, step_id=step.id) }}" data-save-url="{{ url_for('result', session_id=meta.id, step_id=step.id) }}">
           <div class="step-card-head"><span class="step-number">{{ '%02d'|format(step.position) }}</span><div class="step-action"><span>PASSO {{ step.position }}</span><h4>{{ step.action }}</h4></div><div class="step-status-wrap"><div class="status-button-row step-status-buttons" role="group" aria-label="Status do passo {{ step.position }}">{% for code, label, icon in [('nao_executado','Não executado','○'),('em_andamento','Em andamento','◐'),('bloqueado','Bloqueado','⊘'),('reprovado','Reprovado','×'),('aprovado','Aprovado','✓')] %}<button type="button" class="status-icon-button status-choice-{{ code }} {% if step.status == code %}selected{% endif %}" data-value="{{ code }}" aria-label="{{ label }}" title="{{ label }}" aria-pressed="{{ 'true' if step.status == code else 'false' }}" {% if not writable %}disabled{% endif %}><span aria-hidden="true">{{ icon }}</span></button>{% endfor %}</div><small class="step-status-time" data-status-time>{{ 'Status registrado em ' ~ step.status_changed_at[:19].replace('T', ' ') if step.status_changed_at else '' }}</small></div></div>
           <div class="step-inputs">
-            <div><label>DADOS DE TESTE</label><p>{{ step.test_data }}</p></div>
-            <div><label>RESULTADO ESPERADO</label><p>{{ step.expected }}</p></div>
+            <div class="step-test-data"><label>DADOS DE TESTE</label><div class="reference-source"><p>{{ step.test_data }}</p></div></div>
+            <div class="step-expected"><label>RESULTADO ESPERADO</label><div class="reference-source"><p>{{ step.expected }}</p></div></div>
           </div>
           <div class="step-execution">
             <div class="evidence-area observed-area" data-upload-url="{{ url_for('upload_image', session_id=meta.id, step_id=step.id) }}">
-              <div class="observed-heading"><strong>Resultado observado</strong></div>
+              <div class="observed-heading"><strong>Resultado observado</strong>{% if writable %}<button type="button" class="step-sync-action" data-step-sync aria-label="Sincronizar evidência deste passo" title="Sincronizar evidência deste passo" {% if not step.action|trim or not step.evidence or not step.status_changed_at %}disabled{% endif %}>⟳ Sincronizar</button>{% endif %}</div>
               {{ rich_editor(step.actual_blocks, 'Resultado observado') }}
             </div>
             <div class="step-attachments" data-attachment-upload-url="{{ url_for('upload_step_attachment', session_id=meta.id, step_id=step.id) }}" data-max-files="5" data-max-bytes="5242880">
@@ -115,6 +115,7 @@
       <form action="{{ url_for('finish', session_id=meta.id) }}" method="post" id="finish-form"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button type="submit" class="button button-secondary side-action">Finalizar execução</button></form>
     {% endif %}
     <small class="side-note">Exportar um relatório não finaliza esta execução.</small>
+    {% if writable %}<button type="button" class="button button-secondary side-action sync-side-action" id="open-sync-modal" aria-label="Sincronizar evidência do passo selecionado" aria-describedby="sync-side-help" title="Selecione um passo com evidência e status salvos" disabled>⟳ Sincronizar evidência</button><small class="side-note" id="sync-side-help">Selecione um passo com descrição, evidência e status salvos.</small>{% endif %}
     <button type="button" class="button button-primary side-action" id="open-report-modal">Exportar Relatório</button>
     {% if meta.state == 'concluida' %}<form action="{{ url_for('new_execution', session_id=meta.id) }}" method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button type="submit" class="button button-ghost side-action">Nova execução a partir desta</button></form>{% endif %}
   </aside>
@@ -137,5 +138,21 @@
     <div class="pdf-modal-foot"><span id="pdf-selection-error" role="alert"></span><button type="button" class="button button-secondary" id="cancel-pdf-modal">Cancelar</button><button type="submit" class="button button-primary" id="submit-pdf">Gerar PDF</button></div>
   </form>
 </dialog>
+{% if writable %}
+<dialog id="sync-modal" class="pdf-modal sync-modal" aria-labelledby="sync-modal-title" aria-describedby="sync-source-label sync-match-note">
+  <div class="sync-modal-layout">
+    <div class="pdf-modal-head"><div><span class="modal-eyebrow">Sincronização</span><h2 id="sync-modal-title">Sincronizar evidência</h2><p id="sync-source-label">Carregando passo de origem…</p></div><button type="button" class="modal-close" id="close-sync-modal" aria-label="Fechar">×</button></div>
+    <div class="sync-modal-scroll">
+      <section class="sync-source-summary" aria-labelledby="sync-source-title"><strong id="sync-source-title">Evidência de origem</strong><span id="sync-evidence-summary"></span><ul id="sync-evidence-list"></ul></section>
+      <p class="sync-match-note" id="sync-match-note">O matching ignora maiúsculas, acentos e espaços repetidos, preservando a pontuação.</p>
+      <div class="pdf-selection-actions sync-selection-actions"><span id="sync-selected-count">0 destinos selecionados</span><span><button type="button" class="sync-text-action" id="sync-select-all">Selecionar todos</button><button type="button" class="sync-text-action" id="sync-clear-all">Limpar seleção</button></span></div>
+      <div id="sync-target-list" class="sync-target-list"></div>
+      <p id="sync-empty" class="sync-empty" hidden>Nenhum passo equivalente foi encontrado nesta sessão.</p>
+    </div>
+    <p id="sync-feedback" class="sync-feedback" role="status" aria-live="polite"></p>
+    <div class="pdf-modal-foot sync-modal-foot"><label class="sync-status-toggle"><input type="checkbox" id="sync-replicate-status"><span>Replicar status do passo de origem</span></label><button type="button" class="button button-ghost" id="cancel-sync-modal">Cancelar</button><button type="button" class="button button-primary" id="confirm-sync" disabled>Sincronizar evidência</button></div>
+  </div>
+</dialog>
+{% endif %}
 {% endblock %}
 

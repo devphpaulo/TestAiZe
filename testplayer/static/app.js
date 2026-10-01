@@ -104,6 +104,7 @@
   const cycleChecks = [...document.querySelectorAll('.cycle-check')];
   const cycleAll = document.getElementById('cycle-all');
   const labels = { nao_executado: 'Não executado', em_andamento: 'Em andamento', aprovado: 'Aprovado', reprovado: 'Reprovado', bloqueado: 'Bloqueado' };
+  let caseViewChanged = () => {};
 
   function setSaveState(message, error = false) {
     saveState.textContent = message;
@@ -123,6 +124,7 @@
     url.hash = `caso-${views[index].dataset.caseView}`;
     history.replaceState(null, '', url);
     window.scrollTo({ top: 0, behavior: 'smooth' });
+    caseViewChanged();
   }
   caseButtons.forEach(button => button.addEventListener('click', () => showCase(viewIndexById.get(button.dataset.caseButton))));
   function moveCase(direction) {
@@ -174,6 +176,7 @@
       history.replaceState(null, '', url);
     }
     updateScopedSummary();
+    caseViewChanged();
   }
   function updateCyclePicker() {
     const chosen = cycleChecks.filter(check => check.checked);
@@ -313,6 +316,12 @@
       pdfModal.showModal();
     });
     ['close-pdf-modal', 'cancel-pdf-modal'].forEach(id => document.getElementById(id).addEventListener('click', () => pdfModal.close()));
+    pdfModal.addEventListener('click', event => {
+      if (event.target !== pdfModal) return;
+      const bounds = pdfModal.getBoundingClientRect();
+      if (event.clientX < bounds.left || event.clientX > bounds.right ||
+          event.clientY < bounds.top || event.clientY > bounds.bottom) pdfModal.close();
+    });
     allCheck.addEventListener('change', () => { caseChecks.forEach(check => { check.checked = allCheck.checked; }); updatePdfSelection(); });
     pdfModal.querySelectorAll('.pdf-folder-check').forEach(check => check.addEventListener('change', () => {
       check.closest('.pdf-folder').querySelectorAll('.pdf-case-check').forEach(item => { item.checked = check.checked; });
@@ -346,6 +355,213 @@
     updatePdfSelection();
   }
   if (!writable) return;
+
+  const syncModal = document.getElementById('sync-modal');
+  const syncSideButton = document.getElementById('open-sync-modal');
+  let syncSource = null;
+  let syncBusy = false;
+  function syncCardEligible(card) {
+    return Boolean(card?.querySelector('.step-action h4')?.textContent.trim()
+      && card.dataset.statusSaved === 'true'
+      && card.querySelector('.observed-area .rich-image'));
+  }
+  function syncCardIsCurrent(card) {
+    if (!card) return false;
+    const view = card.closest('[data-case-view]');
+    const button = caseButtons.find(item => item.dataset.caseButton === view?.dataset.caseView);
+    return view === views[selectedIndex] && !view.classList.contains('is-hidden')
+      && Boolean(button && !button.classList.contains('is-hidden'));
+  }
+  function updateSyncActions() {
+    cards.forEach(card => {
+      const action = card.querySelector('[data-step-sync]');
+      if (!action) return;
+      const eligible = syncCardEligible(card);
+      action.disabled = !eligible || syncBusy;
+      action.title = eligible ? 'Sincronizar evidência deste passo'
+        : 'Salve uma descrição, uma evidência e o status deste passo';
+    });
+    if (syncSideButton) {
+      const eligible = syncCardEligible(syncSource) && syncCardIsCurrent(syncSource);
+      syncSideButton.disabled = !eligible || syncBusy;
+      syncSideButton.title = eligible ? 'Sincronizar evidência do passo selecionado'
+        : 'Selecione um passo com evidência e status salvos';
+    }
+  }
+  function clearSyncSource() {
+    syncSource?.classList.remove('sync-source-selected');
+    syncSource = null;
+    updateSyncActions();
+  }
+  function revalidateSyncSource() {
+    if (syncSource && !syncCardIsCurrent(syncSource)) clearSyncSource();
+    else updateSyncActions();
+  }
+  function selectSyncSource(card) {
+    if (!syncCardIsCurrent(card)) { clearSyncSource(); return; }
+    cards.forEach(item => item.classList.toggle('sync-source-selected', item === card));
+    syncSource = card;
+    updateSyncActions();
+  }
+  cards.forEach(card => {
+    card.addEventListener('focusin', () => selectSyncSource(card));
+    card.addEventListener('pointerdown', () => selectSyncSource(card));
+    card.querySelector('[data-step-sync]')?.addEventListener('click', () => openSyncModal(card));
+  });
+  caseViewChanged = revalidateSyncSource;
+  window.addEventListener('hashchange', clearSyncSource);
+  syncSideButton?.addEventListener('click', () => openSyncModal(syncSource));
+
+  function syncTargetChecks() { return [...syncModal.querySelectorAll('.sync-target-check')]; }
+  function updateSyncSelection() {
+    const checks = syncTargetChecks();
+    const selected = checks.filter(check => check.checked).length;
+    document.getElementById('sync-selected-count').textContent = `${selected} de ${checks.length} destinos selecionados`;
+    syncModal.querySelectorAll('.sync-case-group').forEach(group => {
+      const children = [...group.querySelectorAll('.sync-target-check')];
+      const control = group.querySelector('.sync-case-check');
+      const count = children.filter(check => check.checked).length;
+      control.checked = count === children.length;
+      control.indeterminate = count > 0 && count < children.length;
+    });
+    document.getElementById('confirm-sync').disabled = syncBusy || selected === 0;
+    if (selected) document.getElementById('sync-feedback').textContent = '';
+  }
+  function renderSyncPreview(preview) {
+    const origin = preview.origin;
+    document.getElementById('sync-source-label').textContent =
+      `Origem: ${origin.case_name} · Passo ${String(origin.step_position).padStart(2, '0')} · “${origin.description}”`;
+    document.getElementById('sync-evidence-summary').textContent =
+      `${origin.evidence_count} ${origin.evidence_count === 1 ? 'imagem' : 'imagens'} · ${labels[origin.status]}`;
+    const evidenceList = document.getElementById('sync-evidence-list');
+    evidenceList.replaceChildren(...origin.evidence.map(item => {
+      const row = document.createElement('li');
+      row.textContent = `${item.original_name} · ${(item.size / 1024).toFixed(1)} KB`;
+      return row;
+    }));
+    const targetList = document.getElementById('sync-target-list');
+    targetList.replaceChildren();
+    let lastFolder = null;
+    const cases = new Map();
+    preview.targets.forEach(target => {
+      const folder = target.folder || 'Sem pasta';
+      if (folder !== lastFolder) {
+        const heading = document.createElement('h3');
+        heading.className = 'sync-folder-heading';
+        heading.textContent = folder;
+        targetList.append(heading);
+        lastFolder = folder;
+      }
+      let group = cases.get(target.case_id);
+      if (!group) {
+        group = document.createElement('section');
+        group.className = 'sync-case-group';
+        const heading = document.createElement('label');
+        heading.className = 'sync-case-heading';
+        const caseCheck = document.createElement('input');
+        caseCheck.type = 'checkbox'; caseCheck.className = 'sync-case-check'; caseCheck.checked = true;
+        const name = document.createElement('strong'); name.textContent = target.case_name;
+        heading.append(caseCheck, name); group.append(heading); targetList.append(group);
+        caseCheck.addEventListener('change', () => {
+          group.querySelectorAll('.sync-target-check').forEach(check => { check.checked = caseCheck.checked; });
+          updateSyncSelection();
+        });
+        cases.set(target.case_id, group);
+      }
+      const row = document.createElement('label');
+      row.className = 'sync-target-row';
+      const check = document.createElement('input');
+      check.type = 'checkbox'; check.className = 'sync-target-check'; check.value = target.step_id; check.checked = true;
+      const copy = document.createElement('span'); copy.className = 'sync-target-copy';
+      const title = document.createElement('strong'); title.textContent = `Passo ${String(target.step_position).padStart(2, '0')} · ${target.description}`;
+      const detail = document.createElement('small');
+      detail.textContent = `${labels[target.status]} · ${target.has_evidence ? 'Já possui evidência' : 'Sem evidência'}`;
+      copy.append(title, detail); row.append(check, copy); group.append(row);
+      check.addEventListener('change', updateSyncSelection);
+    });
+    document.getElementById('sync-empty').hidden = preview.targets.length > 0;
+    document.getElementById('sync-select-all').disabled = preview.targets.length === 0;
+    document.getElementById('sync-clear-all').disabled = preview.targets.length === 0;
+    document.getElementById('sync-feedback').textContent = '';
+    updateSyncSelection();
+  }
+  async function openSyncModal(card) {
+    if (syncBusy || !syncCardIsCurrent(card) || !syncCardEligible(card)) return;
+    selectSyncSource(card);
+    document.getElementById('sync-target-list').replaceChildren();
+    document.getElementById('sync-evidence-list').replaceChildren();
+    document.getElementById('sync-empty').hidden = true;
+    document.getElementById('sync-replicate-status').checked = false;
+    document.getElementById('sync-feedback').className = 'sync-feedback';
+    document.getElementById('sync-feedback').textContent = 'Carregando passos equivalentes…';
+    document.getElementById('confirm-sync').disabled = true;
+    syncModal.showModal();
+    try {
+      await flushView(card.closest('.case-view'));
+      const response = await fetch(card.dataset.syncUrl);
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.error || 'Não foi possível preparar a sincronização.');
+      renderSyncPreview(result);
+    } catch (error) {
+      document.getElementById('sync-feedback').classList.add('error');
+      document.getElementById('sync-feedback').textContent = error.message;
+      setSaveState(error.message, true);
+    }
+  }
+  function closeSyncModal() { if (!syncBusy) syncModal.close(); }
+  ['close-sync-modal', 'cancel-sync-modal'].forEach(id => document.getElementById(id).addEventListener('click', closeSyncModal));
+  syncModal.addEventListener('cancel', event => { if (syncBusy) event.preventDefault(); });
+  syncModal.addEventListener('click', event => {
+    if (event.target !== syncModal || syncBusy) return;
+    const bounds = syncModal.getBoundingClientRect();
+    if (event.clientX < bounds.left || event.clientX > bounds.right
+        || event.clientY < bounds.top || event.clientY > bounds.bottom) syncModal.close();
+  });
+  document.getElementById('sync-select-all').addEventListener('click', () => {
+    syncTargetChecks().forEach(check => { check.checked = true; }); updateSyncSelection();
+  });
+  document.getElementById('sync-clear-all').addEventListener('click', () => {
+    syncTargetChecks().forEach(check => { check.checked = false; }); updateSyncSelection();
+  });
+  document.getElementById('confirm-sync').addEventListener('click', async () => {
+    if (syncBusy || !syncCardIsCurrent(syncSource) || !syncCardEligible(syncSource)) {
+      revalidateSyncSource();
+      return;
+    }
+    const selected = syncTargetChecks().filter(check => check.checked).map(check => Number(check.value));
+    if (!selected.length) { updateSyncSelection(); return; }
+    syncBusy = true;
+    updateSyncActions();
+    const confirm = document.getElementById('confirm-sync');
+    const cancel = document.getElementById('cancel-sync-modal');
+    confirm.disabled = true; cancel.disabled = true; confirm.textContent = 'Sincronizando…';
+    syncSideButton.textContent = '⟳ Sincronizando…';
+    document.getElementById('sync-feedback').textContent = 'Copiando evidências…';
+    try {
+      const response = await fetch(syncSource.dataset.syncUrl, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
+        body: JSON.stringify({ target_step_ids: selected,
+                               replicate_status: document.getElementById('sync-replicate-status').checked })
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.error || 'Não foi possível sincronizar as evidências.');
+      document.getElementById('sync-feedback').textContent =
+        `Evidência sincronizada em ${result.synced} ${result.synced === 1 ? 'passo' : 'passos'}. Os destinos são independentes.`;
+      document.getElementById('sync-feedback').className = 'sync-feedback success';
+      confirm.textContent = 'Sincronizado';
+      setSaveState('Evidência sincronizada');
+      setTimeout(() => location.reload(), 900);
+    } catch (error) {
+      syncBusy = false;
+      cancel.disabled = false; confirm.textContent = 'Sincronizar evidência';
+      syncSideButton.textContent = '⟳ Sincronizar evidência';
+      document.getElementById('sync-feedback').className = 'sync-feedback error';
+      document.getElementById('sync-feedback').textContent = error.message;
+      setSaveState(error.message, true);
+      updateSyncActions(); updateSyncSelection();
+    }
+  });
+  updateSyncActions();
 
   function serializeEditor(editor) {
     const blocks = [];
@@ -389,6 +605,8 @@
       if (!response.ok) throw new Error(result.error || 'Falha ao salvar.');
       if (result.status_changed_at) {
         card.querySelector('[data-status-time]').textContent = `Status registrado em ${new Date(result.status_changed_at).toLocaleString('pt-BR')}`;
+        card.dataset.statusSaved = 'true';
+        updateSyncActions();
       }
       if ((versions.get(id) || 0) === version) card.dataset.statusAction = 'false';
       return version;
@@ -661,6 +879,7 @@
     editor._imageUrls.delete(figure.dataset.evidenceId);
     figure.remove();
     if (!editor.children.length) editor.append(makeParagraph());
+    updateSyncActions();
     queueEditor(editor);
     setSaveState('Imagem removida');
   }
@@ -700,7 +919,7 @@
     }
     editor.addEventListener('mouseup', rememberCaret);
     editor.addEventListener('keyup', rememberCaret);
-    editor.addEventListener('input', () => { syncRemovedImages(editor); queueEditor(editor); });
+    editor.addEventListener('input', () => { syncRemovedImages(editor); updateSyncActions(); queueEditor(editor); });
     editor.addEventListener('keydown', event => {
       if (event.key !== 'Backspace' && event.key !== 'Delete') return;
       const selection = window.getSelection();
@@ -818,6 +1037,7 @@
           syncRemovedImages(editor);
         }
         insertFigure(editor, makeImageFigure(result, file.name || 'Imagem colada'), anchor, offset);
+        selectSyncSource(area.closest('.step-card'));
         queueEditor(editor);
         setSaveState('Imagem inserida');
         return;

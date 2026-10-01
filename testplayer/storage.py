@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import os
 import shutil
 import sqlite3
+import unicodedata
 import uuid
 from contextlib import closing, contextmanager
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from .attachments import attachment_content_type, attachment_extension
@@ -431,6 +433,201 @@ def aggregate(statuses: list[str]) -> str:
     if all(s == "aprovado" for s in statuses):
         return "aprovado"
     return "em_andamento"
+
+
+def normalize_step_description(value: str) -> str:
+    if not isinstance(value, str):
+        return ""
+    decomposed = unicodedata.normalize("NFD", value.casefold())
+    without_diacritics = "".join(character for character in decomposed
+                                  if unicodedata.category(character) != "Mn")
+    return " ".join(unicodedata.normalize("NFC", without_diacritics).split())
+
+
+def _verified_evidence_path(directory: Path, item: dict) -> Path:
+    base = directory.resolve()
+    path = (base / item["relative_path"]).resolve()
+    if not path.is_relative_to(base) or not path.is_file():
+        raise ValueError(f"Evidência indisponível: {item['original_name']}")
+    content = path.read_bytes()
+    if len(content) != item["size"] or hashlib.sha256(content).hexdigest() != item["sha256"]:
+        raise ValueError(f"Integridade da evidência divergente: {item['original_name']}")
+    return path
+
+
+def _sync_context(connection: sqlite3.Connection, directory: Path, source_step_id: int) -> dict:
+    meta = get_meta(connection)
+    session_id = meta.get("id", "")
+    if (meta.get("state") not in {"rascunho", "concluida"} or not session_id
+            or (directory.name != session_id and not directory.name.endswith(f"-{session_id}"))):
+        raise ValueError("Sessão indisponível para sincronização.")
+    source = connection.execute(
+        "SELECT s.id AS step_id,s.case_id,s.position AS step_position,s.action AS description,"
+        "c.name AS case_name,c.folder,c.position AS case_position,r.status,r.status_changed_at,"
+        "r.actual,r.actual_doc FROM steps s JOIN cases c ON c.id=s.case_id "
+        "JOIN results r ON r.step_id=s.id WHERE s.id=?", (source_step_id,)
+    ).fetchone()
+    if source is None:
+        raise LookupError("Passo de origem não encontrado.")
+    source = dict(source)
+    normalized = normalize_step_description(source["description"])
+    if not normalized:
+        raise ValueError("O passo de origem não possui descrição.")
+    if source["status"] not in STATUSES or not source["status_changed_at"]:
+        raise ValueError("Salve o status do passo de origem antes de sincronizar.")
+    evidence = [dict(row) for row in connection.execute(
+        "SELECT * FROM evidence WHERE step_id=? ORDER BY created_at,id", (source_step_id,)
+    )]
+    if not evidence:
+        raise ValueError("O passo de origem não possui evidência persistida.")
+    for item in evidence:
+        _verified_evidence_path(directory, item)
+    targets = []
+    for row in connection.execute(
+        "SELECT s.id AS step_id,s.case_id,s.position AS step_position,s.action AS description,"
+        "c.name AS case_name,c.folder,c.position AS case_position,r.status,"
+        "EXISTS(SELECT 1 FROM evidence e WHERE e.step_id=s.id) AS has_evidence "
+        "FROM steps s JOIN cases c ON c.id=s.case_id JOIN results r ON r.step_id=s.id "
+        "ORDER BY c.position,s.position"
+    ):
+        item = dict(row)
+        item["has_evidence"] = bool(item["has_evidence"])
+        if item["step_id"] != source_step_id and normalize_step_description(item["description"]) == normalized:
+            targets.append(item)
+    source_blocks = display_blocks(source["actual_doc"], source["actual"], evidence)
+    widths = {block["id"]: block["width"] for block in source_blocks if block["type"] == "image"}
+    source.update(evidence=evidence, evidence_count=len(evidence), evidence_widths=widths)
+    return {"origin": source, "targets": targets}
+
+
+def find_sync_targets(directory: Path, source_step_id: int) -> dict:
+    with db(directory) as connection:
+        context = _sync_context(connection, directory, source_step_id)
+    origin = context["origin"]
+    return {
+        "origin": {
+            key: origin[key] for key in (
+                "step_id", "case_id", "step_position", "description", "case_name", "folder", "status",
+                "evidence_count",
+            )
+        } | {"evidence": [{key: item[key] for key in ("id", "original_name", "mime", "size")}
+                           for item in origin["evidence"]]},
+        "targets": context["targets"],
+    }
+
+
+def _stored_document_blocks(raw: str | None, fallback: str, evidence: list[dict]) -> list[dict]:
+    blocks = []
+    for block in display_blocks(raw, fallback, evidence):
+        if block["type"] == "text":
+            blocks.append({"type": "text", "text": block["text"]})
+        else:
+            blocks.append({"type": "image", "id": block["id"], "width": block["width"]})
+    return blocks
+
+
+def sync_step_evidence(directory: Path, source_step_id: int, target_step_ids: list[int],
+                       replicate_status: bool = False) -> dict:
+    if (not isinstance(target_step_ids, list) or not target_step_ids
+            or any(type(step_id) is not int for step_id in target_step_ids)):
+        raise ValueError("Selecione ao menos um passo de destino válido.")
+    if len(target_step_ids) != len(set(target_step_ids)):
+        raise ValueError("A seleção contém passos duplicados.")
+    temporary_files: list[Path] = []
+    created_files: list[Path] = []
+    target_case_ids: set[int] = set()
+    with db(directory) as connection:
+        connection.execute("BEGIN IMMEDIATE")
+        try:
+            context = _sync_context(connection, directory, source_step_id)
+            valid_targets = {item["step_id"]: item for item in context["targets"]}
+            if not set(target_step_ids).issubset(valid_targets):
+                raise ValueError("Há passos inválidos ou não equivalentes na seleção.")
+            source = context["origin"]
+            copies: dict[int, list[tuple[dict, str, str]]] = {}
+            for target_step_id in target_step_ids:
+                target = valid_targets[target_step_id]
+                current = connection.execute(
+                    "SELECT COUNT(*) FROM evidence WHERE step_id=?", (target_step_id,)
+                ).fetchone()[0]
+                if current + len(source["evidence"]) > 12:
+                    raise ValueError(f"O passo {target['step_position']} de {target['case_name']} excederia o limite de 12 imagens.")
+                target_case_ids.add(target["case_id"])
+                copies[target_step_id] = []
+                target_time = datetime.now().astimezone()
+                latest = connection.execute(
+                    "SELECT MAX(created_at) FROM evidence WHERE step_id=?", (target_step_id,)
+                ).fetchone()[0]
+                if latest:
+                    try:
+                        latest_time = datetime.fromisoformat(latest)
+                        if latest_time.tzinfo is None:
+                            latest_time = latest_time.replace(tzinfo=target_time.tzinfo)
+                        if latest_time >= target_time:
+                            target_time = latest_time + timedelta(microseconds=1)
+                    except ValueError:
+                        pass
+                for evidence_position, item in enumerate(source["evidence"]):
+                    source_path = _verified_evidence_path(directory, item)
+                    image_id = uuid.uuid4().hex
+                    suffix = Path(item["relative_path"]).suffix
+                    relative = (Path("evidencias") / f"caso-{target['case_id']}" /
+                                f"passo-{target['step_position']}" / f"{image_id}{suffix}")
+                    final_path = (directory / relative).resolve()
+                    if not final_path.is_relative_to(directory.resolve()):
+                        raise ValueError("Caminho de destino da evidência inválido.")
+                    final_path.parent.mkdir(parents=True, exist_ok=True)
+                    temporary = final_path.with_name(final_path.name + ".tmp")
+                    temporary_files.append(temporary)
+                    shutil.copy2(source_path, temporary)
+                    copied = temporary.read_bytes()
+                    if len(copied) != item["size"] or hashlib.sha256(copied).hexdigest() != item["sha256"]:
+                        raise OSError(f"Falha ao validar a cópia de {item['original_name']}.")
+                    os.replace(temporary, final_path)
+                    temporary_files.remove(temporary)
+                    created_files.append(final_path)
+                    created_at = (target_time + timedelta(microseconds=evidence_position)).isoformat(timespec="microseconds")
+                    connection.execute(
+                        "INSERT INTO evidence(id,step_id,relative_path,original_name,mime,size,sha256,created_at) "
+                        "VALUES (?,?,?,?,?,?,?,?)",
+                        (image_id, target_step_id, relative.as_posix(), item["original_name"], item["mime"],
+                         item["size"], item["sha256"], created_at),
+                    )
+                    copies[target_step_id].append((item, image_id, relative.as_posix()))
+            for target_step_id in target_step_ids:
+                row = connection.execute(
+                    "SELECT actual,actual_doc FROM results WHERE step_id=?", (target_step_id,)
+                ).fetchone()
+                existing = [dict(item) for item in connection.execute(
+                    "SELECT * FROM evidence WHERE step_id=? AND id NOT IN ({}) ORDER BY created_at,id".format(
+                        ",".join("?" for _ in copies[target_step_id])),
+                    (target_step_id, *(image_id for _, image_id, _ in copies[target_step_id])),
+                )]
+                blocks = _stored_document_blocks(row["actual_doc"], row["actual"], existing)
+                blocks.extend({"type": "image", "id": image_id,
+                               "width": source["evidence_widths"].get(item["id"], 100)}
+                              for item, image_id, _ in copies[target_step_id])
+                all_ids = {item[0] for item in connection.execute(
+                    "SELECT id FROM evidence WHERE step_id=?", (target_step_id,)
+                )}
+                document, _ = normalize_document(blocks, all_ids)
+                if replicate_status:
+                    connection.execute(
+                        "UPDATE results SET status=?,actual_doc=?,updated_at=?,status_changed_at=? WHERE step_id=?",
+                        (source["status"], document, now(), now(), target_step_id),
+                    )
+                else:
+                    connection.execute("UPDATE results SET actual_doc=? WHERE step_id=?", (document, target_step_id))
+            connection.commit()
+        except Exception:
+            connection.rollback()
+            for path in temporary_files + created_files:
+                path.unlink(missing_ok=True)
+            raise
+    record = read_session(directory)
+    statuses = {case["id"]: case["status"] for case in record["cases"] if case["id"] in target_case_ids}
+    return {"ok": True, "synced": len(target_step_ids), "replicated_status": replicate_status,
+            "case_statuses": statuses}
 
 
 def list_sessions(root: Path) -> list[dict]:
