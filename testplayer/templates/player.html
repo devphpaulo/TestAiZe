@@ -115,7 +115,6 @@
       <form action="{{ url_for('finish', session_id=meta.id) }}" method="post" id="finish-form"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button type="submit" class="button button-secondary side-action">Finalizar execução</button></form>
     {% endif %}
     <small class="side-note">Exportar um relatório não finaliza esta execução.</small>
-    {% if writable %}<button type="button" class="button button-secondary side-action sync-side-action" id="open-sync-modal" aria-label="Sincronizar evidência do passo selecionado" aria-describedby="sync-side-help" title="Selecione um passo com evidência e status salvos" disabled>⟳ Sincronizar evidência</button><small class="side-note" id="sync-side-help">Selecione um passo com descrição, evidência e status salvos.</small>{% endif %}
     <button type="button" class="button button-primary side-action" id="open-report-modal">Exportar Relatório</button>
     {% if meta.state == 'concluida' %}<form action="{{ url_for('new_execution', session_id=meta.id) }}" method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button type="submit" class="button button-ghost side-action">Nova execução a partir desta</button></form>{% endif %}
   </aside>
