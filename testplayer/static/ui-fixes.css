@@ -696,3 +696,76 @@
   .top-links > a,
   .local-indicator { display: none !important; }
 }
+
+/* Folder card links: separate, keyboard-safe actions in the existing Carbon table. */
+.folder-list-heading,
+.folder-row {
+  grid-template-columns: minmax(220px, 1.35fr) minmax(150px, .8fr) minmax(210px, .9fr) !important;
+  gap: 0 !important;
+}
+.folder-list-heading { padding: 0 !important; }
+.folder-list-heading > span { padding: 12px 16px; text-align: left !important; }
+.folder-row { min-height: 92px !important; padding: 0 !important; }
+.folder-open,
+.folder-card-cell { min-height: 92px; padding: 16px; }
+.folder-open { color: var(--ink); }
+.folder-open:hover { background: var(--soft); color: var(--ink); text-decoration: none; }
+.folder-row > .folder-progress { margin: 0 16px; }
+.folder-progress-percent { display: block; margin-top: 14px; color: var(--muted); font-size: 12px; line-height: 1; text-align: right; }
+.folder-card-cell { border-left: 1px solid var(--line); }
+.folder-card-cell { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.folder-card-empty { color: var(--faint); }
+.folder-card-link { display: flex; align-items: center; gap: 10px; min-width: 0; flex: 1; color: var(--blue); }
+.folder-card-link:hover { color: var(--blue-hover); }
+.folder-card-provider { display: grid; place-items: center; flex: 0 0 32px; width: 32px; height: 32px; background: var(--blue); color: var(--accent-ink); font-size: 12px; font-weight: 600; }
+.folder-card-link > span:last-child { display: grid; min-width: 0; }
+.folder-card-link small { color: var(--muted); font-size: 10px; }
+.folder-card-link strong { overflow: hidden; color: inherit; font-size: 13px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.folder-card-add { min-height: 40px; padding: 0 14px; border: 1px solid var(--blue); background: transparent; color: var(--blue); }
+.folder-card-add:hover { background: var(--blue); color: var(--accent-ink); }
+.folder-card-edit { display: grid; place-items: center; flex: 0 0 40px; width: 40px; height: 40px; border: 0; background: transparent; color: var(--blue); font-size: 17px; }
+.folder-card-edit:hover { background: var(--soft); }
+.readonly-card-row { display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px; margin-top: 8px; font-size: 12px; }
+.readonly-card-row a { color: var(--blue); font-weight: 600; }
+.readonly-card-row span { color: var(--faint); font-size: 11px; }
+
+.folder-card-modal { width: min(640px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); padding: 0; border: 1px solid var(--line); background: var(--canvas); color: var(--ink); overflow: auto; }
+.folder-card-modal::backdrop { background: rgba(22, 22, 22, .72); }
+.folder-card-modal form { display: grid; }
+.folder-card-modal-head { display: flex; justify-content: space-between; gap: 24px; padding: 24px 24px 12px; }
+.folder-card-modal-head h2 { margin-top: 6px; font-size: 24px; font-weight: 400; }
+.folder-card-modal-close { align-self: flex-start; width: 40px; height: 40px; border: 0; background: transparent; color: var(--ink); font-size: 24px; }
+.folder-card-modal-close:hover { background: var(--soft); }
+.folder-card-modal-body { padding: 12px 24px 24px; }
+.folder-card-context { display: grid; gap: 4px; padding: 14px 16px; border: 1px solid var(--line); border-top-color: var(--blue); background: var(--soft); }
+.folder-card-context small { color: var(--muted); font-size: 10px; }
+.folder-card-context strong { color: var(--ink); font-size: 15px; }
+.folder-card-context span { color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
+.folder-card-field { display: grid; gap: 8px; margin-top: 22px; color: var(--ink); font-size: 12px; }
+.folder-card-field input { width: 100%; min-height: 48px; padding: 11px 16px; border: 0; border-bottom: 1px solid var(--faint); border-radius: 0; background: var(--soft); color: var(--ink); }
+.folder-card-field input:focus { outline: 2px solid var(--blue); outline-offset: -2px; border-bottom: 2px solid var(--blue); }
+.folder-card-field input[aria-invalid="true"] { border-bottom-color: var(--danger); outline-color: var(--danger); }
+.folder-card-field small { color: var(--muted); }
+.folder-card-error { min-height: 20px; margin-top: 8px; color: var(--danger); font-size: 12px; }
+.folder-card-remove { min-height: 40px; padding: 0; border: 0; background: transparent; color: var(--danger); text-align: left; }
+.folder-card-remove:hover { text-decoration: underline; }
+.folder-card-modal-actions { display: grid; grid-template-columns: 1fr 1fr; border-top: 1px solid var(--line); }
+.folder-card-modal-actions .button { min-height: 64px; justify-content: flex-start; }
+
+@media (max-width: 900px) {
+  .folder-list-heading { display: none !important; }
+  .folder-row { grid-template-columns: 1fr 1fr !important; }
+  .folder-open { grid-column: 1 / -1; border-bottom: 1px solid var(--line); }
+  .folder-row > .folder-progress { grid-column: 1; grid-row: 2; margin: 0; padding: 24px 16px; }
+  .folder-card-cell { grid-column: 2; grid-row: 2; border-left: 1px solid var(--line); min-height: 72px; }
+}
+@media (max-width: 600px) {
+  .folder-row { grid-template-columns: 1fr !important; }
+  .folder-row > .folder-progress,
+  .folder-card-cell { grid-column: 1; grid-row: auto; }
+  .folder-card-cell { min-height: 64px; border-top: 1px solid var(--line); border-left: 0; }
+  .folder-card-modal-head,
+  .folder-card-modal-body { padding-left: 16px; padding-right: 16px; }
+  .folder-card-modal-actions { grid-template-columns: 1fr; }
+  .folder-card-modal-actions .button { min-height: 52px; }
+}

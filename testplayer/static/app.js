@@ -56,6 +56,148 @@
   }
   document.querySelectorAll('.flash').forEach(item => setTimeout(() => item.remove(), 9000));
 
+  const folderCardModal = document.getElementById('folder-card-modal');
+  if (folderCardModal) {
+    const form = document.getElementById('folder-card-form');
+    const urlInput = document.getElementById('folder-card-url');
+    const error = document.getElementById('folder-card-error');
+    const removeButton = document.getElementById('folder-card-remove');
+    const saveButton = document.getElementById('folder-card-save');
+    const closeButtons = [...folderCardModal.querySelectorAll('[data-folder-card-close]')];
+    let selectedRow = null;
+    let returnFocus = null;
+    let busy = false;
+
+    const cardUrlIsValid = value => {
+      if (!value || value !== value.trim() || [...value].some(character => /\s/u.test(character) || character.charCodeAt(0) < 32 || character.charCodeAt(0) === 127)) return false;
+      try {
+        const parsed = new URL(value);
+        return ['http:', 'https:'].includes(parsed.protocol) && Boolean(parsed.hostname);
+      } catch (_) { return false; }
+    };
+    const closeFolderCard = () => { if (!busy && folderCardModal.open) folderCardModal.close(); };
+    const setFolderCardBusy = value => {
+      busy = value;
+      saveButton.disabled = value;
+      removeButton.disabled = value;
+      closeButtons.forEach(button => { button.disabled = value; });
+    };
+    const cardIcon = provider => provider === 'Jira' ? 'J' : provider === 'ClickUp' ? 'C' : '↗';
+    function renderFolderCard(row, card) {
+      const cell = row.querySelector('.folder-card-cell');
+      cell.replaceChildren();
+      if (card) {
+        const link = document.createElement('a');
+        link.className = 'folder-card-link';
+        link.href = card.url;
+        link.target = '_blank';
+        link.rel = 'noopener noreferrer';
+        link.title = card.url;
+        link.setAttribute('aria-label', `Abrir ${card.label} no ${card.provider} em nova aba`);
+        const icon = document.createElement('span');
+        icon.className = 'folder-card-provider';
+        icon.setAttribute('aria-hidden', 'true');
+        icon.textContent = cardIcon(card.provider);
+        const copy = document.createElement('span');
+        const provider = document.createElement('small');
+        provider.textContent = card.provider;
+        const label = document.createElement('strong');
+        label.textContent = `${card.label} ↗`;
+        copy.append(provider, label);
+        link.append(icon, copy);
+        const edit = document.createElement('button');
+        edit.className = 'folder-card-edit';
+        edit.type = 'button';
+        edit.dataset.folderCardEdit = '';
+        edit.title = 'Editar vínculo';
+        edit.setAttribute('aria-label', `Editar vínculo da pasta ${row.dataset.folderName}`);
+        edit.textContent = '✎';
+        cell.append(link, edit);
+      } else {
+        const add = document.createElement('button');
+        add.className = 'folder-card-add';
+        add.type = 'button';
+        add.dataset.folderCardEdit = '';
+        const icon = document.createElement('span');
+        icon.setAttribute('aria-hidden', 'true');
+        icon.textContent = '＋';
+        add.append(icon, ' Vincular card');
+        cell.append(add);
+      }
+    }
+    function openFolderCard(trigger) {
+      selectedRow = trigger.closest('[data-folder-card-row]');
+      returnFocus = trigger;
+      const existingUrl = selectedRow.dataset.cardUrl;
+      document.getElementById('folder-card-folder').textContent = selectedRow.dataset.folderName;
+      document.getElementById('folder-card-path').textContent = selectedRow.dataset.folderPath;
+      document.getElementById('folder-card-modal-title').textContent = existingUrl ? 'Editar card vinculado' : 'Vincular card à pasta';
+      urlInput.value = existingUrl;
+      urlInput.removeAttribute('aria-invalid');
+      error.textContent = '';
+      removeButton.hidden = !existingUrl;
+      folderCardModal.showModal();
+      urlInput.focus();
+    }
+    document.addEventListener('click', event => {
+      const trigger = event.target.closest('[data-folder-card-edit]');
+      if (trigger) openFolderCard(trigger);
+    });
+    closeButtons.forEach(button => button.addEventListener('click', closeFolderCard));
+    urlInput.addEventListener('input', () => { urlInput.removeAttribute('aria-invalid'); error.textContent = ''; });
+    folderCardModal.addEventListener('cancel', event => { if (busy) event.preventDefault(); });
+    folderCardModal.addEventListener('click', event => {
+      if (event.target !== folderCardModal) return;
+      const bounds = folderCardModal.getBoundingClientRect();
+      if (event.clientX < bounds.left || event.clientX > bounds.right || event.clientY < bounds.top || event.clientY > bounds.bottom) closeFolderCard();
+    });
+    folderCardModal.addEventListener('close', () => { selectedRow = null; returnFocus?.focus(); returnFocus = null; });
+    form.addEventListener('submit', async event => {
+      event.preventDefault();
+      if (busy) return;
+      const value = urlInput.value;
+      if (!cardUrlIsValid(value)) {
+        error.textContent = 'Informe um link completo iniciado por http:// ou https://.';
+        urlInput.setAttribute('aria-invalid', 'true');
+        urlInput.focus();
+        return;
+      }
+      setFolderCardBusy(true);
+      error.textContent = '';
+      try {
+        const response = await fetch(folderCardModal.dataset.endpoint, {method: 'POST', headers: {'Content-Type': 'application/json', 'X-CSRF-Token': csrf}, body: JSON.stringify({folder_path: selectedRow.dataset.folderPath, card_url: value})});
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || 'Não foi possível salvar o vínculo.');
+        selectedRow.dataset.cardUrl = result.card.url;
+        selectedRow.dataset.cardProvider = result.card.provider;
+        selectedRow.dataset.cardLabel = result.card.label;
+        renderFolderCard(selectedRow, result.card);
+        returnFocus = selectedRow.querySelector('[data-folder-card-edit]');
+        folderCardModal.close();
+      } catch (failure) {
+        error.textContent = failure.message;
+        urlInput.setAttribute('aria-invalid', 'true');
+      } finally { setFolderCardBusy(false); }
+    });
+    removeButton.addEventListener('click', async () => {
+      if (busy) return;
+      setFolderCardBusy(true);
+      error.textContent = '';
+      try {
+        const response = await fetch(folderCardModal.dataset.endpoint, {method: 'DELETE', headers: {'Content-Type': 'application/json', 'X-CSRF-Token': csrf}, body: JSON.stringify({folder_path: selectedRow.dataset.folderPath})});
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || 'Não foi possível remover o vínculo.');
+        selectedRow.dataset.cardUrl = '';
+        selectedRow.dataset.cardProvider = '';
+        selectedRow.dataset.cardLabel = '';
+        renderFolderCard(selectedRow, null);
+        returnFocus = selectedRow.querySelector('[data-folder-card-edit]');
+        folderCardModal.close();
+      } catch (failure) { error.textContent = failure.message; }
+      finally { setFolderCardBusy(false); }
+    });
+  }
+
   const deleteModal = document.getElementById('delete-session-modal');
   if (deleteModal) {
     const form = document.getElementById('delete-session-form');
