@@ -286,25 +286,26 @@ class FolderLinkTests(unittest.TestCase):
         self.assertNotIn(b'<a class="folder-row"', listing.data)
         listing_html = listing.get_data(as_text=True)
         self.assertNotIn("Resultados", listing_html)
+        self.assertNotIn("folder-row-end", listing_html)
         self.assertEqual(
             len(re.findall(r'<span class="folder-progress-percent">\d+%</span>', listing_html)),
             3,
         )
-        open_contents = re.findall(
-            r'<a class="folder-row-end"[^>]*>(.*?)</a>', listing_html, re.DOTALL
+        open_links = re.findall(
+            r'<a class="folder-row-main folder-open" href="([^"]+)"[^>]*>.*?</a>',
+            listing_html,
+            re.DOTALL,
         )
-        self.assertEqual(open_contents, ["<span>Abrir →</span>"] * 3)
-        open_links = re.findall(r'<a class="folder-row-end" href="([^"]+)"[^>]*>.*?</a>',
-                                listing_html, re.DOTALL)
         self.assertEqual(open_links, [
             f"/sessao/{self.session_id}",
             f"/sessao/{self.session_id}?pasta=/Produto/Same",
             f"/sessao/{self.session_id}?pasta=/Outro/Same",
         ])
-        self.assertNotIn("data-folder-card-edit", "".join(
-            re.findall(r'<a class="folder-row-end"[^>]*>.*?</a>',
-                       listing_html, re.DOTALL)
-        ))
+        self.assertNotIn("data-folder-card-edit", "".join(re.findall(
+            r'<a class="folder-row-main folder-open"[^>]*>.*?</a>',
+            listing_html,
+            re.DOTALL,
+        )))
 
         endpoint = f"/api/sessao/{self.session_id}/pasta/vinculo"
         body = {"folder_path": "/Produto/Same", "card_url": "https://empresa.atlassian.net/browse/QA-231"}
@@ -399,18 +400,26 @@ class FolderLinkTests(unittest.TestCase):
             template,
         )
         self.assertNotIn("<span></span>", template)
+        self.assertNotIn("folder-row-end", template)
         self.assertRegex(
             template,
             r'(?s)folder-progress-track.*?</div>\s*<span class="folder-progress-percent">.*?%</span>\s*<div class="progress-tooltip"',
         )
-        for content in re.findall(r'<a class="folder-row-end"[^>]*>(.*?)</a>', template, re.DOTALL):
-            self.assertNotIn("%", content)
-            self.assertEqual(content.strip(), "<span>Abrir →</span>")
-        self.assertNotIn(".folder-row-end { display: none; }", fixes)
+        self.assertIn('<div class="progress-tooltip" role="tooltip">', template)
+        self.assertRegex(
+            template,
+            r'\{% for status, label in status_names %\}\{% if group\.counts\[status\] %\}'
+            r'<span><i class="state-\{\{ status \}\}"></i>.*?\{% endif %\}\{% endfor %\}',
+        )
+        self.assertRegex(
+            fixes,
+            r'(?s)\.folder-list-heading,\s*\.folder-row \{\s*grid-template-columns: '
+            r'minmax\(220px, 1\.35fr\) minmax\(150px, \.8fr\) minmax\(210px, \.9fr\) !important;',
+        )
+        self.assertIn(".folder-progress-percent { display: block; margin-top: 14px;", fixes)
+        self.assertNotIn(".folder-row-end", fixes)
         self.assertNotIn(".folder-list-heading > span:last-child", fixes)
         self.assertIn(".folder-list-heading > span { padding: 12px 16px; text-align: left !important; }", fixes)
-        self.assertIn(".folder-row-end { display: flex;", fixes)
-        self.assertIn(".folder-row-end > span { display: inline; }", fixes)
         self.assertIn(':root[data-theme="light"]', carbon)
         self.assertIn(':root[data-theme="dark"]', carbon)
         self.assertIn("background: var(--canvas)", fixes)

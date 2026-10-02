@@ -11,7 +11,7 @@
     </div>
     <span class="folder-progress-percent">{{ percent }}%</span>
     <div class="progress-tooltip" role="tooltip"><strong>{{ group.total }} casos nesta seleção</strong>
-      {% for status, label in status_names %}<span><i class="state-{{ status }}"></i>{{ label }} <b>{{ group.counts[status] }}/{{ group.total }} · {{ (group.counts[status] / (group.total or 1) * 100)|round|int }}%</b></span>{% endfor %}
+      {% for status, label in status_names %}{% if group.counts[status] %}<span><i class="state-{{ status }}"></i>{{ label }} <b>{{ group.counts[status] }}/{{ group.total }} · {{ (group.counts[status] / (group.total or 1) * 100)|round|int }}%</b></span>{% endif %}{% endfor %}
     </div>
   </div>
 {% endmacro %}
@@ -24,7 +24,6 @@
     <a class="folder-row-main folder-open" href="{{ url_for('player', session_id=meta.id) }}"><span class="folder-icon">▦</span><span><strong>Todas as pastas</strong><small>{{ record.cases|length }} casos · visão completa da sessão</small></span></a>
     {{ progress(all_progress, (all_progress.done / (all_progress.total or 1) * 100)|round|int) }}
     <span class="folder-card-cell folder-card-empty" aria-label="Não se aplica à visão de todas as pastas">—</span>
-    <a class="folder-row-end" href="{{ url_for('player', session_id=meta.id) }}" aria-label="Abrir todas as pastas"><span>Abrir →</span></a>
   </article>
   {% for group in folder_groups %}
   <article class="folder-row" data-folder-card-row data-folder-name="{{ group.label }}" data-folder-path="{{ group.name }}" data-card-url="{{ group.card.url if group.card else '' }}" data-card-provider="{{ group.card.provider if group.card else '' }}" data-card-label="{{ group.card.label if group.card else '' }}">
@@ -38,7 +37,6 @@
       <button class="folder-card-add" type="button" data-folder-card-edit><span aria-hidden="true">＋</span> Vincular card</button>
       {% endif %}
     </div>
-    <a class="folder-row-end" href="{{ url_for('player', session_id=meta.id, pasta=group.name) }}" aria-label="Abrir pasta {{ group.label }}"><span>Abrir →</span></a>
   </article>
   {% endfor %}
   <p class="folder-hint">Passe o mouse sobre a barra de progresso para ver quantos casos há em cada status.</p>

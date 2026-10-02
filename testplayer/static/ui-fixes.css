@@ -700,21 +700,19 @@
 /* Folder card links: separate, keyboard-safe actions in the existing Carbon table. */
 .folder-list-heading,
 .folder-row {
-  grid-template-columns: minmax(220px, 1.35fr) minmax(150px, .8fr) minmax(210px, .9fr) 108px !important;
+  grid-template-columns: minmax(220px, 1.35fr) minmax(150px, .8fr) minmax(210px, .9fr) !important;
   gap: 0 !important;
 }
 .folder-list-heading { padding: 0 !important; }
 .folder-list-heading > span { padding: 12px 16px; text-align: left !important; }
 .folder-row { min-height: 92px !important; padding: 0 !important; }
 .folder-open,
-.folder-card-cell,
-.folder-row-end { min-height: 92px; padding: 16px; }
+.folder-card-cell { min-height: 92px; padding: 16px; }
 .folder-open { color: var(--ink); }
 .folder-open:hover { background: var(--soft); color: var(--ink); text-decoration: none; }
 .folder-row > .folder-progress { margin: 0 16px; }
-.folder-progress-percent { display: block; margin-top: 8px; color: var(--muted); font-size: 12px; line-height: 1; text-align: right; }
-.folder-card-cell,
-.folder-row-end { border-left: 1px solid var(--line); }
+.folder-progress-percent { display: block; margin-top: 14px; color: var(--muted); font-size: 12px; line-height: 1; text-align: right; }
+.folder-card-cell { border-left: 1px solid var(--line); }
 .folder-card-cell { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .folder-card-empty { color: var(--faint); }
 .folder-card-link { display: flex; align-items: center; gap: 10px; min-width: 0; flex: 1; color: var(--blue); }
@@ -760,8 +758,6 @@
   .folder-open { grid-column: 1 / -1; border-bottom: 1px solid var(--line); }
   .folder-row > .folder-progress { grid-column: 1; grid-row: 2; margin: 0; padding: 24px 16px; }
   .folder-card-cell { grid-column: 2; grid-row: 2; border-left: 1px solid var(--line); min-height: 72px; }
-  .folder-row-end { display: flex; grid-column: 1 / -1; grid-row: auto; min-height: 56px; justify-content: flex-start; border-top: 1px solid var(--line); border-left: 0; }
-  .folder-row-end > span { display: inline; }
 }
 @media (max-width: 600px) {
   .folder-row { grid-template-columns: 1fr !important; }
