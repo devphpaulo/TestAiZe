@@ -4,11 +4,12 @@
 {% block content %}
 {% set meta = record.meta %}
 {% set status_names = [('aprovado','Aprovados'),('reprovado','Reprovados'),('bloqueado','Bloqueados'),('em_andamento','Em andamento'),('nao_executado','Não executados')] %}
-{% macro progress(group) %}
+{% macro progress(group, percent) %}
   <div class="folder-progress" tabindex="0" aria-label="Distribuição dos {{ group.total }} casos por status">
     <div class="folder-progress-track">
       {% for status, label in status_names %}{% if group.counts[status] %}<span class="progress-segment segment-{{ status }}" style="width:{{ group.counts[status] / group.total * 100 }}%"></span>{% endif %}{% endfor %}
     </div>
+    <span class="folder-progress-percent">{{ percent }}%</span>
     <div class="progress-tooltip" role="tooltip"><strong>{{ group.total }} casos nesta seleção</strong>
       {% for status, label in status_names %}<span><i class="state-{{ status }}"></i>{{ label }} <b>{{ group.counts[status] }}/{{ group.total }} · {{ (group.counts[status] / (group.total or 1) * 100)|round|int }}%</b></span>{% endfor %}
     </div>
@@ -18,17 +19,17 @@
   <a href="{{ url_for('home') }}" class="back-link">← Todas as sessões</a>
   <div class="eyebrow"><span class="eyebrow-line"></span> ABRIR EXECUÇÃO</div>
   <div class="folder-intro"><div><h1>Escolha o que abrir.</h1><p>{{ meta.source_name }} · {{ record.cases|length }} casos em {{ folder_groups|length }} {{ 'pasta' if folder_groups|length == 1 else 'pastas' }}</p></div><span class="status-tag {{ 'status-em_andamento' if meta.state == 'rascunho' else 'status-aprovado' }}">{{ 'Em andamento' if meta.state == 'rascunho' else 'Concluída' }}</span></div>
-  <div class="folder-list-heading"><span>Pasta</span><span>Progresso</span><span>Card vinculado</span><span>Resultados</span></div>
+  <div class="folder-list-heading"><span>Pasta</span><span>Progresso</span><span>Card vinculado</span></div>
   <article class="folder-row all-folders">
     <a class="folder-row-main folder-open" href="{{ url_for('player', session_id=meta.id) }}"><span class="folder-icon">▦</span><span><strong>Todas as pastas</strong><small>{{ record.cases|length }} casos · visão completa da sessão</small></span></a>
-    {{ progress(all_progress) }}
+    {{ progress(all_progress, (all_progress.done / (all_progress.total or 1) * 100)|round|int) }}
     <span class="folder-card-cell folder-card-empty" aria-label="Não se aplica à visão de todas as pastas">—</span>
-    <a class="folder-row-end" href="{{ url_for('player', session_id=meta.id) }}" aria-label="Abrir todas as pastas"><b>{{ (all_progress.done / (all_progress.total or 1) * 100)|round|int }}%</b><span>Abrir →</span></a>
+    <a class="folder-row-end" href="{{ url_for('player', session_id=meta.id) }}" aria-label="Abrir todas as pastas"><span>Abrir →</span></a>
   </article>
   {% for group in folder_groups %}
   <article class="folder-row" data-folder-card-row data-folder-name="{{ group.label }}" data-folder-path="{{ group.name }}" data-card-url="{{ group.card.url if group.card else '' }}" data-card-provider="{{ group.card.provider if group.card else '' }}" data-card-label="{{ group.card.label if group.card else '' }}">
     <a class="folder-row-main folder-open" href="{{ url_for('player', session_id=meta.id, pasta=group.name) }}"><span class="folder-icon">▤</span><span><strong title="{{ group.name or group.label }}">{{ group.label }}</strong><small title="{{ group.name or group.label }}">{{ group.name or 'Sem pasta' }}</small></span></a>
-    {{ progress(group) }}
+    {{ progress(group, group.percent) }}
     <div class="folder-card-cell">
       {% if group.card %}
       <a class="folder-card-link" href="{{ group.card.url }}" target="_blank" rel="noopener noreferrer" title="{{ group.card.url }}" aria-label="Abrir {{ group.card.label }} no {{ group.card.provider }} em nova aba"><span class="folder-card-provider" aria-hidden="true">{{ group.card.provider[0] }}</span><span><small>{{ group.card.provider }}</small><strong>{{ group.card.label }} ↗</strong></span></a>
@@ -37,7 +38,7 @@
       <button class="folder-card-add" type="button" data-folder-card-edit><span aria-hidden="true">＋</span> Vincular card</button>
       {% endif %}
     </div>
-    <a class="folder-row-end" href="{{ url_for('player', session_id=meta.id, pasta=group.name) }}" aria-label="Abrir pasta {{ group.label }}"><b>{{ group.percent }}%</b><span>Abrir →</span></a>
+    <a class="folder-row-end" href="{{ url_for('player', session_id=meta.id, pasta=group.name) }}" aria-label="Abrir pasta {{ group.label }}"><span>Abrir →</span></a>
   </article>
   {% endfor %}
   <p class="folder-hint">Passe o mouse sobre a barra de progresso para ver quantos casos há em cada status.</p>
