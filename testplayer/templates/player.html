@@ -1,6 +1,6 @@
 {% extends 'base.html' %}
 {% block title %}Execução · TestAíZé{% endblock %}
-{% block header_actions %}<a class="view-switch" href="{{ url_for('kanban', session_id=record.meta.id) }}">Modo Kanban</a>{% endblock %}
+{% block header_actions %}<a class="view-switch" href="{{ url_for('kanban', session_id=record.meta.id) }}">Modo Kanban</a><button type="button" class="mini-player-open" id="mini-player-open" aria-haspopup="dialog" aria-controls="mini-player"><span aria-hidden="true">▣</span> Mini Player</button>{% endblock %}
 {% block content %}
 {% set meta = record.meta %}
 {% macro rich_editor(blocks, placeholder, editable=true) %}
@@ -118,6 +118,25 @@
     <button type="button" class="button button-primary side-action" id="open-report-modal">Exportar Relatório</button>
     {% if meta.state == 'concluida' %}<form action="{{ url_for('new_execution', session_id=meta.id) }}" method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button type="submit" class="button button-ghost side-action">Nova execução a partir desta</button></form>{% endif %}
   </aside>
+</div>
+<div id="mini-player-home">
+  <section class="mini-player" id="mini-player" data-surface="fallback" role="dialog" aria-modal="false" aria-label="Mini Player da execução" hidden>
+    <header class="mini-player-head">
+      <span class="mini-player-brand"><img src="{{ url_for('static', filename='favicon.svg') }}" alt=""><strong>Mini Player</strong></span>
+      <span class="mini-player-head-spacer"></span>
+      <button type="button" class="mini-player-icon" id="mini-player-restore" aria-label="Restaurar visualização completa" title="Restaurar visualização completa">↗</button>
+      <button type="button" class="mini-player-icon" id="mini-player-close" aria-label="Fechar Mini Player" title="Fechar Mini Player">×</button>
+    </header>
+    <div class="mini-player-content">
+      <p class="mini-player-surface" id="mini-player-surface"></p>
+      <span class="mini-player-case-label" id="mini-player-case-label"></span>
+      <h2 id="mini-player-case-title"></h2>
+      <div class="mini-player-progress"><span>Passo <b id="mini-player-position">1</b> de <b id="mini-player-total">1</b></span><div class="mini-player-progress-track" aria-hidden="true"><i id="mini-player-progress-bar"></i></div><span id="mini-player-case-status"></span></div>
+      <div class="mini-player-steps" id="mini-player-steps"></div>
+      <p class="mini-player-feedback" id="mini-player-feedback" role="status" aria-live="polite"></p>
+    </div>
+    <footer class="mini-player-foot"><span id="mini-player-sync-state"><i aria-hidden="true"></i> Sessão sincronizada</span><span class="mini-player-head-spacer"></span><button type="button" class="mini-player-nav" id="mini-player-prev">← Caso</button><button type="button" class="mini-player-nav mini-player-nav-primary" id="mini-player-next">Próximo caso →</button></footer>
+  </section>
 </div>
 <dialog id="pdf-modal" class="pdf-modal" aria-labelledby="pdf-modal-title">
   <form action="{{ url_for('make_pdf', session_id=meta.id) }}" data-pdf-url="{{ url_for('make_pdf', session_id=meta.id) }}" data-html-url="{{ url_for('make_html', session_id=meta.id) }}" method="post" id="pdf-form">
