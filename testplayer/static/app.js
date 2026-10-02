@@ -246,11 +246,18 @@
   const cycleChecks = [...document.querySelectorAll('.cycle-check')];
   const cycleAll = document.getElementById('cycle-all');
   const labels = { nao_executado: 'Não executado', em_andamento: 'Em andamento', aprovado: 'Aprovado', reprovado: 'Reprovado', bloqueado: 'Bloqueado' };
-  let caseViewChanged = () => {};
+  const caseViewChangeHandlers = new Set();
+  function caseViewChanged() { caseViewChangeHandlers.forEach(handler => handler()); }
 
   function setSaveState(message, error = false) {
     saveState.textContent = message;
     saveState.classList.toggle('error', error);
+    const pipDocument = window.documentPictureInPicture?.window?.document;
+    const miniState = document.getElementById('mini-player-sync-state') || pipDocument?.getElementById('mini-player-sync-state');
+    if (miniState) {
+      miniState.lastChild.textContent = ` ${message}`;
+      miniState.classList.toggle('error', error);
+    }
   }
   function showCase(index) {
     if (index < 0 || index >= views.length) return;
@@ -425,6 +432,280 @@
   });
   views.forEach(view => { view.dataset.manualStatus = view.querySelector('.case-status-buttons .selected')?.dataset.value || ''; });
   updateSummary();
+
+  const miniPlayer = document.getElementById('mini-player');
+  const miniPlayerHome = document.getElementById('mini-player-home');
+  const miniPlayerOpen = document.getElementById('mini-player-open');
+  const miniPlayerFeedback = document.getElementById('mini-player-feedback');
+  const activeMiniSteps = new Map(views.map(view => [view.dataset.caseView, view.querySelector('.step-card')]));
+  let pipWindow = null;
+  let focusMainAfterMiniClose = false;
+
+  function activeMiniStep() {
+    const view = views[selectedIndex];
+    return activeMiniSteps.get(view?.dataset.caseView) || view?.querySelector('.step-card') || null;
+  }
+  function setActiveMiniStep(card, revealMain = false) {
+    if (!card) return;
+    activeMiniSteps.set(card.dataset.caseId, card);
+    renderMiniPlayer();
+    if (revealMain) card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+  function miniElement(tag, className, text = '') {
+    const node = miniPlayer.ownerDocument.createElement(tag);
+    node.className = className;
+    node.textContent = text;
+    return node;
+  }
+  function setMiniPlayerFeedback(message, error = false) {
+    miniPlayerFeedback.textContent = message;
+    miniPlayerFeedback.classList.toggle('error', error);
+  }
+  function observedTextBlocks(editor) {
+    const blocks = [];
+    function collect(node) {
+      if (node.nodeType === Node.TEXT_NODE) { blocks.push(node); return; }
+      if (node.nodeType !== Node.ELEMENT_NODE) return;
+      if (node.matches('.rich-image')) return;
+      if (node.matches('p,div') && !node.querySelector('.rich-image')) { blocks.push(node); return; }
+      node.childNodes.forEach(collect);
+    }
+    editor.childNodes.forEach(collect);
+    return blocks;
+  }
+  function syncObservedText(editor, value) {
+    const lines = value.replace(/\r/g, '').split('\n');
+    const paragraphs = observedTextBlocks(editor);
+    lines.forEach((line, index) => {
+      if (!paragraphs[index]) {
+        const paragraph = makeParagraph();
+        editor.append(paragraph);
+        paragraphs.push(paragraph);
+      }
+      paragraphs[index].textContent = line;
+    });
+    paragraphs.slice(lines.length).forEach(paragraph => paragraph.remove());
+    updateSyncActions();
+    queueEditor(editor);
+  }
+  function syncMiniObservedText(editor) {
+    const card = editor.closest('.step-card');
+    if (card !== activeMiniStep()) return;
+    const input = miniPlayer.querySelector('.mini-player-step.active .mini-player-paste');
+    if (input && !(input.ownerDocument.hasFocus() && input.ownerDocument.activeElement === input)) {
+      input.value = plainText(serializeEditor(editor));
+    }
+  }
+  function renderMiniPlayer() {
+    const view = views[selectedIndex];
+    if (!view || !miniPlayer) return;
+    const focused = miniPlayer.ownerDocument.activeElement;
+    const focusedStep = miniPlayer.contains(focused) ? focused.closest('.mini-player-step') : null;
+    const focusTarget = focusedStep ? {
+      stepId: focusedStep.dataset.stepId,
+      control: focused.classList.contains('mini-player-status') ? 'status'
+        : focused.classList.contains('mini-player-paste') ? 'paste' : 'summary',
+      status: focused.dataset?.value || ''
+    } : null;
+    const stepCards = [...view.querySelectorAll('.step-card')];
+    const active = activeMiniSteps.get(view.dataset.caseView) || stepCards[0];
+    if (active) activeMiniSteps.set(view.dataset.caseView, active);
+    const activeIndex = Math.max(0, stepCards.indexOf(active));
+    miniPlayer.querySelector('#mini-player-case-label').textContent = view.querySelector('.case-kicker')?.textContent.trim() || '';
+    miniPlayer.querySelector('#mini-player-case-title').textContent = view.querySelector('.case-heading h2')?.textContent.trim() || '';
+    miniPlayer.querySelector('#mini-player-position').textContent = String(activeIndex + 1);
+    miniPlayer.querySelector('#mini-player-total').textContent = String(stepCards.length);
+    miniPlayer.querySelector('#mini-player-case-status').textContent = view.querySelector('[data-case-status]')?.textContent.trim() || '';
+    const approved = stepCards.filter(card => card.dataset.status === 'aprovado').length;
+    miniPlayer.querySelector('#mini-player-progress-bar').style.width = `${stepCards.length ? approved / stepCards.length * 100 : 0}%`;
+
+    const list = miniPlayer.querySelector('#mini-player-steps');
+    list.replaceChildren();
+    stepCards.forEach((card, index) => {
+      const item = miniElement('section', `mini-player-step${card === active ? ' active' : ''}`);
+      item.dataset.stepId = card.dataset.stepId;
+      item.dataset.status = card.dataset.status;
+      const summary = miniElement('button', 'mini-player-step-summary');
+      summary.type = 'button';
+      summary.setAttribute('aria-expanded', String(card === active));
+      const number = miniElement('span', 'mini-player-step-number', String(index + 1).padStart(2, '0'));
+      const title = miniElement('span', 'mini-player-step-title', card.querySelector('.step-action h4')?.textContent.trim() || 'Passo sem descrição');
+      const state = miniElement('span', 'mini-player-step-state', card.querySelector('.step-status-buttons .selected span')?.textContent.trim() || '○');
+      state.setAttribute('aria-label', labels[card.dataset.status] || 'Não executado');
+      summary.append(number, title, state);
+      summary.addEventListener('click', () => setActiveMiniStep(card, true));
+      item.append(summary);
+
+      if (card === active) {
+        const body = miniElement('div', 'mini-player-step-body');
+        const statusLabel = miniElement('span', 'mini-player-field-label', 'Status do passo');
+        const statusGroup = miniElement('div', 'mini-player-statuses');
+        statusGroup.setAttribute('role', 'group');
+        statusGroup.setAttribute('aria-label', `Status do passo ${index + 1}`);
+        card.querySelectorAll('.step-status-buttons .status-icon-button').forEach(mainButton => {
+          const button = miniElement('button', `mini-player-status status-choice-${mainButton.dataset.value}${mainButton.classList.contains('selected') ? ' selected' : ''}`);
+          button.type = 'button';
+          button.dataset.value = mainButton.dataset.value;
+          button.dataset.tooltip = mainButton.getAttribute('aria-label');
+          button.title = mainButton.getAttribute('aria-label');
+          button.setAttribute('aria-label', mainButton.getAttribute('aria-label'));
+          button.setAttribute('aria-pressed', String(mainButton.classList.contains('selected')));
+          button.disabled = !writable;
+          button.textContent = mainButton.textContent.trim();
+          button.addEventListener('click', () => {
+            mainButton?.click();
+            queueMicrotask(renderMiniPlayer);
+          });
+          statusGroup.append(button);
+        });
+
+        const area = card.querySelector('.observed-area');
+        const editor = area.querySelector('[data-rich-editor]');
+        const observed = miniElement('div', 'mini-player-observed');
+        const observedHead = miniElement('div', 'mini-player-observed-head');
+        const paste = miniElement('textarea', 'mini-player-paste');
+        paste.rows = 2;
+        paste.disabled = !writable;
+        paste.value = plainText(serializeEditor(editor));
+        paste.placeholder = 'Descreva o resultado observado ou cole uma captura com Ctrl+V';
+        paste.setAttribute('aria-label', 'Resultado observado');
+        const images = [...area.querySelectorAll('.rich-image img')];
+        const pasteHeading = miniElement('strong', 'mini-player-paste-title', 'Resultado observado');
+        const pasteHint = miniElement('span', 'mini-player-paste-hint', writable ? 'Digite uma observação ou cole uma captura com Ctrl+V' : 'Sessão somente leitura');
+        observedHead.append(pasteHeading, pasteHint);
+        observed.append(observedHead, paste);
+        if (images.length) {
+          const evidence = miniElement('div', 'mini-player-evidence');
+          images.forEach(source => {
+            const image = miniPlayer.ownerDocument.createElement('img');
+            image.src = source.src;
+            image.alt = source.alt || 'Evidência do passo';
+            evidence.append(image);
+          });
+          observed.append(evidence);
+        }
+        paste.addEventListener('input', () => {
+          syncObservedText(editor, paste.value);
+          setMiniPlayerFeedback('');
+        });
+        paste.addEventListener('paste', async event => {
+          if (!writable) { setMiniPlayerFeedback('Esta execução está somente para leitura.', true); return; }
+          const item = [...(event.clipboardData?.items || [])].find(entry => entry.type.startsWith('image/'));
+          const file = item?.getAsFile() || [...(event.clipboardData?.files || [])].find(entry => entry.type.startsWith('image/'));
+          if (!file) return;
+          event.preventDefault();
+          setMiniPlayerFeedback('Enviando evidência…');
+          try {
+            const anchor = editor?.querySelector('.rich-paragraph:last-of-type');
+            await uploadImage(area, file, anchor, anchor?.textContent.length ?? null);
+            await persist(card);
+            setMiniPlayerFeedback('Evidência salva e sincronizada.');
+            renderMiniPlayer();
+          } catch (error) { setMiniPlayerFeedback(error.message, true); }
+        });
+        body.append(statusLabel, statusGroup, observed);
+        item.append(body);
+      }
+      list.append(item);
+    });
+    if (focusTarget) {
+      const step = [...list.querySelectorAll('.mini-player-step')].find(item => item.dataset.stepId === focusTarget.stepId);
+      const target = focusTarget.control === 'status'
+        ? [...(step?.querySelectorAll('.mini-player-status') || [])].find(button => button.dataset.value === focusTarget.status)
+        : step?.querySelector(focusTarget.control === 'paste' ? '.mini-player-paste' : '.mini-player-step-summary');
+      target?.focus();
+    }
+    const visible = caseButtons.filter(button => !button.classList.contains('is-hidden')).map(button => viewIndexById.get(button.dataset.caseButton));
+    const position = visible.indexOf(selectedIndex);
+    miniPlayer.querySelector('#mini-player-prev').disabled = position <= 0;
+    miniPlayer.querySelector('#mini-player-next').disabled = position < 0 || position === visible.length - 1;
+  }
+  function syncMiniPlayerTheme() {
+    if (!pipWindow) return;
+    pipWindow.document.documentElement.dataset.theme = document.documentElement.dataset.theme;
+    pipWindow.document.documentElement.dataset.accent = document.documentElement.dataset.accent;
+  }
+  function focusMainPlayer() {
+    const target = activeMiniStep()?.querySelector('.step-status-buttons button, [data-rich-editor]');
+    target?.focus();
+    activeMiniStep()?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+  function returnMiniPlayer() {
+    pipWindow = null;
+    miniPlayerHome.append(miniPlayer);
+    miniPlayer.hidden = true;
+    if (focusMainAfterMiniClose) focusMainPlayer();
+    else miniPlayerOpen.focus();
+    focusMainAfterMiniClose = false;
+  }
+  function showMiniPlayerFallback(message) {
+    miniPlayerHome.append(miniPlayer);
+    miniPlayer.dataset.surface = 'fallback';
+    miniPlayer.querySelector('#mini-player-surface').textContent = message;
+    miniPlayer.hidden = false;
+    miniPlayer.querySelector('#mini-player-close').focus();
+  }
+  async function openMiniPlayer() {
+    renderMiniPlayer();
+    setMiniPlayerFeedback('');
+    if (pipWindow && !pipWindow.closed) { pipWindow.focus(); return; }
+    if ('documentPictureInPicture' in window) {
+      try {
+        pipWindow = await window.documentPictureInPicture.requestWindow({ width: 430, height: 720 });
+        pipWindow.document.documentElement.lang = 'pt-BR';
+        pipWindow.document.title = 'TestAíZé - Mini Player';
+        document.querySelectorAll('link[rel="stylesheet"]').forEach(stylesheet => {
+          const link = pipWindow.document.createElement('link');
+          link.rel = 'stylesheet';
+          link.href = stylesheet.href;
+          pipWindow.document.head.append(link);
+        });
+        pipWindow.document.body.className = 'mini-player-window';
+        miniPlayer.dataset.surface = 'pip';
+        miniPlayer.querySelector('#mini-player-surface').textContent = 'Janela sempre visível sobre outros aplicativos.';
+        miniPlayer.hidden = false;
+        pipWindow.document.body.append(miniPlayer);
+        syncMiniPlayerTheme();
+        pipWindow.focus();
+        miniPlayer.querySelector('#mini-player-close').focus();
+        pipWindow.addEventListener('pagehide', returnMiniPlayer, { once: true });
+        pipWindow.document.addEventListener('keydown', event => { if (event.key === 'Escape') pipWindow?.close(); });
+        return;
+      } catch (_) {
+        pipWindow = null;
+        showMiniPlayerFallback('O navegador não liberou a janela externa. Este painel flutua somente dentro do TestAíZé.');
+        return;
+      }
+    }
+    showMiniPlayerFallback('Picture-in-Picture não está disponível. Este painel flutua somente dentro do TestAíZé.');
+  }
+  function closeMiniPlayer(restoreMain = false) {
+    focusMainAfterMiniClose = restoreMain;
+    if (pipWindow && !pipWindow.closed) { pipWindow.close(); return; }
+    miniPlayer.hidden = true;
+    if (restoreMain) focusMainPlayer(); else miniPlayerOpen.focus();
+    focusMainAfterMiniClose = false;
+  }
+  cards.forEach(card => {
+    card.addEventListener('focusin', () => setActiveMiniStep(card));
+    card.addEventListener('pointerdown', () => setActiveMiniStep(card));
+    card.querySelectorAll('.step-status-buttons .status-icon-button').forEach(button =>
+      button.addEventListener('click', () => queueMicrotask(renderMiniPlayer)));
+  });
+  caseViewChangeHandlers.add(renderMiniPlayer);
+  new MutationObserver(syncMiniPlayerTheme).observe(document.documentElement, {
+    attributes: true, attributeFilter: ['data-theme', 'data-accent']
+  });
+  miniPlayerOpen.addEventListener('click', openMiniPlayer);
+  document.getElementById('mini-player-close').addEventListener('click', () => closeMiniPlayer());
+  document.getElementById('mini-player-restore').addEventListener('click', () => closeMiniPlayer(true));
+  document.getElementById('mini-player-prev').addEventListener('click', () => moveCase(-1));
+  document.getElementById('mini-player-next').addEventListener('click', () => moveCase(1));
+  document.addEventListener('keydown', event => {
+    if (event.key === 'Escape' && !miniPlayer.hidden && !pipWindow) closeMiniPlayer();
+  });
+  renderMiniPlayer();
+
   const pdfModal = document.getElementById('pdf-modal');
   if (pdfModal) {
     const reportForm = document.getElementById('pdf-form');
@@ -543,7 +824,7 @@
     card.addEventListener('pointerdown', () => selectSyncSource(card));
     card.querySelector('[data-step-sync]')?.addEventListener('click', () => openSyncModal(card));
   });
-  caseViewChanged = revalidateSyncSource;
+  caseViewChangeHandlers.add(revalidateSyncSource);
   window.addEventListener('hashchange', clearSyncSource);
 
   function syncTargetChecks() { return [...syncModal.querySelectorAll('.sync-target-check')]; }
@@ -829,6 +1110,7 @@
       automatic.classList.remove('selected');
       automatic.setAttribute('aria-pressed', 'false');
       updateSummary();
+      renderMiniPlayer();
       queueCase(view);
     }));
     automatic.addEventListener('click', () => {
@@ -837,6 +1119,7 @@
       automatic.classList.add('selected');
       automatic.setAttribute('aria-pressed', 'true');
       updateSummary();
+      renderMiniPlayer();
       queueCase(view);
     });
   });
@@ -1014,6 +1297,7 @@
     updateSyncActions();
     queueEditor(editor);
     setSaveState('Imagem removida');
+    renderMiniPlayer();
   }
   function syncRemovedImages(editor) {
     const current = new Set([...editor.querySelectorAll('.rich-image')].map(figure => figure.dataset.evidenceId));
@@ -1051,7 +1335,12 @@
     }
     editor.addEventListener('mouseup', rememberCaret);
     editor.addEventListener('keyup', rememberCaret);
-    editor.addEventListener('input', () => { syncRemovedImages(editor); updateSyncActions(); queueEditor(editor); });
+    editor.addEventListener('input', () => {
+      syncRemovedImages(editor);
+      updateSyncActions();
+      queueEditor(editor);
+      syncMiniObservedText(editor);
+    });
     editor.addEventListener('keydown', event => {
       if (event.key !== 'Backspace' && event.key !== 'Delete') return;
       const selection = window.getSelection();
@@ -1172,6 +1461,7 @@
         selectSyncSource(area.closest('.step-card'));
         queueEditor(editor);
         setSaveState('Imagem inserida');
+        renderMiniPlayer();
         return;
       }
       const node = document.createElement('div');
