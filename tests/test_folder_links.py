@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import re
 import sqlite3
+import sys
 import tempfile
 import unittest
 from contextlib import closing
@@ -10,6 +11,8 @@ from html.parser import HTMLParser
 from pathlib import Path
 
 import pymupdf
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from testplayer.html_export import generate_html, render_report_html
 from testplayer.pdf_export import _browser_path, generate_pdf
@@ -24,7 +27,7 @@ from testplayer.storage import (
 from testplayer.web import create_app, folder_card_details, folder_groups
 
 
-# Copied from HEAD:testplayer/storage.py, the complete schema immediately before folder_links.
+# Copied from HEAD:src/testplayer/storage.py, the complete schema immediately before folder_links.
 LEGACY_SCHEMA = """
 PRAGMA foreign_keys=ON;
 CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
@@ -375,7 +378,7 @@ class FolderLinkTests(unittest.TestCase):
         self.assertEqual(text.count("Card vinculado:"), 1)
 
     def test_modal_and_theme_contract_is_structurally_present(self):
-        root = Path(__file__).resolve().parent / "testplayer"
+        root = Path(__file__).resolve().parents[1] / "src" / "testplayer"
         template = (root / "templates" / "choose_folder.html").read_text(encoding="utf-8")
         javascript = (root / "static" / "app.js").read_text(encoding="utf-8")
         fixes = (root / "static" / "ui-fixes.css").read_text(encoding="utf-8")

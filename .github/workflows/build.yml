@@ -16,9 +16,10 @@ jobs:
         id: pkg
         shell: pwsh
         run: |
+          $env:PYTHONPATH = "$PWD/src"
           $version = python -c "from testplayer.version import PACKAGE_VERSION; print(PACKAGE_VERSION)"
           "version=$version" >> $env:GITHUB_OUTPUT
-          python -m PyInstaller --noconfirm --clean --onefile --windowed --name "TestAiZe-$version" --icon assets/testaize.ico --add-data "testplayer/templates;testplayer/templates" --add-data "testplayer/static;testplayer/static" --hidden-import pystray._win32 launcher.py
+          python -m PyInstaller --noconfirm --clean --onefile --windowed --name "TestAiZe-$version" --icon assets/testaize.ico --paths src --add-data "src/testplayer/templates;testplayer/templates" --add-data "src/testplayer/static;testplayer/static" --hidden-import pystray._win32 src/launcher.py
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - uses: actions/upload-artifact@v4
         with:
