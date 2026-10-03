@@ -4,7 +4,7 @@ import unittest
 
 class MiniPlayerContractTests(unittest.TestCase):
     def setUp(self):
-        root = Path(__file__).resolve().parent / "testplayer"
+        root = Path(__file__).resolve().parents[1] / "src" / "testplayer"
         self.template = (root / "templates" / "player.html").read_text(encoding="utf-8")
         self.javascript = (root / "static" / "app.js").read_text(encoding="utf-8")
         self.styles = (root / "static" / "ui-fixes.css").read_text(encoding="utf-8")
