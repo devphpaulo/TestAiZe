@@ -3,4 +3,6 @@ __pycache__/
 aplicativo/
 build/
 dist/
+plans/
 *.spec
+/executar.bat
