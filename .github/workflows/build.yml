@@ -44,6 +44,7 @@ jobs:
         shell: pwsh
         run: |
           $env:TESTAIZE_EXE = "$PWD/dist/TestAiZe-${{ steps.pkg.outputs.version }}.exe"
+          $env:TESTAIZE_PYTHON = "python"
           npm --prefix src/playwright-recorder run test:host
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - uses: actions/upload-artifact@v4
