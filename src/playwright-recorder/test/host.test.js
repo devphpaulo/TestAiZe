@@ -117,8 +117,8 @@ test("separate Automation page records through embedded Chromium and cleans up o
         assert.equal(generated.includes('recorded-canary@example.test') || generated.includes('recorded-password-canary'), false);
         await worker.getByRole('tab', { name: 'Etapas para executar' }).click();
         await worker.locator('#steps').fill((await worker.locator('#steps').inputValue()) + "\nawait page.getByRole('button', { name: 'Buscar' }).click();\nawait expect(page.locator('output')).toHaveText('Cofre OK');");
-        page.once('dialog', (dialog) => void dialog.accept());
         await worker.getByRole('button', { name: 'Rodar', exact: true }).click();
+        await worker.getByRole('dialog').getByRole('button', { name: 'Rodar etapas', exact: true }).click();
         await worker.locator('#copy-status').filter({ hasText: 'Etapas executadas.' }).waitFor();
         // Theme follows the host without reconnecting or losing the recording.
         await page.locator("#theme-toggle").click();

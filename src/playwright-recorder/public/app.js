@@ -123,9 +123,11 @@ navigationForm.addEventListener("submit", (event) => {
 stopButton.addEventListener("click", () => send({ type: "session.stop" }));
 clearButton.addEventListener("click", () => send({ type: "recording.clear" }));
 reconnectButton.addEventListener("click", connect);
-runButton.addEventListener("click", () => {
+runButton.addEventListener("click", async () => {
   if (!executionAcknowledged) {
-    executionAcknowledged = window.confirm("Rodar etapas editáveis na sessão local atual? Código pode navegar e executar comandos Playwright.");
+    executionAcknowledged = await TestaizeConfirm.ask({ title: 'Rodar etapas editáveis?',
+      message: 'As etapas serão executadas na sessão local atual. O código pode navegar e executar comandos Playwright.',
+      confirmLabel: 'Rodar etapas' });
   }
   if (executionAcknowledged && stepsOutput.value.trim()) send({ type: "script.run", steps: stepsOutput.value });
 });

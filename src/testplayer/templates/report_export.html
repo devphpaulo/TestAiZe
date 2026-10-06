@@ -19,7 +19,7 @@
     </header>
     <main class="content">
       <div class="heading-row">
-        <div><h1>{{ 'Relatório de Falha' if report_kind == 'failure' else 'Relatório de Execução' }}</h1><div class="intro">{{ meta.source_name }} &nbsp;·&nbsp; {{ run_count }} execução(ões)</div></div>
+        <div><h1>{{ 'Relatório de Falha' if report_kind == 'failure' else 'Relatório de Execução' }}</h1><div class="intro">{{ meta.source_name }} &nbsp;·&nbsp; {{ run_count }} {{ 'execução' if run_count == 1 else 'execuções' }}</div></div>
         <span class="pill {{ 'pill--passed' if meta.state == 'concluida' else 'pill--progress' }}">{{ 'Concluída' if meta.state == 'concluida' else 'Em andamento' }}</span>
       </div>
       <section class="stats" aria-label="Informações da sessão">
@@ -117,7 +117,7 @@
       pre.append(preContent);group.append(pre);
       const heading=node('div','steps-heading');heading.append(node('div','section-title','Passos do caso'));
       const failed=run.steps.filter(step=>step.status==='reprovado').length;
-      heading.append(node('span','',`${run.steps.length} passos  ·  ${failed} reprovado(s)`));group.append(heading);
+      heading.append(node('span','',`${run.steps.length} ${run.steps.length === 1 ? 'passo' : 'passos'}  ·  ${failed} ${failed === 1 ? 'reprovado' : 'reprovados'}`));group.append(heading);
       for(const step of run.steps)group.append(stepCard(step));
       if(hasRich(run.comment)){
         const comment=node('section','commentary');comment.append(node('div','section-title','Comentário do caso'));rich(comment,run.comment);group.append(comment);

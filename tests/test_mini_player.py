@@ -7,7 +7,8 @@ class MiniPlayerContractTests(unittest.TestCase):
         root = Path(__file__).resolve().parents[1] / "src" / "testplayer"
         self.template = (root / "templates" / "player.html").read_text(encoding="utf-8")
         self.javascript = (root / "static" / "app.js").read_text(encoding="utf-8")
-        self.styles = (root / "static" / "ui-fixes.css").read_text(encoding="utf-8")
+        self.styles = (root / "static" / "layout.css").read_text(encoding="utf-8")
+        self.appearance = (root / "static" / "sleek.css").read_text(encoding="utf-8")
 
     def test_mini_player_reuses_player_state_and_has_pip_fallback(self):
         for fragment in (
@@ -48,17 +49,17 @@ class MiniPlayerContractTests(unittest.TestCase):
             ".mini-player-statuses",
             ".mini-player-paste",
             ".mini-player-window .mini-player",
-            ':root[data-theme="dark"] .mini-player-nav-primary',
         ):
             self.assertIn(selector, self.styles)
         for status in ("nao_executado", "em_andamento", "bloqueado", "reprovado", "aprovado"):
-            self.assertIn(f'.mini-player-step[data-status="{status}"]', self.styles)
-            self.assertIn(f'.mini-player-status:hover[data-value="{status}"]', self.styles)
+            self.assertIn(f'.mini-player-step[data-status="{status}"]', self.styles + self.appearance)
+            self.assertIn(f'.mini-player-status:hover[data-value="{status}"]', self.appearance)
         self.assertNotIn(".mini-player-step-summary:hover { box-shadow", self.styles)
         self.assertNotIn(".step-card.mini-player-source-active", self.styles)
         self.assertNotIn("syncActiveMiniStepMarker", self.javascript)
         self.assertIn("min-height: 64px", self.styles)
-        self.assertIn("border-radius: 0", self.styles)
+        self.assertIn("border-radius: var(--radius-md)", self.appearance)
+        self.assertIn("TestaizeIcons.status(mainButton.dataset.value)", self.javascript)
 
 
 if __name__ == "__main__":

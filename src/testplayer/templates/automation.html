@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from 'ui_macros.html' import icon, status_icon with context %}
 {% block title %}Automação — TestAíZé{% endblock %}
 {% block head %}
 <link rel="stylesheet" href="{{ url_for('static', filename='automation.css') }}">
@@ -9,17 +10,17 @@
 {% endblock %}
 {% block content %}
 <main class="automation-page" id="automation-workspace" data-home="{{ url_for('automation') }}">
-  <a class="automation-back" href="{{ url_for('automation') }}">← Biblioteca de automação</a>
+  <a class="automation-back" href="{{ url_for('automation') }}">{{ icon('arrow-left') }} Biblioteca de automação</a>
   <div class="automation-heading">
     <div>
-      <p class="eyebrow">WORKSPACE / AUTOMAÇÃO</p>
-      <h1>Iniciativa de testes automatizados</h1>
+      <p class="eyebrow">ÁREA DE TESTES / AUTOMAÇÃO</p>
+      <h1>Gravar teste automatizado</h1>
       <p>Grave um fluxo no navegador, revise as etapas e execute seu teste.</p>
     </div>
-    <div class="automation-heading-actions"><button type="button" class="button button-primary" id="automation-save">Salvar na biblioteca</button><button type="button" class="button button-secondary" id="vault-open"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor"><path d="M4 7V4a4 4 0 0 1 8 0v3M2 7h12v8H2zM8 10v2"/></svg> Cofre</button><button type="button" class="button button-ghost" id="automation-exit">Encerrar iniciativa</button></div>
+    <div class="automation-heading-actions"><button type="button" class="button button-primary" id="automation-save">Salvar na biblioteca</button><button type="button" class="button button-secondary" id="vault-open"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor"><path d="M4 7V4a4 4 0 0 1 8 0v3M2 7h12v8H2zM8 10v2"/></svg> Cofre</button><button type="button" class="button button-ghost" id="automation-exit">Encerrar gravação</button></div>
   </div>
   <div class="automation-state-bar">
-    <output id="automation-status" role="status" aria-live="polite">Iniciando recorder…</output>
+    <output id="automation-status" role="status" aria-live="polite">Iniciando gravador…</output>
     <button type="button" class="button button-ghost" id="automation-retry" hidden>Tentar novamente</button>
   </div>
   <section class="automation-frame-shell" id="automation-frame-shell" aria-label="Recorder Playwright" aria-busy="true">

@@ -16,9 +16,9 @@ test("HTTP contract and WebSocket origin policy stay local", async () => {
         const health = await fetch(`http://127.0.0.1:${port}/health`);
         assert.equal(health.status, 200);
         assert.deepEqual(await health.json(), { status: "ok" });
-        const styles = await fetch(`http://127.0.0.1:${port}/carbon.css`);
+        const styles = await fetch(`http://127.0.0.1:${port}/sleek.css`);
         assert.equal(styles.status, 200);
-        assert.match(await styles.text(), /IBM Carbon/);
+        assert.match(await styles.text(), /Sleek/);
         assert.equal((await fetch(`http://127.0.0.1:${port}/missing`)).status, 404);
         assert.equal((await fetch(`http://127.0.0.1:${port}/..%2fpackage.json`)).status, 404);
         assert.equal(await rejectedStatus(`ws://127.0.0.1:${port}/ws`, "http://example.test"), 403);
@@ -150,8 +150,8 @@ test("user records navigation, click, text, password, clear, and stop inside UI"
         assert.equal(await page.locator("#status").textContent(), "Pronto");
         await page.getByRole('tab', { name: 'Etapas para executar' }).click();
         await page.getByLabel("Etapas Playwright executáveis").fill("await page.getByRole('button', { name: 'Run' }).click();");
-        page.once("dialog", (dialog) => void dialog.accept());
         await page.getByRole("button", { name: "Rodar" }).click();
+        await page.getByRole('dialog').getByRole('button', { name: 'Rodar etapas', exact: true }).click();
         await waitFor(page, () => document.querySelector("#copy-status")?.textContent === "Etapas executadas.");
         await page.getByRole("button", { name: "Encerrar" }).click();
         await waitFor(page, () => document.querySelector("#status")?.textContent === "Ocioso");

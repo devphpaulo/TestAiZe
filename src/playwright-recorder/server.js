@@ -14,8 +14,12 @@ const ASSETS = new Map([
     ["/app.js", { file: resolve(PUBLIC_DIR, "app.js"), contentType: "text/javascript; charset=utf-8" }],
     ["/styles.css", { file: resolve(PUBLIC_DIR, "styles.css"), contentType: "text/css; charset=utf-8" }],
     ["/embedded.js", { file: resolve(PUBLIC_DIR, "embedded.js"), contentType: "text/javascript; charset=utf-8" }],
-    ['/carbon.css', { file: resolve(HOST_STATIC_DIR, 'carbon.css'), contentType: 'text/css; charset=utf-8' }],
-    ['/ui-fixes.css', { file: resolve(HOST_STATIC_DIR, 'ui-fixes.css'), contentType: 'text/css; charset=utf-8' }],
+    ['/sleek.css', { file: resolve(HOST_STATIC_DIR, 'sleek.css'), contentType: 'text/css; charset=utf-8' }],
+    ['/icons.js', { file: resolve(HOST_STATIC_DIR, 'icons.js'), contentType: 'text/javascript; charset=utf-8' }],
+    ['/confirmation.js', { file: resolve(HOST_STATIC_DIR, 'confirmation.js'), contentType: 'text/javascript; charset=utf-8' }],
+    ['/icons.svg', { file: resolve(HOST_STATIC_DIR, 'icons.svg'), contentType: 'image/svg+xml' }],
+    ['/fonts/inter-latin.woff2', { file: resolve(HOST_STATIC_DIR, 'fonts/inter-latin.woff2'), contentType: 'font/woff2' }],
+    ['/fonts/jetbrains-mono-latin.woff2', { file: resolve(HOST_STATIC_DIR, 'fonts/jetbrains-mono-latin.woff2'), contentType: 'font/woff2' }],
 ]);
 export function createServer(options = {}) {
     const parentOrigin = validateParentOrigin(options.parentOrigin);

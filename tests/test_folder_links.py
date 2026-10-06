@@ -381,8 +381,8 @@ class FolderLinkTests(unittest.TestCase):
         root = Path(__file__).resolve().parents[1] / "src" / "testplayer"
         template = (root / "templates" / "choose_folder.html").read_text(encoding="utf-8")
         javascript = (root / "static" / "app.js").read_text(encoding="utf-8")
-        fixes = (root / "static" / "ui-fixes.css").read_text(encoding="utf-8")
-        carbon = (root / "static" / "carbon.css").read_text(encoding="utf-8")
+        fixes = (root / "static" / "layout.css").read_text(encoding="utf-8")
+        appearance = (root / "static" / "sleek.css").read_text(encoding="utf-8")
 
         for fragment in (
             '<dialog id="folder-card-modal"', 'aria-labelledby="folder-card-modal-title"',
@@ -420,13 +420,11 @@ class FolderLinkTests(unittest.TestCase):
             r'minmax\(220px, 1\.35fr\) minmax\(150px, \.8fr\) minmax\(210px, \.9fr\) !important;',
         )
         self.assertIn(".folder-progress-percent { display: block; margin-top: 14px;", fixes)
-        self.assertNotIn(".folder-row-end", fixes)
-        self.assertNotIn(".folder-list-heading > span:last-child", fixes)
         self.assertIn(".folder-list-heading > span { padding: 12px 16px; text-align: left !important; }", fixes)
-        self.assertIn(':root[data-theme="light"]', carbon)
-        self.assertIn(':root[data-theme="dark"]', carbon)
-        self.assertIn("background: var(--canvas)", fixes)
-        self.assertIn("color: var(--ink)", fixes)
+        self.assertIn(':root[data-theme="light"]', appearance)
+        self.assertIn(':root[data-theme="dark"]', appearance)
+        self.assertIn("background: var(--canvas)", appearance)
+        self.assertIn("color: var(--ink)", appearance)
 
 
 if __name__ == "__main__":

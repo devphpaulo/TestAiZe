@@ -5,9 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Automação — TestAíZé</title>
   <link rel="icon" href="data:,">
-  <link rel="stylesheet" href="/carbon.css">
-  <link rel="stylesheet" href="/ui-fixes.css">
   <link rel="stylesheet" href="/styles.css">
+  <link rel="stylesheet" href="/sleek.css">
+  <script defer src="/icons.js"></script>
+  <script defer src="/confirmation.js"></script>
 </head>
 <body>
   <main class="recorder-app">
@@ -35,7 +36,7 @@
         <div class="code-tabs" role="tablist" aria-label="Conteúdo do teste"><button id="code-tab" role="tab" aria-selected="true" aria-controls="source-panel" type="button">Código gerado</button><button id="steps-tab" role="tab" aria-selected="false" aria-controls="steps-panel" tabindex="-1" type="button">Etapas para executar</button></div>
         <div id="source-panel" class="editor-panel" role="tabpanel" aria-labelledby="code-tab"><label class="visually-hidden" for="code">Arquivo Playwright Test</label><textarea id="code" class="code-editor" spellcheck="false" aria-label="Código Playwright Test gerado" placeholder="As ações gravadas aparecem aqui."></textarea></div>
         <div id="steps-panel" class="editor-panel" role="tabpanel" aria-labelledby="steps-tab" hidden><label class="visually-hidden" for="steps">Etapas Playwright executáveis</label><textarea id="steps" class="code-editor" spellcheck="false" aria-label="Etapas Playwright executáveis" placeholder="Revise as etapas antes de executar."></textarea></div>
-        <div class="code-toolbar"><button id="save-spec" class="button button-ghost" type="button">Salvar .spec.ts</button><button id="copy" class="button button-ghost" type="button">Copiar</button><button id="clear" class="button button-ghost" type="button">Limpar</button><button id="run" class="button button-primary" type="button">Rodar <span aria-hidden="true">▶</span></button></div>
+        <div class="code-toolbar"><button id="save-spec" class="button button-ghost" type="button">Salvar .spec.ts</button><button id="copy" class="button button-ghost" type="button">Copiar</button><button id="clear" class="button button-ghost" type="button">Limpar</button><button id="run" class="button button-primary" type="button">Rodar <svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="/icons.svg#play"></use></svg></button></div>
         <div class="code-footer"><output id="copy-status" role="status" aria-live="polite"></output><p>E-mail e senha usam as variáveis definidas no Cofre.</p></div>
       </aside>
     </div>

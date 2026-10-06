@@ -32,7 +32,9 @@
     } catch (error) { document.querySelector('#automation-entity-error').textContent = error.message; }
   });
   for (const button of document.querySelectorAll('[data-delete-kind]')) button.addEventListener('click', async () => {
-    if (!confirm(`Excluir ${button.dataset.deleteName}? Os scripts deste item serão removidos; o histórico de execuções será preservado.`)) return;
+    if (!await TestaizeConfirm.ask({ title: `Excluir ${button.dataset.deleteName}?`,
+      message: 'Os scripts deste item serão removidos. O histórico de execuções será preservado.',
+      confirmLabel: 'Excluir', danger: true })) return;
     try { await request(button.dataset.deleteKind + '/' + button.dataset.deleteId, 'DELETE'); window.location.assign(window.location.pathname); }
     catch (error) { feedback.textContent = error.message; }
   });

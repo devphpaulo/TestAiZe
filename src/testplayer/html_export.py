@@ -90,12 +90,19 @@ def render_report_html(directory: Path, selected_case_ids: set[int], include_his
     static = Path(__file__).resolve().parent / "static"
     environment = Environment(loader=FileSystemLoader(templates), autoescape=select_autoescape(["html"]))
     favicon_src = "data:image/svg+xml;base64," + base64.b64encode((static / "favicon.svg").read_bytes()).decode("ascii")
+    # Embed the same local fonts so shared HTML and PDF reports remain offline.
+    font_css = ""
+    for family, filename, weights in (("Inter", "inter-latin.woff2", "100 900"),
+                                      ("JetBrains Mono", "jetbrains-mono-latin.woff2", "100 800")):
+        encoded = base64.b64encode((static / "fonts" / filename).read_bytes()).decode("ascii")
+        font_css += (f"@font-face{{font-family:'{family}';font-style:normal;font-weight:{weights};"
+                     f"font-display:swap;src:url(data:font/woff2;base64,{encoded}) format('woff2');}}")
     return environment.get_template("report_export.html").render(
         meta=session["meta"], payload=payload, case_count=len(cases),
         run_count=sum(len(case["runs"]) for case in cases), report_kind=report_kind,
         started_at=_format_time(session["meta"].get("created_at", "")),
         generated_at=_format_time(datetime.now().astimezone().isoformat()),
-        report_css=(static / "report.css").read_text(encoding="utf-8"),
+        report_css=font_css + (static / "report.css").read_text(encoding="utf-8"),
         logo_src=favicon_src, favicon_src=favicon_src,
         print_all=print_all, pdf_mode=pdf_mode,
     )

@@ -3,7 +3,9 @@
   const themeButton = document.getElementById('theme-toggle');
   function updateThemeButton() {
     const light = document.documentElement.dataset.theme === 'light';
-    themeButton.textContent = light ? '☾ Modo escuro' : '☼ Modo claro';
+    const label = document.createElement('span');
+    label.textContent = light ? 'Modo escuro' : 'Modo claro';
+    themeButton.replaceChildren(TestaizeIcons.create(light ? 'moon' : 'sun'), label);
     themeButton.setAttribute('aria-label', light ? 'Ativar modo escuro' : 'Ativar modo claro');
   }
   if (themeButton) {
@@ -19,7 +21,7 @@
   if (accentPicker) {
     const trigger = document.getElementById('accent-trigger');
     const options = document.getElementById('accent-options');
-    const names = { neutro: 'Neutro', roxo: 'Roxo', verde: 'Verde', vermelho: 'Vermelho', amarelo: 'Amarelo' };
+    const names = { neutro: 'Azul', roxo: 'Roxo', verde: 'Verde', vermelho: 'Vermelho', amarelo: 'Amarelo' };
     function updateAccent() {
       const selected = names[document.documentElement.dataset.accent] ? document.documentElement.dataset.accent : 'neutro';
       trigger.setAttribute('aria-label', `Escolher cor do aplicativo. Atual: ${names[selected]}`);
@@ -41,7 +43,12 @@
       trigger.focus();
     }));
     document.addEventListener('click', event => { if (!accentPicker.contains(event.target)) closeAccent(); });
-    document.addEventListener('keydown', event => { if (event.key === 'Escape') closeAccent(); });
+    document.addEventListener('keydown', event => {
+      if (event.key !== 'Escape' || options.hidden) return;
+      event.preventDefault();
+      closeAccent();
+      trigger.focus();
+    });
   }
   const fileInput = document.getElementById('arquivo');
   if (fileInput) {
@@ -111,7 +118,7 @@
         edit.dataset.folderCardEdit = '';
         edit.title = 'Editar vínculo';
         edit.setAttribute('aria-label', `Editar vínculo da pasta ${row.dataset.folderName}`);
-        edit.textContent = '✎';
+        edit.append(TestaizeIcons.create('edit'));
         cell.append(link, edit);
       } else {
         const add = document.createElement('button');
@@ -120,7 +127,7 @@
         add.dataset.folderCardEdit = '';
         const icon = document.createElement('span');
         icon.setAttribute('aria-hidden', 'true');
-        icon.textContent = '＋';
+        icon.append(TestaizeIcons.create('plus'));
         add.append(icon, ' Vincular card');
         cell.append(add);
       }
@@ -530,7 +537,8 @@
       summary.setAttribute('aria-expanded', String(card === active));
       const number = miniElement('span', 'mini-player-step-number', String(index + 1).padStart(2, '0'));
       const title = miniElement('span', 'mini-player-step-title', card.querySelector('.step-action h4')?.textContent.trim() || 'Passo sem descrição');
-      const state = miniElement('span', 'mini-player-step-state', card.querySelector('.step-status-buttons .selected span')?.textContent.trim() || '○');
+      const state = miniElement('span', 'mini-player-step-state');
+      state.append(TestaizeIcons.status(card.dataset.status));
       state.setAttribute('aria-label', labels[card.dataset.status] || 'Não executado');
       summary.append(number, title, state);
       summary.addEventListener('click', () => setActiveMiniStep(card, true));
@@ -551,7 +559,7 @@
           button.setAttribute('aria-label', mainButton.getAttribute('aria-label'));
           button.setAttribute('aria-pressed', String(mainButton.classList.contains('selected')));
           button.disabled = !writable;
-          button.textContent = mainButton.textContent.trim();
+          button.append(TestaizeIcons.status(mainButton.dataset.value));
           button.addEventListener('click', () => {
             mainButton?.click();
             queueMicrotask(renderMiniPlayer);
@@ -1253,10 +1261,10 @@
     link.append(image);
     const caption = document.createElement('figcaption'); caption.textContent = name;
     const remove = document.createElement('button');
-    remove.type = 'button'; remove.className = 'rich-image-remove'; remove.textContent = '×';
+    remove.type = 'button'; remove.className = 'rich-image-remove'; remove.append(TestaizeIcons.create('x'));
     remove.setAttribute('aria-label', 'Excluir imagem'); remove.dataset.deleteUrl = result.delete_url;
     const handle = document.createElement('span');
-    handle.className = 'rich-image-resize'; handle.textContent = '↘';
+    handle.className = 'rich-image-resize'; handle.append(TestaizeIcons.create('resize'));
     handle.tabIndex = 0; handle.setAttribute('role', 'slider');
     handle.setAttribute('aria-label', 'Largura da imagem');
     handle.setAttribute('aria-valuemin', '20'); handle.setAttribute('aria-valuemax', '100');
@@ -1473,7 +1481,7 @@
       const caption = document.createElement('span'); caption.textContent = file.name || 'Imagem colada';
       link.append(image, caption);
       const remove = document.createElement('button');
-      remove.type = 'button'; remove.className = 'remove-evidence'; remove.textContent = '×';
+      remove.type = 'button'; remove.className = 'remove-evidence'; remove.append(TestaizeIcons.create('x'));
       remove.setAttribute('aria-label', 'Excluir imagem');
       remove.dataset.deleteUrl = result.delete_url;
       node.append(link, remove);

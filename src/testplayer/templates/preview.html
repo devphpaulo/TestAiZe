@@ -1,15 +1,16 @@
 {% extends 'base.html' %}
+{% from 'ui_macros.html' import icon, status_icon with context %}
 {% block title %}Prévia da importação · TestAíZé{% endblock %}
 {% block content %}
 <main class="page preview-page">
-  <a class="back-link" href="{{ url_for('home') }}">← Voltar para sessões</a>
+  <a class="back-link" href="{{ url_for('home') }}">{{ icon('arrow-left') }} Voltar para sessões</a>
   <div class="eyebrow"><span class="eyebrow-line"></span> IMPORTAÇÃO <span class="eyebrow-index">02 / 03</span></div>
-  <div class="page-heading"><div><h1>Revise antes de executar.</h1><p>{{ parsed.filename }}</p></div><span class="count-pill">{{ selected_cases }} casos · {{ selected_steps }} passos</span></div>
+  <div class="page-heading"><div><h1>Revise a importação</h1><p>{{ parsed.filename }}</p></div><span class="count-pill">{{ selected_cases }} casos · {{ selected_steps }} passos</span></div>
 
   <form method="post" class="preview-form">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     {% if parsed.errors or selected_errors %}
-      <section class="notice error" role="alert"><strong>Há pontos para revisar.</strong><ul>{% for error in selected_errors[:12] %}<li>{{ error }}</li>{% endfor %}</ul></section>
+      <section class="notice error" role="alert"><strong>Revise os campos indicados para continuar.</strong><ul>{% for error in selected_errors[:12] %}<li>{{ error }}</li>{% endfor %}</ul></section>
     {% endif %}
     <section class="panel mapping-panel">
       <div class="panel-topline"><span>MAPEAMENTO DE COLUNAS</span><span>01</span></div>
@@ -38,7 +39,7 @@
         {% endfor %}
       </div>
     </section>
-    <div class="preview-actions"><p>O arquivo original será copiado para a execução local.</p><button type="submit" name="action" value="start" class="button button-primary" {% if selected_errors or not selected_cases %}disabled{% endif %}>Iniciar execução <span aria-hidden="true">→</span></button></div>
+    <div class="preview-actions"><p>O arquivo original será copiado para a execução local.</p><button type="submit" name="action" value="start" class="button button-primary" {% if selected_errors or not selected_cases %}disabled{% endif %}>Iniciar execução <span aria-hidden="true">{{ icon('arrow-right') }}</span></button></div>
   </form>
 </main>
 {% endblock %}

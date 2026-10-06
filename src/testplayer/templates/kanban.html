@@ -1,9 +1,10 @@
 {% extends 'base.html' %}
+{% from 'ui_macros.html' import icon, status_icon with context %}
 {% block title %}Kanban · TestAíZé{% endblock %}
 {% block header_actions %}<a class="view-switch active" href="{{ url_for('choose_folder', session_id=record.meta.id) }}">Modo lista</a>{% endblock %}
 {% block content %}
 <main class="kanban-page">
-  <div class="kanban-intro"><div><a href="{{ url_for('choose_folder', session_id=record.meta.id) }}" class="back-link">← Ciclos e pastas</a><div class="eyebrow"><span class="eyebrow-line"></span> VISÃO KANBAN</div><h1>Casos por status</h1><p>{{ record.meta.source_name }} · {{ record.cases|length }} casos na sessão</p></div><a class="button button-secondary" href="{{ url_for('player', session_id=record.meta.id) }}">Abrir Test Player</a></div>
+  <div class="kanban-intro"><div><a href="{{ url_for('choose_folder', session_id=record.meta.id) }}" class="back-link">{{ icon('arrow-left') }} Ciclos e pastas</a><div class="eyebrow"><span class="eyebrow-line"></span> VISÃO KANBAN</div><h1>Casos por status</h1><p>{{ record.meta.source_name }} · {{ record.cases|length }} casos na sessão</p></div><a class="button button-secondary" href="{{ url_for('player', session_id=record.meta.id) }}">Abrir Test Player</a></div>
   <nav class="kanban-filters" aria-label="Filtrar ciclos"><a class="kanban-filter {% if not chosen %}active{% endif %}" href="{{ url_for('kanban', session_id=record.meta.id) }}">Todos os ciclos</a>{% for group in folder_groups %}<a class="kanban-filter {% if group.name in chosen %}active{% endif %}" href="{{ url_for('kanban', session_id=record.meta.id, pasta=group.name) }}" title="{{ group.name }}">{{ group.label }} <span>{{ group.total }}</span></a>{% endfor %}</nav>
   <div class="kanban-board">
     {% for status, label, cases in columns %}

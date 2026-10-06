@@ -2,7 +2,7 @@ const parameters = new URLSearchParams(location.search);
 const embedded = parameters.get('embedded') === '1';
 document.documentElement.dataset.embedded = String(embedded);
 function appearance(theme, accent) {
-  document.documentElement.dataset.theme = theme === 'light' ? 'light' : 'dark';
+  document.documentElement.dataset.theme = theme === 'dark' ? 'dark' : 'light';
   document.documentElement.dataset.accent = ['roxo', 'verde', 'vermelho', 'amarelo'].includes(accent) ? accent : 'neutro';
 }
 appearance(parameters.get('theme'), parameters.get('accent'));

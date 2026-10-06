@@ -33,7 +33,7 @@
   function embed() {
     const iframe = document.createElement('iframe');
     const destination = new URL(url);
-    destination.searchParams.set('theme', document.documentElement.dataset.theme || 'dark');
+    destination.searchParams.set('theme', document.documentElement.dataset.theme || 'light');
     destination.searchParams.set('accent', document.documentElement.dataset.accent || 'neutro');
     iframe.src = destination.href;
     iframe.title = 'Gravação de testes Playwright: navegador e código';
@@ -48,14 +48,14 @@
     if (starting || leaving) return;
     starting = true;
     clearInterval(heartbeat);
-    showStatus('Iniciando recorder…');
+    showStatus('Iniciando gravador…');
     shell.setAttribute('aria-busy', 'true');
     try {
       const result = await request('start');
       if (leaving) { await request('stop'); return; }
       url = result.url;
       embed();
-      showStatus('Recorder disponível. Informe uma URL para iniciar a gravação.');
+      showStatus('Gravador pronto. Informe uma URL para começar.');
       heartbeat = setInterval(checkStatus, 20000);
     } catch (error) {
       showStatus(error.message || 'Conexão interrompida. Tente novamente.', true);
@@ -72,7 +72,7 @@
         clearInterval(heartbeat);
         shell.querySelector('iframe')?.remove();
         placeholder.hidden = false;
-        showStatus(result.state === 'replaced' ? 'Automação aberta em outra aba. Retome aqui para iniciar uma nova iniciativa.' : 'Recorder encerrado. Você pode iniciar novamente.', true);
+        showStatus(result.state === 'replaced' ? 'Gravação aberta em outra aba. Retome aqui para continuar.' : 'Gravador encerrado. Inicie novamente quando quiser.', true);
       }
     } catch { /* The manager's finite lease handles a missing host. */ }
   }

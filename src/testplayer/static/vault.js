@@ -47,7 +47,7 @@
       secretLabel.className = 'vault-secret';
       const secret = document.createElement('input');
       secret.type = 'checkbox'; secret.checked = entry.secret;
-      secretLabel.append(secret, document.createTextNode('Secret'));
+      secretLabel.append(secret, document.createTextNode('Valor secreto'));
       secret.addEventListener('change', () => { value.type = secret.checked ? 'password' : 'text'; });
       const save = document.createElement('button');
       save.type = 'submit'; save.className = 'button button-secondary'; save.textContent = 'Salvar';

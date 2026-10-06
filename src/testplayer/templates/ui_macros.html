@@ -1,0 +1,6 @@
+{% macro icon(name) -%}
+<svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="{{ url_for('static', filename='icons.svg', _external=True) }}#{{ name }}"></use></svg>
+{%- endmacro %}
+{% macro status_icon(code) -%}
+{{ icon({'nao_executado':'circle', 'em_andamento':'clock', 'bloqueado':'ban', 'reprovado':'x', 'aprovado':'check'}[code]) }}
+{%- endmacro %}
