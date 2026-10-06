@@ -59,7 +59,8 @@ class AutomationLibraryTests(unittest.TestCase):
         script = self.library.save_script(cycle['id'], 'Teste', 'codigo salvo')
         run = self.library.create_run(folder['id'], cycle['id'], [script])
         archive_path = make_backup(root)
+        script_archive_path = f"automacao/pastas/{folder['id']}/ciclos/{cycle['id']}/{script['id']}.spec.ts"
         with zipfile.ZipFile(archive_path) as archive:
             self.assertIn('automacao/biblioteca.sqlite3', archive.namelist())
-            self.assertEqual(archive.read(self.library.script_path(script['id']).relative_to(root).as_posix()).decode(), 'codigo salvo')
+            self.assertEqual(archive.read(script_archive_path).decode(), 'codigo salvo')
             self.assertIn('automacao/execucoes/' + run['id'] + '/report.json', archive.namelist())
