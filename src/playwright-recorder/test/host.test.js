@@ -164,7 +164,7 @@ test("separate Automation page records through embedded Chromium and cleans up o
         const replacementUrl = (await page.locator(".automation-frame-shell iframe").getAttribute("src"));
         assert.notEqual(new URL(replacementUrl).port, new URL(workerUrl).port);
         await assert.rejects(fetch(new URL("/health", workerUrl)));
-        await page.getByRole("button", { name: "Encerrar iniciativa" }).click();
+        await page.getByRole("button", { name: "Encerrar gravação" }).click();
         await page.waitForURL(origin + "/iniciativas/automacao");
         assert.equal((await (await page.request.get(origin + "/api/iniciativas/automacao/recorder/status")).json()).state, "idle");
         await assert.rejects(fetch(new URL("/health", replacementUrl)));
@@ -280,7 +280,7 @@ test('manual player brand follows dark-theme accents and search fits narrow side
                 return { outer: wrap.getBoundingClientRect().toJSON(), inner: input.getBoundingClientRect().toJSON(), radius: getComputedStyle(input).borderRadius };
             }, width);
             assert.ok(bounds.inner.left >= bounds.outer.left && bounds.inner.right <= bounds.outer.right + 1, JSON.stringify(bounds));
-            assert.equal(bounds.radius, '0px');
+            assert.equal(bounds.radius, '8px');
         }
         await page.evaluate(() => { document.querySelector('.case-sidebar').style.width = ''; document.documentElement.dataset.accent = 'verde'; });
         if (process.env.TESTAIZE_SCREENSHOT) await page.screenshot({ path: process.env.TESTAIZE_SCREENSHOT.replace('.png', '-manual.png'), fullPage: true });

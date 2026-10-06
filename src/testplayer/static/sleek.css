@@ -91,6 +91,11 @@ pre, code { color: var(--ink); }
 .eyebrow-index { color: var(--faint); }
 .topbar { background: var(--panel); border-color: var(--line-soft); box-shadow: var(--shadow-sm); }
 .brand, .brand:hover { color: var(--ink); font-weight: 700; letter-spacing: -.035em; }
+.brand > span { color: var(--ink); }
+:root[data-accent="roxo"] .brand > span,
+:root[data-accent="verde"] .brand > span,
+:root[data-accent="vermelho"] .brand > span,
+:root[data-accent="amarelo"] .brand > span { color: var(--accent); }
 .brand-mark { background: transparent; border-radius: var(--radius-sm); transform: none; }
 .top-links > a, .view-switch, .theme-toggle, .accent-trigger { color: var(--muted); background: transparent; font-weight: 500; border-color: var(--line-soft); }
 .top-links > a:hover, .view-switch:hover, .theme-toggle:hover, .accent-trigger:hover { background: var(--soft); color: var(--ink); }
