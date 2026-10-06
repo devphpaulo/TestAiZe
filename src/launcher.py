@@ -177,8 +177,12 @@ def main():
         return
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     server = None
+    app = None
     try:
         app = create_app(root)
+        runtime = app.extensions["automation_runtime"]
+        if not runtime.available:
+            _notice(runtime.message)
         sock.bind(("127.0.0.1", 0))
         sock.listen(128)
         port = sock.getsockname()[1]
@@ -195,6 +199,10 @@ def main():
     except KeyboardInterrupt:
         _notice("Aplicativo encerrado.")
     finally:
+        if app is not None:
+            app.extensions['automation_suite'].shutdown()
+            app.extensions["automation_recorder"].shutdown()
+            app.extensions["automation_vault"].clear()
         runtime_file.unlink(missing_ok=True)
         if server is not None:
             server.close()

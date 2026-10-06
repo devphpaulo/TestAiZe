@@ -1,0 +1,6 @@
+<section class="automation-run-panel" id="suite-progress" hidden aria-label="Resultado da suíte">
+  <div class="section-heading"><h2>Execução da suíte</h2><button type="button" class="button button-secondary" id="suite-cancel" hidden>Cancelar execução</button></div>
+  <div class="automation-metrics"><div><span>Total de testes</span><strong id="suite-total">0</strong></div><div><span>Aprovados</span><strong id="suite-passed">0</strong></div><div><span>Reprovados</span><strong id="suite-failed">0</strong></div><div><span>Ignorados</span><strong id="suite-skipped">0</strong></div></div>
+  <output id="suite-state" role="status" aria-live="polite"></output><progress id="suite-bar" max="1" value="0" aria-label="Progresso dos testes"></progress>
+  <div id="suite-errors"></div><ol id="suite-results" class="automation-test-results"></ol>
+</section>

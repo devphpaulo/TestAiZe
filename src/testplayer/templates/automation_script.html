@@ -1,0 +1,10 @@
+{% extends 'base.html' %}
+{% block title %}{{ script.name }} · Automação{% endblock %}
+{% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='automation.css') }}"><link rel="stylesheet" href="{{ url_for('static', filename='automation-library.css') }}"><script defer src="{{ url_for('static', filename='automation-library.js') }}"></script><script defer src="{{ url_for('static', filename='automation-script.js') }}"></script><script defer src="{{ url_for('static', filename='vault.js') }}"></script>{% endblock %}
+{% block content %}
+<main class="page" id="automation-script" data-script="{{ script.id }}" data-folder="{{ script.folder_id }}" data-cycle="{{ script.cycle_id }}">
+  <a class="automation-back" href="{{ url_for('automation_library.folder_page', folder_id=script.folder_id) }}">← Voltar à pasta</a><div class="automation-heading"><div><p class="eyebrow">SCRIPT SALVO</p><h1>{{ script.name }}</h1></div><div class="automation-heading-actions"><button type="button" class="button button-secondary" id="vault-open">🔒 Cofre</button><button type="button" class="button button-primary" id="suite-run">Rodar ciclo</button></div></div>
+  <form id="automation-script-form"><div class="automation-script-fields"><label>Nome<input id="script-name" required maxlength="120" value="{{ script.name }}"></label><label>Ciclo<select id="script-cycle">{% for cycle in cycles %}<option value="{{ cycle.id }}" {% if script.cycle_id == cycle.id %}selected{% endif %}>{{ cycle.name }}</option>{% endfor %}</select></label></div><label for="script-code">Arquivo Playwright Test (.spec.ts)</label><textarea id="script-code" class="automation-source" spellcheck="false" required>{{ script.code }}</textarea><div class="automation-dialog-actions"><a class="button button-secondary" href="{{ url_for('automation_library.download_script', script_id=script.id) }}">Baixar .spec.ts salvo</a><button type="submit" class="button button-primary">Salvar alterações</button></div></form>
+  <output id="automation-library-feedback" role="status" aria-live="polite"></output>{% include 'automation_run_panel.html' %}
+</main>{% include 'vault_dialog.html' %}
+{% endblock %}

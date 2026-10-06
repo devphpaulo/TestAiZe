@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Automação — TestAíZé</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="/carbon.css">
+  <link rel="stylesheet" href="/ui-fixes.css">
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <main class="recorder-app">
+    <header class="hero"><h1>Automação · TestAíZé</h1><p>Gravação de testes com Playwright instalado neste computador.</p></header>
+    <form id="navigation" class="navigation url-toolbar">
+      <div class="destination-field"><label for="target-url">URL HTTP ou HTTPS</label><input id="target-url" name="url" type="url" maxlength="4096" placeholder="https://seu-sistema.com" aria-describedby="url-hint" required><span id="url-hint" class="visually-hidden">Inicie uma gravação no destino informado.</span></div>
+      <button id="start" class="button button-primary" type="submit">Iniciar</button>
+      <button id="stop" class="button button-secondary" type="button">Encerrar</button>
+      <button id="reconnect" class="button button-ghost" type="button">Reconectar</button>
+    </form>
+    <div class="workspace">
+      <section class="browser-panel" aria-labelledby="browser-title">
+        <div class="workspace-heading"><div><span class="panel-kicker">GRAVAÇÃO</span><h2 id="browser-title">Navegador</h2></div><output id="status" class="recorder-status" aria-live="polite">Conectando…</output></div>
+        <div class="viewport-shell">
+          <canvas id="viewport" width="1280" height="720" tabindex="0" aria-label="Página Chromium interativa" aria-disabled="true"></canvas>
+          <div id="hover-highlight" class="hover-highlight" aria-hidden="true" hidden></div>
+          <div id="hover-tooltip" class="hover-tooltip" aria-hidden="true" hidden><code id="hover-locator"></code></div>
+          <div id="select-overlay" class="select-popover" role="listbox" aria-label="Opções do campo selecionado" hidden></div>
+          <div id="viewport-placeholder" class="empty-state"><svg aria-hidden="true" viewBox="0 0 32 32"><path d="M4 7h24v18H4zM4 12h24M8 9h2m2 0h2m-2 7 6 4-6 4"/></svg><strong>Comece pelo endereço do seu sistema</strong><p>O navegador aparece aqui quando você iniciar a gravação.</p></div>
+        </div>
+        <div class="browser-footer"><span>Chromium · 1280 × 720</span><span>Mouse, teclado e rolagem</span></div>
+      </section>
+      <aside class="code-panel" aria-labelledby="code-title">
+        <div class="workspace-heading"><div><span class="panel-kicker">TESTE AUTOMATIZADO</span><h2 id="code-title">Teste Playwright</h2></div><span class="code-format">.spec.ts</span></div>
+        <div class="code-tabs" role="tablist" aria-label="Conteúdo do teste"><button id="code-tab" role="tab" aria-selected="true" aria-controls="source-panel" type="button">Código gerado</button><button id="steps-tab" role="tab" aria-selected="false" aria-controls="steps-panel" tabindex="-1" type="button">Etapas para executar</button></div>
+        <div id="source-panel" class="editor-panel" role="tabpanel" aria-labelledby="code-tab"><label class="visually-hidden" for="code">Arquivo Playwright Test</label><textarea id="code" class="code-editor" spellcheck="false" aria-label="Código Playwright Test gerado" placeholder="As ações gravadas aparecem aqui."></textarea></div>
+        <div id="steps-panel" class="editor-panel" role="tabpanel" aria-labelledby="steps-tab" hidden><label class="visually-hidden" for="steps">Etapas Playwright executáveis</label><textarea id="steps" class="code-editor" spellcheck="false" aria-label="Etapas Playwright executáveis" placeholder="Revise as etapas antes de executar."></textarea></div>
+        <div class="code-toolbar"><button id="save-spec" class="button button-ghost" type="button">Salvar .spec.ts</button><button id="copy" class="button button-ghost" type="button">Copiar</button><button id="clear" class="button button-ghost" type="button">Limpar</button><button id="run" class="button button-primary" type="button">Rodar <span aria-hidden="true">▶</span></button></div>
+        <div class="code-footer"><output id="copy-status" role="status" aria-live="polite"></output><p>E-mail e senha usam as variáveis definidas no Cofre.</p></div>
+      </aside>
+    </div>
+  </main>
+  <script type="module" src="/embedded.js"></script>
+  <script type="module" src="/app.js"></script>
+</body>
+</html>

@@ -16,7 +16,7 @@ def make_backup(root: Path) -> Path:
     if destination.exists():
         raise FileExistsError("Já existe um backup com este horário. Tente novamente.")
     sources = []
-    for folder in (root / "rascunhos", root / "sessoes", root / "excluidas"):
+    for folder in (root / "rascunhos", root / "sessoes", root / "excluidas", root / "automacao"):
         if folder.exists():
             sources.extend(path for path in folder.rglob("*") if path.is_file())
     prompt = root / "prompt-report-bug.txt"
@@ -29,7 +29,7 @@ def make_backup(root: Path) -> Path:
         scratch_dir = Path(scratch)
         for source in sources:
             relative = source.relative_to(root).as_posix()
-            if source.name == "sessao.sqlite":
+            if source.name in ("sessao.sqlite", "biblioteca.sqlite3"):
                 snapshot = scratch_dir / f"{len(checksums)}.sqlite"
                 original_db = sqlite3.connect(source)
                 backup_db = sqlite3.connect(snapshot)

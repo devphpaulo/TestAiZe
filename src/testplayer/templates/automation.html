@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}Automação — TestAíZé{% endblock %}
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='automation.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='automation-library.css') }}">
+<script defer src="{{ url_for('static', filename='automation.js') }}"></script>
+<script defer src="{{ url_for('static', filename='vault.js') }}"></script>
+<script defer src="{{ url_for('static', filename='automation-save.js') }}"></script>
+{% endblock %}
+{% block content %}
+<main class="automation-page" id="automation-workspace" data-home="{{ url_for('automation') }}">
+  <a class="automation-back" href="{{ url_for('automation') }}">← Biblioteca de automação</a>
+  <div class="automation-heading">
+    <div>
+      <p class="eyebrow">WORKSPACE / AUTOMAÇÃO</p>
+      <h1>Iniciativa de testes automatizados</h1>
+      <p>Grave um fluxo no navegador, revise as etapas e execute seu teste.</p>
+    </div>
+    <div class="automation-heading-actions"><button type="button" class="button button-primary" id="automation-save">Salvar na biblioteca</button><button type="button" class="button button-secondary" id="vault-open"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor"><path d="M4 7V4a4 4 0 0 1 8 0v3M2 7h12v8H2zM8 10v2"/></svg> Cofre</button><button type="button" class="button button-ghost" id="automation-exit">Encerrar iniciativa</button></div>
+  </div>
+  <div class="automation-state-bar">
+    <output id="automation-status" role="status" aria-live="polite">Iniciando recorder…</output>
+    <button type="button" class="button button-ghost" id="automation-retry" hidden>Tentar novamente</button>
+  </div>
+  <section class="automation-frame-shell" id="automation-frame-shell" aria-label="Recorder Playwright" aria-busy="true">
+    <div id="automation-placeholder">Preparando a área de gravação…</div>
+  </section>
+  <p class="automation-note">Sem salvar, a gravação é descartada ao sair. Scripts salvos permanecem na biblioteca.</p>
+  <output id="automation-save-feedback" role="status" aria-live="polite"></output>
+</main>
+<dialog id="automation-save-dialog" class="automation-save-dialog" aria-labelledby="automation-save-title"><form id="automation-save-form"><h2 id="automation-save-title">Salvar teste na biblioteca</h2><label>Nome do script<input id="save-script-name" required maxlength="120" placeholder="Login com sucesso"></label><label>Pasta<select id="save-script-folder"></select></label><label id="save-new-folder-label" hidden>Nome da nova pasta<input id="save-new-folder-name" maxlength="120"></label><label>Ciclo<select id="save-script-cycle"></select></label><label id="save-new-cycle-label" hidden>Nome do novo ciclo<input id="save-new-cycle-name" maxlength="120"></label><output id="save-script-error" role="status"></output><div class="automation-dialog-actions"><button type="button" class="button button-ghost" id="save-script-cancel">Cancelar</button><button type="submit" class="button button-primary">Salvar script</button></div></form></dialog>
+{% include "vault_dialog.html" %}
+{% endblock %}

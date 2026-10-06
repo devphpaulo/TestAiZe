@@ -9,6 +9,7 @@ import secrets
 import shutil
 import sqlite3
 import uuid
+from collections.abc import Mapping
 from pathlib import Path, PureWindowsPath
 
 from flask import Flask, abort, flash, jsonify, redirect, render_template, request, send_file, session, url_for
@@ -16,6 +17,12 @@ from werkzeug.exceptions import HTTPException
 from PIL import Image, UnidentifiedImageError
 
 from .importer import FIELDS, LABELS, inspect_file
+from .automation_recorder import RecorderError, RecorderManager
+from .automation_environment import detect_automation_runtime
+from .automation_vault import AutomationVault
+from .automation_library import AutomationLibrary
+from .automation_suite import AutomationSuiteRunner
+from .automation_routes import blueprint as automation_blueprint, library_page
 from .attachments import (MAX_ATTACHMENT_BYTES, MAX_STEP_ATTACHMENTS, attachment_content_type,
                           attachment_extension, safe_attachment_name, verified_attachment_bytes)
 from .pdf_export import generate_pdf
@@ -79,6 +86,80 @@ def create_app(root: Path) -> Flask:
         SESSION_COOKIE_SAMESITE="Strict",
     )
     app.config["DATA_ROOT"] = str(root)
+    automation_runtime = detect_automation_runtime()
+    app.extensions["automation_runtime"] = automation_runtime
+    app.extensions["automation_recorder"] = RecorderManager(runtime=automation_runtime)
+    app.extensions["automation_vault"] = AutomationVault()
+    app.extensions['automation_library'] = AutomationLibrary(root)
+    app.extensions['automation_suite'] = AutomationSuiteRunner(app.extensions['automation_library'], automation_runtime)
+    app.register_blueprint(automation_blueprint)
+
+    @app.get('/api/iniciativas/automacao/cofre')
+    def automation_vault_entries():
+        response = jsonify(entries=app.extensions['automation_vault'].entries())
+        response.headers['Cache-Control'] = 'no-store'
+        return response
+
+    @app.post('/api/iniciativas/automacao/cofre')
+    def automation_vault_save():
+        payload = request.get_json(silent=True)
+        if not isinstance(payload, dict):
+            abort(400, 'Solicitação inválida.')
+        vault = app.extensions['automation_vault']
+        try:
+            if payload.get('action') == 'remove':
+                vault.remove(payload.get('key'))
+            else:
+                vault.save(payload.get('key'), payload.get('value'), payload.get('secret', False))
+        except ValueError as error:
+            abort(400, str(error))
+        app.extensions['automation_recorder'].update_vault(vault.environment())
+        return jsonify(ok=True, entries=vault.entries())
+
+    @app.get("/iniciativas/automacao")
+    def automation():
+        if not automation_runtime.available:
+            return render_template("automation_unavailable.html", reason=automation_runtime.message), 503
+        return library_page()
+
+    def recorder_owner():
+        payload = request.get_json(silent=True) if request.is_json else request.form
+        if payload is not None and not isinstance(payload, Mapping):
+            abort(400, "Solicitação inválida.")
+        owner = (payload or {}).get("owner", "")
+        if not isinstance(owner, str) or len(owner) > 128:
+            abort(400, "Identificador da página inválido.")
+        return owner
+
+    @app.post("/api/iniciativas/automacao/recorder/start")
+    def automation_recorder_start():
+        if not automation_runtime.available:
+            return jsonify(ok=False, state="unavailable", error=automation_runtime.message), 503
+        owner = recorder_owner()
+        try:
+            app.extensions['automation_recorder'].update_vault(app.extensions['automation_vault'].environment())
+            result = app.extensions["automation_recorder"].start(request.host_url.rstrip("/"), owner)
+            return jsonify(ok=True, **result)
+        except RecorderError as error:
+            return jsonify(ok=False, state="error", error=str(error)), 503
+        except Exception:
+            app.logger.exception("Falha ao iniciar recorder")
+            return jsonify(ok=False, state="error", error="Falha ao iniciar automação. Tente novamente."), 500
+
+    @app.post("/api/iniciativas/automacao/recorder/stop")
+    def automation_recorder_stop():
+        return jsonify(ok=True, **app.extensions["automation_recorder"].stop(recorder_owner()))
+
+    @app.get("/api/iniciativas/automacao/recorder/status")
+    def automation_recorder_status():
+        return jsonify(**app.extensions["automation_recorder"].status(request.args.get("owner", "")))
+
+    @app.errorhandler(400)
+    @app.errorhandler(403)
+    def invalid_automation_request(error):
+        if request.path.startswith("/api/iniciativas/automacao/"):
+            return jsonify(ok=False, error=error.description), error.code
+        return error
 
     @app.context_processor
     def inject():
@@ -86,7 +167,8 @@ def create_app(root: Path) -> Flask:
         if not token:
             token = secrets.token_urlsafe(32)
             session["csrf_token"] = token
-        return {"csrf_token": token, "status_labels": {
+        return {"csrf_token": token, "automation_available": automation_runtime.available,
+                "automation_notice": automation_runtime.message, "status_labels": {
             "nao_executado": "Não executado", "em_andamento": "Em andamento",
             "aprovado": "Aprovado", "reprovado": "Reprovado", "bloqueado": "Bloqueado",
         }}

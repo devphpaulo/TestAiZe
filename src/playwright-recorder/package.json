@@ -1,0 +1,12 @@
+{
+  "name": "testaize-recorder",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test test/protocol.test.js test/recorder-adapter.test.js test/server.test.js test/email.test.js",
+    "test:e2e": "node --test test/e2e.test.js",
+    "test:host": "node --test test/host.test.js"
+  }
+}

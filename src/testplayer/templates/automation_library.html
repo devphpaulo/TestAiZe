@@ -1,0 +1,38 @@
+{% extends 'base.html' %}
+{% block title %}Automação · TestAíZé{% endblock %}
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='automation.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='automation-library.css') }}">
+<script defer src="{{ url_for('static', filename='automation-library.js') }}"></script>
+<script defer src="{{ url_for('static', filename='vault.js') }}"></script>
+{% endblock %}
+{% block content %}
+<main class="page automation-library" id="automation-library" data-folder="{{ folder.id if folder else '' }}" data-cycle="{{ selected_cycle or '' }}" data-has-scripts="{{ 'true' if scripts else 'false' }}" data-latest-run="{{ runs[0].id if runs else '' }}">
+  <div class="eyebrow"><span class="eyebrow-line"></span> WORKSPACE / AUTOMAÇÃO</div>
+  {% if not folder %}
+  <section class="home-hero"><div><h1>Organize seus testes.<br><span>Acompanhe cada execução.</span></h1><p>Guarde scripts por pasta e ciclo, execute suas suítes e investigue os resultados.</p></div><div class="hero-side" aria-hidden="true">AI</div></section>
+  <div class="home-grid">
+    <section class="panel"><div class="panel-topline"><span>BIBLIOTECA LOCAL</span><span>01</span></div><h2>Crie uma pasta de automação</h2><p>Dentro de cada pasta, organize ciclos de teste e salve seus arquivos .spec.ts.</p><button type="button" class="button button-primary" data-entity-kind="pastas">Nova pasta</button></section>
+    <section class="panel how-panel"><div class="panel-topline"><span>GRAVAÇÃO AVULSA</span><span>02</span></div><h2>Comece por uma navegação</h2><p>Grave sem escolher pasta ou ciclo. Baixe o teste ou organize-o na biblioteca quando quiser.</p><a class="button button-secondary" href="{{ url_for('automation_library.recording') }}">Gravar teste avulso</a></section>
+  </div>
+  <section class="sessions-section"><div class="section-heading"><div><div class="eyebrow">ORGANIZAÇÃO</div><h2>Pastas de automação</h2></div><button type="button" class="button button-secondary" id="vault-open">🔒 Cofre</button></div>
+    {% for item in folders %}<div class="automation-folder-row"><a href="{{ url_for('automation_library.folder_page', folder_id=item.id) }}"><strong>{{ item.name }}</strong><small>{{ item.cycle_count }} ciclos · {{ item.script_count }} scripts</small></a><div class="automation-row-actions"><button type="button" data-entity-kind="pastas" data-entity-id="{{ item.id }}" data-entity-name="{{ item.name }}">Renomear</button><button type="button" data-delete-kind="pastas" data-delete-id="{{ item.id }}" data-delete-name="{{ item.name }}">Excluir</button></div></div>{% else %}<div class="empty-state"><strong>Nenhuma pasta ainda.</strong><p>Crie sua primeira pasta ou comece com uma gravação avulsa.</p></div>{% endfor %}
+  </section>
+  {% else %}
+  <a class="automation-back" href="{{ url_for('automation') }}">← Todas as pastas</a>
+  <div class="automation-heading"><div><h1>{{ folder.name }}</h1><p>{{ cycles|length }} ciclos · {{ scripts|length }} scripts nesta seleção</p></div><div class="automation-heading-actions"><button type="button" class="button button-secondary" id="vault-open">🔒 Cofre</button><button class="button button-primary" type="button" id="suite-run" {% if not scripts %}disabled{% endif %}>Rodar suíte</button></div></div>
+  <section class="automation-cycle-section"><div class="section-heading"><h2>Ciclos de teste</h2><button type="button" class="button button-secondary" data-entity-kind="ciclos" data-folder-id="{{ folder.id }}">Novo ciclo</button></div>
+    <div class="automation-cycle-list">{% for cycle in cycles %}<div class="automation-cycle-item"><a href="{{ url_for('automation_library.folder_page', folder_id=folder.id, ciclo=cycle.id) }}" {% if selected_cycle == cycle.id %}aria-current="page"{% endif %}>{{ cycle.name }} <small>{{ cycle.script_count }} scripts</small></a><button type="button" data-entity-kind="ciclos" data-entity-id="{{ cycle.id }}" data-entity-name="{{ cycle.name }}">Renomear</button><button type="button" data-delete-kind="ciclos" data-delete-id="{{ cycle.id }}" data-delete-name="{{ cycle.name }}">Excluir</button></div>{% else %}<p class="automation-muted">Crie um ciclo para organizar os scripts desta pasta.</p>{% endfor %}</div>
+  </section>
+  <section class="sessions-section"><div class="section-heading"><h2>Scripts</h2><a class="button button-secondary" href="{{ url_for('automation_library.recording') }}">Gravar novo teste</a></div>
+    <form method="get" class="automation-cycle-filter"><label for="automation-cycle-filter">Filtrar por ciclo</label><select name="ciclo" id="automation-cycle-filter"><option value="">Todos os ciclos</option>{% for cycle in cycles %}<option value="{{ cycle.id }}" {% if selected_cycle == cycle.id %}selected{% endif %}>{{ cycle.name }}</option>{% endfor %}</select></form>
+    {% for script in scripts %}<div class="automation-script-row"><a href="{{ url_for('automation_library.script_page', script_id=script.id) }}"><strong>{{ script.name }}{% if not script.name.endswith('.spec.ts') %}.spec.ts{% endif %}</strong><small>{{ script.cycle_name }}</small></a><div class="automation-row-actions"><a href="{{ url_for('automation_library.download_script', script_id=script.id) }}">Baixar</a><button type="button" data-delete-kind="scripts" data-delete-id="{{ script.id }}" data-delete-name="{{ script.name }}">Excluir</button></div></div>{% else %}<div class="empty-state"><strong>Nenhum script nesta seleção.</strong><p>Grave um teste e escolha esta pasta ao salvar na biblioteca.</p></div>{% endfor %}
+  </section>
+  {% include 'automation_run_panel.html' %}
+  <section class="automation-run-history"><h2>Histórico de suítes</h2>{% for run in runs[:20] %}<button type="button" class="automation-history-row" data-view-run="{{ run.id }}"><strong>{{ run.passed }} aprovados · {{ run.failed }} reprovados · {{ run.skipped }} ignorados</strong><small>{{ run.created_at[:19].replace('T', ' ') }} UTC · {{ run.state }}</small></button>{% else %}<p class="automation-muted">Nenhuma suíte executada ainda.</p>{% endfor %}</section>
+  {% endif %}
+  <output id="automation-library-feedback" role="status" aria-live="polite"></output>
+</main>
+<dialog id="automation-entity-dialog" class="automation-entity-dialog" aria-labelledby="automation-entity-title"><form id="automation-entity-form"><h2 id="automation-entity-title">Nova pasta</h2><label>Nome<input id="automation-entity-name" name="name" required maxlength="120"></label><output id="automation-entity-error" role="status"></output><div class="automation-dialog-actions"><button type="button" class="button button-ghost" id="automation-entity-cancel">Cancelar</button><button type="submit" class="button button-primary">Salvar</button></div></form></dialog>
+{% include 'vault_dialog.html' %}
+{% endblock %}

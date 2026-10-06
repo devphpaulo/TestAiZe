@@ -1,0 +1,13 @@
+<dialog id="vault-dialog" class="vault-dialog" aria-labelledby="vault-title">
+  <div class="vault-heading"><div><p class="eyebrow">VARIÁVEIS DO TESTE</p><h2 id="vault-title">Cofre</h2></div><button type="button" class="button button-ghost" id="vault-close" aria-label="Fechar Cofre">Fechar</button></div>
+  <p class="vault-description">Valores disponíveis enquanto o aplicativo estiver aberto. E-mail e senha gravados usam estas chaves; nas etapas editáveis, use <code>process.env.SUA_CHAVE</code>.</p>
+  <div id="vault-entries" class="vault-entries"></div>
+  <form id="vault-add" class="vault-add">
+    <h3>Adicionar chave</h3>
+    <label>Chave<input name="key" placeholder="API_TOKEN" pattern="[A-Z][A-Z0-9_]{0,63}" required maxlength="64"></label>
+    <label>Valor<input name="value" type="password" autocomplete="off" maxlength="8192"></label>
+    <label class="vault-secret"><input name="secret" type="checkbox" checked> Secret</label>
+    <button type="submit" class="button button-primary">Adicionar</button>
+  </form>
+  <output id="vault-feedback" role="status" aria-live="polite"></output>
+</dialog>

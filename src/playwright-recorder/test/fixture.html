@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>Recorder fixture</title>
+    <style>
+      body { margin: 0; min-height: 1500px; font-family: sans-serif; }
+      label, button, output { position: absolute; left: 40px; }
+      label { display: grid; gap: 4px; }
+      input, select { width: 240px; height: 36px; font: inherit; }
+      label[for="name"] { top: 40px; }
+      label[for="password"] { top: 120px; }
+      label[for="role"] { top: 330px; }
+      button { top: 210px; width: 120px; height: 42px; }
+      output { top: 275px; }
+      a { position: absolute; left: 40px; top: 430px; }
+    </style>
+  </head>
+  <body>
+    <label for="name">Name <input id="name"></label>
+    <label for="password">Password <input id="password" type="password"></label>
+    <button id="run" type="button">Run</button>
+    <output id="result">waiting</output>
+    <label for="role">Role
+      <select id="role">
+        <option value="developer">Developer</option>
+        <option value="manager">Manager</option>
+        <option value="disabled" disabled>Disabled</option>
+      </select>
+    </label>
+    <a href="#details">Sauce Demo</a>
+    <script>
+      document.querySelector("#run").addEventListener("click", () => {
+        document.querySelector("#result").textContent = "ran";
+      });
+    </script>
+  </body>
+</html>

@@ -12,6 +12,7 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='carbon.css') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='ui-fixes.css') }}">
   <script defer src="{{ url_for('static', filename='app.js') }}"></script>
+  {% block head %}{% endblock %}
 </head>
 <body>
   <header class="topbar">
@@ -21,6 +22,7 @@
     </a>
     <nav class="top-links" aria-label="Navegação principal">
       <a href="{{ url_for('home') }}">Sessões</a>
+      {% if automation_available %}<a class="automation-nav" href="{{ url_for('automation') }}" {% if request.path.startswith('/iniciativas/automacao') %}aria-current="page"{% endif %}>Automação</a>{% endif %}
       {% block header_actions %}{% endblock %}
       <div class="accent-picker" id="accent-picker">
         <button type="button" class="accent-trigger" id="accent-trigger" aria-label="Escolher cor do aplicativo" aria-haspopup="true" aria-expanded="false" aria-controls="accent-options"><span class="palette-mark" aria-hidden="true"></span><span class="accent-trigger-label">Cores</span><span class="accent-trigger-chevron" aria-hidden="true"></span></button>
@@ -33,6 +35,7 @@
       <span class="local-indicator"><span></span> Nesta máquina</span>
     </nav>
   </header>
+  {% if automation_notice and request.endpoint == 'home' %}<div class="automation-environment-notice" role="status">{{ automation_notice }}</div>{% endif %}
   {% with messages = get_flashed_messages(with_categories=true) %}
     {% if messages %}
       <div class="flash-stack" role="status">
