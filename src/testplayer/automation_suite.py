@@ -8,6 +8,18 @@ import subprocess
 import threading
 from .automation_environment import recorder_root
 
+_PLAYWRIGHT_LAUNCHER = (
+    "const { dirname, join } = require('node:path');"
+    "const entry = process.env.RECORDER_PLAYWRIGHT_MODULE;"
+    "const config = process.env.TESTAIZE_SUITE_CONFIG;"
+    "if (!entry || !config) process.exit(1);"
+    "const cli = join(dirname(entry), 'cli.js');"
+    "process.argv = [process.execPath, cli, 'test', '--config', config];"
+    "process.stdin.resume();"
+    "process.stdin.once('end', () => process.exit(1));"
+    "require(cli);"
+)
+
 
 class AutomationSuiteRunner:
     def __init__(self, library, runtime, timeout=300):
@@ -30,7 +42,7 @@ class AutomationSuiteRunner:
     def start(self, folder_id, cycle_id, environment, secrets):
         if not self.runtime.available: raise ValueError(self.runtime.message or 'Playwright indisponível.')
         worker = recorder_root()
-        missing = [name for name in ('run-suite.cjs', 'suite-runtime.cjs', 'suite-reporter.cjs') if not (worker / name).is_file()]
+        missing = [name for name in ('suite-runtime.cjs', 'suite-reporter.cjs') if not (worker / name).is_file()]
         if missing:
             raise ValueError('Instalação de automação incompleta. Arquivos ausentes: ' + ', '.join(missing) + '.')
         with self._lock:
@@ -61,8 +73,9 @@ class AutomationSuiteRunner:
         hook = (worker / 'suite-runtime.cjs').as_posix()
         env = {**os.environ, **environment, 'RECORDER_PLAYWRIGHT_MODULE': self.runtime.playwright_entry,
                'TESTAIZE_SUITE_REPORT': str(path / 'report.json'), 'TESTAIZE_SUITE_SECRETS': json.dumps(secrets),
+               'TESTAIZE_SUITE_CONFIG': str(path / 'playwright.config.cjs'),
                'NODE_OPTIONS': (os.environ.get('NODE_OPTIONS', '') + f' --require "{hook}"').strip()}
-        process = subprocess.Popen([self.runtime.node, str(worker / 'run-suite.cjs'), str(path / 'playwright.config.cjs')],
+        process = subprocess.Popen([self.runtime.node, '--eval', _PLAYWRIGHT_LAUNCHER],
                                    cwd=path, env=env, stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                                    creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
         with self._lock:

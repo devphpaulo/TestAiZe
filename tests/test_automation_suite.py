@@ -14,7 +14,7 @@ from testplayer.automation_suite import AutomationSuiteRunner
 
 
 class AutomationSuiteTests(unittest.TestCase):
-    def test_missing_runner_file_is_reported_before_creating_an_execution(self):
+    def test_missing_playwright_support_files_are_reported_before_creating_an_execution(self):
         with tempfile.TemporaryDirectory() as temporary:
             library = AutomationLibrary(Path(temporary))
             folder = library.create_folder('Instalação')
@@ -23,7 +23,7 @@ class AutomationSuiteTests(unittest.TestCase):
             runner = AutomationSuiteRunner(library, AutomationRuntime(True, 'node', 'playwright'))
             try:
                 with patch('testplayer.automation_suite.recorder_root', return_value=Path(temporary) / 'missing-worker'):
-                    with self.assertRaisesRegex(ValueError, 'run-suite.cjs'):
+                    with self.assertRaisesRegex(ValueError, 'suite-runtime.cjs'):
                         runner.start(folder['id'], cycle['id'], {}, [])
                 self.assertEqual(library.runs(folder['id']), [])
             finally:
