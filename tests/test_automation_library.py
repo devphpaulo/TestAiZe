@@ -1,3 +1,4 @@
+import os
 import sys
 import tempfile
 import unittest
@@ -61,5 +62,6 @@ class AutomationLibraryTests(unittest.TestCase):
         archive_path = make_backup(root)
         with zipfile.ZipFile(archive_path) as archive:
             self.assertIn('automacao/biblioteca.sqlite3', archive.namelist())
-            self.assertEqual(archive.read(self.library.script_path(script['id']).relative_to(root).as_posix()).decode(), 'codigo salvo')
+            script_archive_path = os.path.relpath(self.library.script_path(script['id']), root).replace(os.sep, '/')
+            self.assertEqual(archive.read(script_archive_path).decode(), 'codigo salvo')
             self.assertIn('automacao/execucoes/' + run['id'] + '/report.json', archive.namelist())
