@@ -43,6 +43,7 @@ jobs:
       - name: Testar executável com ferramentas do ambiente
         shell: pwsh
         run: |
+          $env:TESTAIZE_PYTHON = "python"
           $env:TESTAIZE_EXE = "$PWD/dist/TestAiZe-${{ steps.pkg.outputs.version }}.exe"
           npm --prefix src/playwright-recorder run test:host
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
