@@ -1,39 +1,360 @@
-# TestAíZé
+# Manual do TestAiZe
 
-## Abrir
+O TestAiZe é um executor local de testes manuais. Você importa os casos de teste de uma planilha, executa cada passo no Test Player, registra resultados e evidências e gera um relatório para compartilhar.
 
-Dê dois cliques em `TestAiZe-01.005.000.exe`. O aplicativo inicia discretamente, abre o navegador e fica na bandeja do Windows, perto do relógio. Não é necessário instalar Python nem manter uma janela de terminal aberta. O ZIP da mesma versão se chama `TestAiZe-windows-01.005.000.zip`.
+Este manual mostra o fluxo completo de uso, do primeiro acesso ao relatório final.
 
-No ícone da bandeja, use **Abrir aplicativo**, **Abrir pasta de dados** ou **Encerrar aplicativo**. Se o aplicativo já estiver aberto, dar dois cliques no `.exe` novamente apenas reabre o navegador.
+## Fluxo completo
 
-O arquivo `logs/aplicativo.log` registra cada linha com data, hora, versão do TestAíZé, nível, origem e mensagem. O formato é `AAAA-MM-DD HH:MM:SS | TestAíZé v01.005.000 | NÍVEL | origem | mensagem`, inclusive para erros de relatório e avisos do servidor.
+```mermaid
+flowchart TD
+    A["Abrir o TestAiZe"] --> B["Importar planilha"]
+    B --> C["Revisar a prévia"]
+    C --> D{"Planilha correta?"}
+    D -- "Não" --> E["Ajustar mapeamento ou abas"]
+    E --> C
+    D -- "Sim" --> F["Iniciar execução"]
+    F --> G["Escolher pastas ou ciclos"]
+    G --> H["Executar casos no Test Player"]
+    H --> I["Registrar status, resultado e evidências"]
+    I --> J{"Precisa retestar?"}
+    J -- "Sim" --> K["Iniciar nova execução do caso"]
+    K --> H
+    J -- "Não" --> L["Exportar relatório"]
+    L --> M["Finalizar ou continuar editando"]
+```
 
-O servidor aceita conexões somente em `127.0.0.1`; não precisa de internet. No cabeçalho, escolha o modo claro ou escuro e a cor **Neutro**, **Roxo**, **Verde**, **Vermelho** ou **Amarelo**. As duas preferências são lembradas pelo navegador. As cores dos status dos testes continuam fixas para facilitar a leitura dos resultados.
+## 1. Antes de começar
 
-## Onde ficam os dados
+Você precisa de:
 
-Na primeira abertura, o programa cria **Documentos/TestAiZe**; nesta máquina, o caminho é `C:\Users\phpau\OneDrive\Documentos\TestAiZe`. Ali ficam `rascunhos/`, `sessoes/`, `excluidas/`, imagens, PDFs, backups e logs. Esta versão começa com sessões novas e não importa automaticamente os dados da pasta antiga. O próprio `.exe` pode ficar em qualquer pasta e pode ser substituído por uma versão nova sem afetar as sessões criadas em **TestAiZe**. Use **Abrir pasta de dados** na bandeja para chegar ao local exato.
+- Windows 10 ou 11;
+- o executável do TestAiZe;
+- uma planilha de casos em `.xlsx` ou CSV UTF-8;
+- Microsoft Edge ou Google Chrome instalado, caso queira gerar PDF.
 
-Rascunhos ficam em `rascunhos/`; depois de finalizar, cada execução fica em `sessoes/AAAA-MM-DD/execucao-.../`. A sessão concluída continua editável: você pode ajustar status, anotações, evidências e iniciar retestes nela. É possível exportar PDF ou HTML em qualquer momento, mesmo com casos ou passos ainda não executados. Exportar não finaliza a execução; use **Finalizar execução** quando quiser classificá-la como concluída.
+Os casos manuais entram no sistema por meio da planilha. A criação manual de novos casos dentro do aplicativo ainda não está disponível.
 
-Na lista de sessões, clique em **Excluir** para escolher o destino dos arquivos. **Não, guardar os arquivos** move a pasta completa da sessão para `excluidas/` e a retira da lista. **Sim, excluir também os arquivos** apaga permanentemente a pasta da sessão, incluindo evidências e PDFs. Os backups criados pelo aplicativo incluem também as sessões em `excluidas/`.
+## 2. Abrir o aplicativo
 
-## Usar
+1. Baixe o artefato `TestAiZe-windows-01.005.000` na aba [Actions](https://github.com/devphpaulo/TestAiZe/actions).
+2. Descompacte o arquivo em qualquer pasta.
+3. Dê dois cliques em `TestAiZe-01.005.000.exe`.
+4. O aplicativo abrirá no navegador e ficará disponível na bandeja do Windows.
 
-Importe `.xlsx` ou CSV UTF-8. O perfil automático reconhece `Nome`, `Precondição`, `Status`, `Prioridade`, `Passo`, `Resultado Esperado`, `Dados do teste` e `Pasta`. Revise o mapeamento na prévia se o arquivo usar outros cabeçalhos.
+O executável não precisa de instalação. Também não é necessário manter uma janela de terminal aberta.
 
-O status do caso pode ser definido diretamente pelos botões de ícone, independentemente dos passos. **Automático pelos passos** volta a calcular o status. A data e a hora de cada seleção de status aparecem abaixo do passo e no PDF. O comentário fica ao fim do caso. O texto de **Pré-condições da planilha** é somente leitura; escreva no campo **Anotações e evidências** logo abaixo. Nesse campo, em **Resultado observado** e em **Comentário do caso**, selecione, substitua ou apague texto de várias linhas normalmente. Cole imagens com `Ctrl+V`, use Enter para continuar abaixo delas e Backspace para remover uma imagem quando o cursor estiver logo depois. Arraste o canto inferior direito da imagem para ajustar sua largura visual. A posição e a largura aparecem também no PDF; o arquivo original permanece intacto. O botão **Anexar arquivos** do passo aceita qualquer tipo de arquivo, inclusive TXT, XLS, XML, JPG e PNG. Esses arquivos ficam separados das imagens inseridas no texto e podem ser baixados ou removidos; cada passo aceita até 5 arquivos de 5 MB. O download entrega os bytes originais com o nome e a extensão preservados, mas sem abrir o conteúdo na origem da aplicação. O PDF lista o nome, a extensão e o tamanho de cada arquivo anexo, sem incorporar seus bytes. O HTML é autossuficiente e oferece um botão **Baixar anexo** em cada passo.
+Pelo ícone na bandeja, você pode:
 
-Para retestar um caso na mesma sessão e no mesmo ciclo, clique em **Iniciar nova execução deste caso** abaixo do comentário. A execução anterior fica em **Execuções anteriores**, fechada por padrão, com status, passos, horários, anotações e imagens preservados. O caso atual começa sem resultados nem evidências e pode receber uma nova avaliação. A exportação em PDF usa somente a execução atual de cada caso; o histórico continua acessível na sessão.
+- **Abrir aplicativo**: abrir novamente a tela no navegador;
+- **Abrir pasta de dados**: acessar os arquivos salvos;
+- **Encerrar aplicativo**: fechar o TestAiZe.
 
-Ao clicar numa sessão, escolha **Todas as pastas** ou uma pasta específica. As barras mostram a distribuição dos casos por status; passe o mouse sobre uma barra para ver quantidades e percentuais. Caminhos como `/MVP-Gestao-Testes/Acessos-e-Auditoria/MVP-GT` aparecem pelo nome da pasta do ciclo, **Acessos-e-Auditoria**; o caminho completo continua identificado no arquivo da sessão. No player, a lateral agrupa os casos por pasta e permite buscar e selecionar vários ciclos no filtro. A borda de cada caso e passo acompanha seu status. As duas laterais podem ser arrastadas para mudar sua largura ou recolhidas pelos botões no topo. **Modo Kanban**, ao lado do tema, mostra os mesmos casos agrupados por status; abra um cartão para voltar ao Test Player.
+Se o aplicativo já estiver aberto, abrir o executável novamente apenas reabre o navegador.
 
-Clique em **Exportar Relatório** em qualquer estado da execução, mesmo antes de finalizar. No modal, escolha **PDF** ou **HTML**; todos os casos vêm selecionados e você pode desmarcar casos individuais ou pastas inteiras. Escolha **Somente a última** para exportar a execução atual de cada caso ou **Todas as execuções** para incluir também os retestes anteriores com seus passos e evidências. Antes de gerar, a aplicação salva novamente os dados dos casos selecionados para refletir o status atual. O último PDF fica em `relatorios/relatorio.pdf`; o último HTML fica em `relatorios/relatorio.html`. O PDF é renderizado pelo mesmo modelo visual do HTML, com cabeçalho preto, resumo da sessão, distribuição de resultados e as mesmas seções dos casos. Texto e imagens das pré-condições, dos resultados observados e dos comentários aparecem no ponto correspondente; os arquivos anexados aos passos são listados com nome, extensão e tamanho, sem botão de download. O HTML inclui todos os casos selecionados, mesmo sem resultados ou evidências, permite baixar os anexos e oferece botões para mostrar todos os casos ou focar em um deles. Como o HTML incorpora os anexos em Base64, seu tamanho pode crescer cerca de 33% além dos bytes originais, mais imagens e layout.
+## 3. Criar uma execução a partir da planilha
 
-Se o caso e ao menos um de seus passos estiverem **Reprovados**, aparecem **Gerar relatório da falha** e **Copiar prompt de bug** abaixo dos passos. O PDF de falha contém apenas a execução atual desse caso e fica em `relatorios/falha-caso-...pdf`. O texto copiado vem de `prompt-report-bug.txt` na pasta de dados. Você pode editar esse arquivo em UTF-8; `{{DADOS_DO_CASO}}` é substituído pelos dados, resultados e nomes das evidências da execução atual. Sem esse marcador, os dados do caso são acrescentados ao final do texto. O aplicativo cria um modelo inicial apenas quando o arquivo ainda não existe.
+Na tela inicial:
 
-## Segurança dos arquivos
+1. Clique em **Escolher arquivo**.
+2. Selecione um arquivo `.xlsx` ou CSV UTF-8.
+3. Clique em **Ver prévia**.
+4. Confira as abas, os casos, os passos e o mapeamento das colunas.
+5. Se necessário, ajuste o mapeamento manualmente.
+6. Selecione somente as abas que deseja importar.
+7. Corrija os erros exibidos na prévia.
+8. Clique em **Iniciar execução**.
 
-Para guardar uma cópia dos dados, encerre o aplicativo pela bandeja e copie a pasta **TestAiZe** inteira para outro local. Ao restaurar, substitua a pasta de dados com o aplicativo fechado.
+Quando a execução for criada, os casos aparecerão no Test Player.
 
-Limites desta versão: um operador por vez na mesma máquina; imagens PNG, JPEG ou WebP de até 10 MB e 40 megapixels, até 12 por seção de evidências; arquivos anexados aos passos de até 5 MB cada, 5 por passo. Imagens embutidas na planilha não são importadas.
+### Formato esperado da planilha
+
+O layout padrão possui estes campos:
+
+| Campo | Para que serve |
+|---|---|
+| Nome | Nome do caso de teste |
+| Precondição | O que precisa estar preparado antes do teste |
+| Status | Situação inicial do caso |
+| Prioridade | Importância do caso |
+| Passo | Ação que deve ser executada |
+| Resultado Esperado | Comportamento esperado após o passo |
+| Dados do teste | Massa, caminho ou informação usada no teste |
+| Pasta | Agrupamento do caso ou ciclo |
+
+Cada passo ocupa uma linha. Os dados do caso, como nome, precondição, status, prioridade e pasta, devem ser preenchidos somente na primeira linha daquele caso.
+
+O modelo completo está em [docs/planilha.md](planilha.md).
+
+## 4. Escolher o que executar
+
+Ao abrir uma execução, você pode:
+
+- abrir **Todas as pastas**;
+- abrir uma pasta específica;
+- filtrar vários ciclos;
+- buscar um caso ou uma pasta;
+- visualizar o progresso por status;
+- alternar para o **Modo Kanban**.
+
+Use pastas para concentrar a execução em uma funcionalidade, card, produto ou conjunto de cenários.
+
+## 5. Executar um caso no Test Player
+
+Para cada caso:
+
+1. Leia a precondição e os passos.
+2. Execute a ação descrita no sistema que está sendo testado.
+3. Registre o resultado observado.
+4. Marque o status do passo.
+5. Adicione evidências quando necessário.
+6. Revise o status final do caso.
+
+### Status disponíveis
+
+| Status | Quando usar |
+|---|---|
+| **Não executado** | O passo ou caso ainda não foi avaliado |
+| **Em andamento** | A execução começou, mas ainda não terminou |
+| **Bloqueado** | Não foi possível executar por uma dependência ou impedimento |
+| **Reprovado** | O resultado observado não corresponde ao esperado |
+| **Aprovado** | O comportamento observado corresponde ao esperado |
+
+O status do caso pode ser definido diretamente pelos botões de status. Para voltar ao cálculo automático com base nos passos, use **Automático pelos passos**.
+
+A data e a hora da alteração de status ficam registradas no caso e aparecem também no relatório.
+
+## 6. Registrar resultado e evidências
+
+O campo **Pré-condições da planilha** é apenas informativo. Para registrar o que aconteceu durante a execução, use:
+
+- **Resultado observado**: descreva o comportamento encontrado;
+- **Anotações e evidências**: registre informações complementares;
+- **Comentário do caso**: anote uma conclusão ou observação geral.
+
+### Colar imagens
+
+Nos campos editáveis:
+
+1. Copie uma imagem.
+2. Posicione o cursor no campo desejado.
+3. Pressione `Ctrl+V`.
+4. Use Enter para continuar o texto abaixo da imagem.
+5. Use Backspace logo depois da imagem para removê-la, quando necessário.
+
+Também é possível ajustar visualmente a largura da imagem arrastando seu canto inferior direito.
+
+As imagens permanecem vinculadas à execução e aparecem no PDF e no HTML.
+
+### Anexar arquivos
+
+Use **Anexar arquivos** no passo para adicionar arquivos como:
+
+- TXT;
+- XLS;
+- XML;
+- JPG;
+- PNG;
+- outros arquivos relacionados ao teste.
+
+Limites:
+
+- até 5 arquivos por passo;
+- até 5 MB por arquivo.
+
+Os anexos ficam separados das imagens coladas. Eles podem ser baixados ou removidos no Test Player.
+
+No PDF, os anexos aparecem listados com nome, extensão e tamanho. No HTML, cada anexo possui a opção **Baixar anexo**.
+
+## 7. Retestar um caso
+
+Quando um caso falhar ou precisar ser executado novamente:
+
+1. Vá até o final do caso.
+2. Clique em **Iniciar nova execução deste caso**.
+3. Faça o reteste.
+4. Registre novos status, resultados e evidências.
+
+A execução anterior não é apagada. Ela fica em **Execuções anteriores**, com:
+
+- status;
+- passos;
+- horários;
+- anotações;
+- imagens;
+- arquivos anexados.
+
+O PDF pode ser gerado usando somente a execução atual. O histórico continua disponível dentro da sessão.
+
+## 8. Gerar um relatório
+
+Clique em **Exportar Relatório** em qualquer momento da execução. Não é necessário finalizar antes.
+
+No modal:
+
+1. Escolha **PDF** ou **HTML**.
+2. Selecione os casos ou pastas desejados.
+3. Escolha uma opção:
+   - **Somente a última**: inclui apenas a execução atual de cada caso;
+   - **Todas as execuções**: inclui também os retestes anteriores.
+4. Confirme a exportação.
+
+### PDF
+
+O PDF inclui:
+
+- resumo da execução;
+- distribuição dos resultados;
+- casos selecionados;
+- passos;
+- resultados observados;
+- comentários;
+- imagens;
+- lista de arquivos anexados.
+
+Os anexos são listados no PDF, mas seus arquivos não são incorporados.
+
+### HTML
+
+O HTML inclui os mesmos dados e permite:
+
+- baixar os anexos;
+- mostrar todos os casos;
+- focar em um caso específico;
+- enviar o relatório como um arquivo único.
+
+O último PDF fica em:
+
+`Documentos/TestAiZe/<execução>/relatorios/relatorio.pdf`
+
+O último HTML fica em:
+
+`Documentos/TestAiZe/<execução>/relatorios/relatorio.html`
+
+## 9. Gerar relatório de falha e prompt de bug
+
+Quando o caso e pelo menos um de seus passos estiverem como **Reprovado**, o Test Player disponibiliza:
+
+- **Gerar relatório da falha**;
+- **Copiar prompt de bug**.
+
+O relatório de falha contém somente a execução atual daquele caso.
+
+O texto copiado usa o arquivo `prompt-report-bug.txt`, localizado na pasta de dados do aplicativo. Esse arquivo pode ser personalizado em UTF-8.
+
+O marcador:
+
+`{{DADOS_DO_CASO}}`
+
+é substituído automaticamente pelos dados do caso, resultados observados e nomes das evidências.
+
+## 10. Finalizar e retomar uma execução
+
+Você pode exportar um relatório sem finalizar a execução.
+
+Quando o trabalho estiver concluído:
+
+1. Clique em **Finalizar execução**.
+2. A execução será movida para o histórico de sessões.
+3. Ela continuará disponível para consulta e edição.
+
+Mesmo finalizada, a sessão pode receber ajustes de status, anotações, evidências e novos retestes.
+
+## 11. Onde os dados ficam
+
+O TestAiZe salva os dados em:
+
+`Documentos/TestAiZe`
+
+A pasta contém, entre outros itens:
+
+- `rascunhos/`: execuções ainda não finalizadas;
+- `sessoes/`: execuções finalizadas;
+- `excluidas/`: sessões retiradas da lista;
+- `relatorios/`: relatórios gerados;
+- imagens e anexos;
+- backups;
+- `logs/aplicativo.log`: registros de funcionamento.
+
+O caminho exato pode variar conforme a configuração do Windows e do OneDrive. Use **Abrir pasta de dados** na bandeja para acessar a localização correta.
+
+## 12. Fazer backup
+
+Para criar uma cópia dos seus dados:
+
+1. Encerre o TestAiZe pela bandeja do Windows.
+2. Copie a pasta inteira **TestAiZe** para outro local.
+3. Guarde a cópia em um disco, servidor ou serviço de armazenamento confiável.
+
+Para restaurar:
+
+1. Encerre o aplicativo.
+2. Substitua a pasta de dados pela cópia de segurança.
+3. Abra o TestAiZe novamente.
+
+Não copie ou substitua os arquivos enquanto o aplicativo estiver aberto.
+
+## 13. Excluir uma sessão
+
+Na lista de sessões, clique em **Excluir** e escolha uma opção:
+
+- **Não, guardar os arquivos**: remove a sessão da lista e move seus arquivos para `excluidas/`;
+- **Sim, excluir também os arquivos**: apaga permanentemente a sessão, suas evidências e seus relatórios.
+
+A exclusão permanente não deve ser usada antes de confirmar que existe uma cópia de segurança.
+
+## 14. Solução rápida de problemas
+
+### O PDF não foi gerado
+
+Verifique se o Microsoft Edge ou Google Chrome está instalado. O TestAiZe utiliza um desses navegadores para renderizar o PDF.
+
+### O aplicativo parece já estar aberto
+
+Dê dois cliques no executável novamente. Se a instância já estiver em execução, o navegador será reaberto.
+
+### A planilha não aparece corretamente
+
+Confira se:
+
+- o arquivo é `.xlsx` ou CSV UTF-8;
+- a primeira linha contém os cabeçalhos;
+- cada caso está organizado em várias linhas, uma por passo;
+- o mapeamento foi revisado na prévia;
+- não existem erros nas abas selecionadas.
+
+### Uma imagem não aparece
+
+A versão atual aceita imagens PNG, JPEG ou WebP de até 10 MB e 40 megapixels. Imagens incorporadas dentro da planilha não são importadas automaticamente.
+
+### Não encontro uma sessão
+
+Use **Abrir pasta de dados** na bandeja e verifique as pastas `rascunhos/`, `sessoes/` e `excluidas/`.
+
+## Limitações atuais
+
+- os casos manuais precisam ser importados por planilha;
+- a criação manual de casos ainda não está disponível;
+- apenas um operador deve usar a mesma instalação por vez;
+- imagens incorporadas na planilha não são importadas;
+- cada seção de evidências aceita até 12 imagens;
+- cada imagem pode ter até 10 MB e 40 megapixels;
+- cada passo aceita até 5 anexos de até 5 MB cada.
+
+## Executar pelo código-fonte
+
+Esta opção é destinada a quem deseja executar o projeto diretamente pelo Python.
+
+Requisitos:
+
+- Python 3.12 ou superior;
+- `pip`.
+
+Com o repositório clonado:
+
+```bash
+pip install -r requirements.txt
+python launcher.py
+```
+
+O aplicativo continuará funcionando localmente e abrirá o Test Player no navegador.
