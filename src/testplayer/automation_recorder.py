@@ -134,22 +134,43 @@ class RecorderManager:
             return
         try:
             if process.poll() is None:
+                self._request_shutdown(process)
                 try:
-                    process.stdin.write("shutdown\n")
-                    process.stdin.flush()
                     process.wait(timeout=5)
-                except (OSError, ValueError, subprocess.TimeoutExpired):
-                    if os.name == "nt":
-                        subprocess.run(["taskkill", "/PID", str(process.pid), "/T", "/F"],
-                                       capture_output=True, timeout=5, creationflags=subprocess.CREATE_NO_WINDOW)
-                    else:
-                        process.kill()
-                    process.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    self._force_stop(process)
         finally:
             for stream in (process.stdin, process.stdout):
                 if stream:
-                    stream.close()
+                    try:
+                        stream.close()
+                    except OSError:
+                        pass
             self._process = self._url = self._owner = self._parent_origin = None
+
+    def _request_shutdown(self, process) -> None:
+        """Ask the recorder to exit without letting a full stdin pipe hold the request."""
+        def write() -> None:
+            try:
+                process.stdin.write("shutdown\n")
+                process.stdin.flush()
+            except (OSError, ValueError, AttributeError):
+                return
+
+        writer = threading.Thread(target=write, daemon=True)
+        writer.start()
+        writer.join(1)
+
+    def _force_stop(self, process) -> None:
+        try:
+            if os.name == "nt":
+                subprocess.run(["taskkill", "/PID", str(process.pid), "/T", "/F"],
+                               capture_output=True, timeout=5, creationflags=subprocess.CREATE_NO_WINDOW)
+            else:
+                process.kill()
+            process.wait(timeout=5)
+        except (OSError, subprocess.TimeoutExpired):
+            return
 
     def reap_idle(self):
         with self._lock:
