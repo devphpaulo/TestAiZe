@@ -229,6 +229,12 @@
   const cards = [...document.querySelectorAll('.step-card')];
   const saveState = document.getElementById('save-state');
   let selectedIndex = 0;
+  var captureApplying = false;
+  var captureSilent = false;
+  var captureLastKey = '';
+  var captureCursor = 0;
+  var captureClientId = (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : `web-${Date.now()}`;
+  var capturePublishTimer = null;
   const timers = new Map();
   const inFlight = new Map();
   const versions = new Map();
@@ -259,7 +265,7 @@
       miniState.classList.toggle('error', error);
     }
   }
-  function showCase(index) {
+  function showCase(index, keepScroll = false) {
     if (index < 0 || index >= views.length) return;
     selectedIndex = index;
     views.forEach((view, i) => view.classList.toggle('is-hidden', i !== index));
@@ -272,8 +278,9 @@
     const url = new URL(location.href);
     url.hash = `caso-${views[index].dataset.caseView}`;
     history.replaceState(null, '', url);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    if (!keepScroll) window.scrollTo({ top: 0, behavior: 'smooth' });
     caseViewChanged();
+    if (!captureApplying) scheduleCapturePublish();
   }
   caseButtons.forEach(button => button.addEventListener('click', () => showCase(viewIndexById.get(button.dataset.caseButton))));
   function moveCase(direction) {
@@ -450,6 +457,7 @@
     activeMiniSteps.set(card.dataset.caseId, card);
     renderMiniPlayer();
     if (revealMain) card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    if (!captureApplying) scheduleCapturePublish();
   }
   function miniElement(tag, className, text = '') {
     const node = miniPlayer.ownerDocument.createElement(tag);
@@ -474,6 +482,8 @@
     return blocks;
   }
   function syncObservedText(editor, value) {
+    const card = editor.closest('.step-card');
+    if (card && captureSilent) card.dataset.captureSilence = 'true';
     const lines = value.replace(/\r/g, '').split('\n');
     const paragraphs = observedTextBlocks(editor);
     lines.forEach((line, index) => {
@@ -487,6 +497,7 @@
     paragraphs.slice(lines.length).forEach(paragraph => paragraph.remove());
     updateSyncActions();
     queueEditor(editor);
+    if (card && captureSilent) card.dataset.captureSilence = 'false';
   }
   function syncMiniObservedText(editor) {
     const card = editor.closest('.step-card');
@@ -1001,8 +1012,11 @@
   function plainText(blocks) { return blocks.filter(block => block.type === 'text').map(block => block.text).join('\n'); }
   function collect(card) {
     const blocks = serializeEditor(card.querySelector('[data-rich-editor]'));
+    const view = card.closest('.case-view');
     return { status: card.dataset.status, actual: plainText(blocks), actual_doc: blocks,
-             status_action: card.dataset.statusAction === 'true' };
+             status_action: card.dataset.statusAction === 'true',
+             expected_revision: Number(card.dataset.resultRevision || 0),
+             expected_generation: view?.dataset.executionGeneration || '' };
   }
   async function persist(card) {
     const id = card.dataset.stepId;
@@ -1015,7 +1029,12 @@
         body: JSON.stringify(collect(card))
       });
       const result = await response.json().catch(() => ({}));
+      if (response.status === 409 && (result.code === 'REVISION_CONFLICT' || result.code === 'STALE_EXECUTION' || result.code === 'RELOAD')) {
+        if (String(card.dataset.resultRevision) !== String(result.revision)) card.dataset.revisionConflict = 'true';
+      }
       if (!response.ok) throw new Error(result.error || 'Falha ao salvar.');
+      if (Number.isInteger(result.revision)) card.dataset.resultRevision = String(result.revision);
+      card.dataset.revisionConflict = 'false';
       if (result.status_changed_at) {
         card.querySelector('[data-status-time]').textContent = `Status registrado em ${new Date(result.status_changed_at).toLocaleString('pt-BR')}`;
         card.dataset.statusSaved = 'true';
@@ -1041,6 +1060,11 @@
   }
   function queue(card) {
     const id = card.dataset.stepId;
+    if (card.dataset.captureSilence === 'true') return;
+    if (card.dataset.revisionConflict === 'true') {
+      setSaveState('Recarregue a página antes de salvar este passo. O texto digitado aqui foi mantido.', true);
+      return;
+    }
     versions.set(id, (versions.get(id) || 0) + 1);
     setSaveState('Salvando…');
     if (timers.has(id)) clearTimeout(timers.get(id));
@@ -1265,16 +1289,20 @@
     figure.append(link, caption, remove, handle);
     return figure;
   }
-  function insertFigure(editor, figure, paragraph, offset) {
+  function insertFigure(editor, figure, paragraph, offset, focus = true) {
     const anchor = paragraph?.isConnected ? paragraph : editor.querySelector('.rich-paragraph:last-of-type');
     editor._imageUrls.set(figure.dataset.evidenceId, figure.querySelector('.rich-image-remove').dataset.deleteUrl);
-    if (!anchor) { editor.append(figure, makeParagraph()); focusStart(editor.lastElementChild); return; }
+    if (!anchor) {
+      editor.append(figure, makeParagraph());
+      if (focus) focusStart(editor.lastElementChild);
+      return;
+    }
     const source = anchor.textContent;
     const position = Math.max(0, Math.min(source.length, offset ?? source.length));
     anchor.textContent = source.slice(0, position);
     const next = makeParagraph(source.slice(position));
     anchor.after(figure, next);
-    focusStart(next);
+    if (focus) focusStart(next);
   }
   function paragraphFromRange(editor, range) {
     const node = range?.startContainer;
@@ -1616,4 +1644,110 @@
       setSaveState('Imagem removida');
     } catch (error) { setSaveState(error.message, true); }
   }));
+
+  function scheduleCapturePublish() {
+    if (captureApplying || !writable) return;
+    clearTimeout(capturePublishTimer);
+    capturePublishTimer = setTimeout(publishCaptureContext, 200);
+  }
+  function captureSnapshot() {
+    const view = views[selectedIndex];
+    const card = activeMiniStep();
+    if (!view || !card || view.classList.contains('is-hidden')) return null;
+    if (card.dataset.caseId !== view.dataset.caseView) return null;
+    return {
+      session_id: player.dataset.sessionId,
+      case_id: Number(view.dataset.caseView),
+      step_id: Number(card.dataset.stepId),
+      execution_generation: view.dataset.executionGeneration || '',
+      client_id: captureClientId,
+      event_id: (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : `evt-${Date.now()}`
+    };
+  }
+  async function publishCaptureContext() {
+    const snap = captureSnapshot();
+    if (!snap) return;
+    const key = `${snap.session_id}:${snap.case_id}:${snap.step_id}:${snap.execution_generation}`;
+    if (key === captureLastKey) return;
+    captureLastKey = key;
+    try {
+      await fetch('/api/captura/web/contexto', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
+        body: JSON.stringify(snap)
+      });
+    } catch (_) { /* The player keeps working when the capture host is absent. */ }
+  }
+  function applyCaptureSelection(event) {
+    if (event.session_id !== player.dataset.sessionId || event.source_client_id === captureClientId) return;
+    const viewIndex = views.findIndex(view => view.dataset.caseView === String(event.case_id));
+    const card = document.querySelector(`.step-card[data-step-id="${event.step_id}"]`);
+    if (viewIndex < 0 || !card) return;
+    captureApplying = true;
+    captureLastKey = `${event.session_id}:${event.case_id}:${event.step_id}:${event.execution_generation || ''}`;
+    if (viewIndex !== selectedIndex) showCase(viewIndex, true);
+    setActiveMiniStep(card, false);
+    const typing = document.activeElement && document.activeElement.closest('[data-rich-editor], input, textarea');
+    if (!typing) card.scrollIntoView({ block: 'nearest' });
+    captureApplying = false;
+  }
+  function applyCaptureResult(event) {
+    if (event.session_id !== player.dataset.sessionId || event.source_client_id === captureClientId) return;
+    const card = document.querySelector(`.step-card[data-step-id="${event.step_id}"]`);
+    const editor = card?.querySelector('[data-rich-editor]');
+    if (!card || !editor) return;
+    const focused = editor === document.activeElement || editor.contains(document.activeElement);
+    card.dataset.resultRevision = String(event.revision);
+    if (focused) {
+      card.dataset.revisionConflict = 'true';
+      setSaveState('O resultado observado mudou na captura. O texto que você está digitando foi mantido.', true);
+      return;
+    }
+    card.dataset.revisionConflict = 'false';
+    captureSilent = true;
+    syncObservedText(editor, event.actual || '');
+    captureSilent = false;
+  }
+  function applyCaptureEvidence(event) {
+    if (event.session_id !== player.dataset.sessionId) return;
+    const card = document.querySelector(`.step-card[data-step-id="${event.step_id}"]`);
+    const editor = card?.querySelector('[data-rich-editor]');
+    if (!card || !editor || !editor._imageUrls) return;
+    if (!editor.querySelector(`.rich-image[data-evidence-id="${event.evidence_id}"]`)) {
+      insertFigure(editor, makeImageFigure({
+        id: event.evidence_id,
+        url: event.url,
+        delete_url: event.delete_url
+      }, event.name || 'captura.png'), null, null, false);
+    }
+    card.dataset.resultRevision = String(event.revision);
+    card.dataset.revisionConflict = 'false';
+    renderMiniPlayer();
+    setSaveState('Captura anexada ao passo');
+  }
+  async function pollCapture() {
+    try {
+      const response = await fetch(`/api/captura/web/eventos?after=${captureCursor}&client_id=${encodeURIComponent(captureClientId)}`, {
+        headers: { 'X-CSRF-Token': csrf }
+      });
+      if (!response.ok) return;
+      const payload = await response.json();
+      captureCursor = payload.cursor || captureCursor;
+      const state = document.getElementById('capture-state');
+      if (state && payload.hotkey === false) state.textContent = 'Atalho de captura indisponível';
+      for (const event of payload.events || []) {
+        if (event.type === 'prepare') {
+          if (pipWindow && !pipWindow.closed) pipWindow.close();
+          await fetch('/api/captura/web/preparado', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
+            body: JSON.stringify({ request_id: event.request_id, client_id: captureClientId })
+          });
+        } else if (event.type === 'selection') applyCaptureSelection(event);
+        else if (event.type === 'result') applyCaptureResult(event);
+        else if (event.type === 'evidence') applyCaptureEvidence(event);
+      }
+    } catch (_) { /* Local polling resumes on the next tick. */ }
+  }
+  if (writable) setInterval(pollCapture, 700);
 })();

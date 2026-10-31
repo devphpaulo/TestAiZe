@@ -38,7 +38,7 @@ jobs:
           $env:PYTHONPATH = "$PWD/src"
           $version = python -c "from testplayer.version import PACKAGE_VERSION; print(PACKAGE_VERSION)"
           "version=$version" >> $env:GITHUB_OUTPUT
-          python -m PyInstaller --noconfirm --clean --onefile --windowed --name "TestAiZe-$version" --icon assets/testaize.ico --paths src --add-data "src/testplayer/templates;testplayer/templates" --add-data "src/testplayer/static;testplayer/static" --add-data "src/playwright-recorder;playwright-recorder" --hidden-import pystray._win32 src/launcher.py
+          python -m PyInstaller --noconfirm --clean --onefile --windowed --name "TestAiZe-$version" --icon assets/testaize.ico --paths src --add-data "src/testplayer/templates;testplayer/templates" --add-data "src/testplayer/static;testplayer/static" --add-data "src/playwright-recorder;playwright-recorder" --hidden-import pystray._win32 --hidden-import capture_client.qt_host --hidden-import capture_client.__main__ --collect-submodules capture_client src/launcher.py
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Testar executável com ferramentas do ambiente
         shell: pwsh

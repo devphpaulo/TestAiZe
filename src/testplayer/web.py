@@ -28,11 +28,13 @@ from .attachments import (MAX_ATTACHMENT_BYTES, MAX_STEP_ATTACHMENTS, attachment
 from .pdf_export import generate_pdf
 from .html_export import generate_html
 from .bug_prompt import build_prompt, failed_case
-from .storage import (create_draft, db, ensure_root, finalize, find_directory, get_meta,
+from .storage import (create_draft, db, ensure_root, finalize, find_directory,
                        delete_folder_link, find_sync_targets, folder_card_details, list_sessions,
                        migrate_sessions, now, read_session, save_folder_link,
                        recover_promotions, remove_session, rerun, save_case, save_result,
-                       start_case_run, sync_step_evidence)
+                       start_case_run, sync_step_evidence, RevisionConflict, StaleExecution)
+from .capture_context import CaptureBroker
+from .capture_routes import register_capture_routes
 
 
 MAX_IMPORT_BYTES = 25 * 1024 * 1024
@@ -86,6 +88,7 @@ def create_app(root: Path) -> Flask:
         SESSION_COOKIE_SAMESITE="Strict",
     )
     app.config["DATA_ROOT"] = str(root)
+    app.extensions["capture_broker"] = CaptureBroker()
     automation_runtime = detect_automation_runtime()
     app.extensions["automation_runtime"] = automation_runtime
     app.extensions["automation_recorder"] = RecorderManager(runtime=automation_runtime)
@@ -175,6 +178,8 @@ def create_app(root: Path) -> Flask:
 
     @app.before_request
     def check_csrf():
+        if request.path.startswith("/api/captura/host/"):
+            return
         if request.method in ("POST", "PUT", "PATCH", "DELETE"):
             expected = session.get("csrf_token", "")
             supplied = request.headers.get("X-CSRF-Token") or request.form.get("csrf_token", "")
@@ -379,12 +384,35 @@ def create_app(root: Path) -> Flask:
             return jsonify(error="Envie um objeto JSON válido."), 400
         try:
             comment = body.get("comment")
-            changed_at = save_result(directory, step_id, body.get("status", ""), str(body.get("actual", "")),
-                                     str(comment) if comment is not None else None,
-                                     status_action=body.get("status_action") is True,
-                                     actual_doc=body.get("actual_doc"))
+            if "expected_revision" not in body and app.extensions["capture_broker"].host_seen:
+                return jsonify(error="Recarregue a página para sincronizar o resultado.", code="RELOAD"), 409
+            raw_revision = body.get("expected_revision") if "expected_revision" in body else None
+            raw_generation = body.get("expected_generation") if "expected_generation" in body else None
+            if raw_revision is not None and type(raw_revision) is not int:
+                return jsonify(error="Revisão do resultado inválida."), 422
+            if raw_generation is not None and not isinstance(raw_generation, str):
+                return jsonify(error="Geração da execução inválida."), 422
+            changed_at, revision = save_result(
+                directory, step_id, body.get("status", ""), str(body.get("actual", "")),
+                str(comment) if comment is not None else None,
+                status_action=body.get("status_action") is True,
+                actual_doc=body.get("actual_doc"),
+                expected_revision=raw_revision,
+                expected_generation=raw_generation or None,
+            )
             record = read_session(directory)
-            return jsonify(ok=True, counts=record["counts"], status_changed_at=changed_at)
+            return jsonify(ok=True, counts=record["counts"], status_changed_at=changed_at, revision=revision)
+        except RevisionConflict as exc:
+            document = None
+            if exc.actual_doc:
+                try:
+                    document = json.loads(exc.actual_doc)
+                except json.JSONDecodeError:
+                    document = None
+            return jsonify(error=str(exc), code="REVISION_CONFLICT", revision=exc.revision,
+                           actual=exc.actual, actual_doc=document), 409
+        except StaleExecution as exc:
+            return jsonify(error=str(exc), code="STALE_EXECUTION"), 409
         except LookupError as exc:
             return jsonify(error=str(exc)), 404
         except ValueError as exc:
@@ -461,31 +489,36 @@ def create_app(root: Path) -> Flask:
             return jsonify(error=str(exc) or "Imagem inválida."), 415
         mime, extension = IMAGE_TYPES[kind]
         with db(directory) as connection:
-            meta = get_meta(connection)
-            step = connection.execute("SELECT s.position,s.case_id FROM steps s WHERE s.id=?", (step_id,)).fetchone()
-            count = connection.execute("SELECT COUNT(*) FROM evidence WHERE step_id=?", (step_id,)).fetchone()[0]
-            if step is None:
-                return jsonify(error="Passo não encontrado."), 404
-            if count >= 12:
-                return jsonify(error="Limite de 12 imagens por passo."), 413
-            image_id = uuid.uuid4().hex
-            relative = Path("evidencias") / f"caso-{step['case_id']}" / f"passo-{step['position']}" / f"{image_id}{extension}"
-            target = directory / relative
-            target.parent.mkdir(parents=True, exist_ok=True)
-            temp = target.with_suffix(target.suffix + ".tmp")
+            connection.execute("BEGIN IMMEDIATE")
             try:
+                step = connection.execute("SELECT s.position,s.case_id FROM steps s WHERE s.id=?", (step_id,)).fetchone()
+                if step is None:
+                    connection.rollback()
+                    return jsonify(error="Passo não encontrado."), 404
+                count = connection.execute("SELECT COUNT(*) FROM evidence WHERE step_id=?", (step_id,)).fetchone()[0]
+                if count >= 12:
+                    connection.rollback()
+                    return jsonify(error="Limite de 12 imagens por passo."), 413
+                image_id = uuid.uuid4().hex
+                relative = Path("evidencias") / f"caso-{step['case_id']}" / f"passo-{step['position']}" / f"{image_id}{extension}"
+                target = directory / relative
+                target.parent.mkdir(parents=True, exist_ok=True)
+                temp = target.with_suffix(target.suffix + ".tmp")
                 temp.write_bytes(content)
                 os.replace(temp, target)
-                with connection:
-                    connection.execute(
-                        "INSERT INTO evidence(id,step_id,relative_path,original_name,mime,size,sha256,created_at) "
-                        "VALUES (?,?,?,?,?,?,?,?)",
-                        (image_id, step_id, relative.as_posix(), PureWindowsPath(incoming.filename or "Imagem colada").name[:180],
-                         mime, len(content), hashlib.sha256(content).hexdigest(), now()),
-                    )
+                connection.execute(
+                    "INSERT INTO evidence(id,step_id,relative_path,original_name,mime,size,sha256,created_at) "
+                    "VALUES (?,?,?,?,?,?,?,?)",
+                    (image_id, step_id, relative.as_posix(), PureWindowsPath(incoming.filename or "Imagem colada").name[:180],
+                     mime, len(content), hashlib.sha256(content).hexdigest(), now()),
+                )
+                connection.commit()
             except Exception:
-                temp.unlink(missing_ok=True)
-                target.unlink(missing_ok=True)
+                connection.rollback()
+                if "temp" in locals():
+                    temp.unlink(missing_ok=True)
+                if "target" in locals():
+                    target.unlink(missing_ok=True)
                 raise
         return jsonify(ok=True, id=image_id,
                        url=url_for("view_image", session_id=session_id, evidence_id=image_id),
@@ -768,4 +801,5 @@ def create_app(root: Path) -> Flask:
             abort(409)
         return jsonify(prompt=build_prompt(root, case))
 
+    register_capture_routes(app, root)
     return app
