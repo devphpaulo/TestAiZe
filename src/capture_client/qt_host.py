@@ -320,7 +320,7 @@ class ToolPanel(QWidget):
                 "QPushButton:checked { border:2px solid #2F6FED; }"
             )
             swatch.setProperty("color", color)
-            if color == "#E10600":
+            if color == host.color:
                 swatch.setChecked(True)
             self.color_group.addButton(swatch, index)
             colors.addWidget(swatch, index // 2, index % 2)
@@ -921,8 +921,7 @@ class CaptureHost(QObject):
             layer.close()
             layer.deleteLater()
         self.layers = []
-        self.tools.hide()
-        self.dock.hide()
+        old_panels = (self.tools, self.dock)
         self.draft = None
         self.preview = None
         self.base = None
@@ -931,10 +930,16 @@ class CaptureHost(QObject):
         self.anchor = None
         self.rubber_points = []
         self.tool = "crop"
-        self.tools.group.button(0).setChecked(True)
         self.pending_observed = None
         self.context = None
         self._text_blocked = False
+        # Each capture gets its own native tool windows. Reusing HWNDs whose
+        # previous screen owner was destroyed leaves them hidden on Windows.
+        for panel in old_panels:
+            panel.close()
+            panel.deleteLater()
+        self.tools = ToolPanel(self)
+        self.dock = DockPanel(self)
         logging.info("captura cancelada")
 
     def _update_preview(self) -> None:
@@ -960,8 +965,13 @@ class CaptureHost(QObject):
             self.tools.hide()
             self.dock.hide()
             return
-        self.tools.show()
-        self.dock.show()
+        owner = self.layers[0].windowHandle() if self.layers else None
+        for panel in (self.tools, self.dock):
+            # Changing a visible tool window's owner can hide its native HWND
+            # while QWidget still reports it visible. Bind before showing it.
+            panel.winId()
+            panel.windowHandle().setTransientParent(owner)
+            panel.show()
         _exclude(self.tools)
         _exclude(self.dock)
         self._place()
@@ -970,10 +980,7 @@ class CaptureHost(QObject):
     def _raise_chrome(self) -> None:
         if self.draft is None or not self.layers:
             return
-        owner = self.layers[0].windowHandle()
         for panel in (self.tools, self.dock):
-            if panel.windowHandle() is not None:
-                panel.windowHandle().setTransientParent(owner)
             panel.raise_()
         if self.text_editor is not None:
             self.text_editor.raise_()

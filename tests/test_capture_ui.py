@@ -136,6 +136,67 @@ class CaptureUiTests(unittest.TestCase):
         self.open_selection()
         self.assertTrue(self.host.tools.isVisible())
 
+    def test_repeated_capture_after_copy_processes_window_destruction_and_keeps_every_tool_available(self):
+        screen = Mock()
+        screen.geometry.return_value = QRect(0, 0, 700, 550)
+        screen.devicePixelRatio.return_value = 1
+        pixmap = QPixmap(700, 550)
+        pixmap.fill()
+        screen.grabWindow.return_value = pixmap
+        with patch("capture_client.qt_host.QGuiApplication.screens", return_value=[screen]), \
+             patch("capture_client.qt_host._exclude", new=lambda widget: None), \
+             patch.object(self.host, "_wait_clear", new=lambda: True), \
+             patch("capture_client.qt_host.time.sleep"), \
+             patch("capture_client.qt_host.QApplication.clipboard"):
+            for cycle in range(20):
+                with self.subTest(cycle=cycle):
+                    self.host.begin()
+                    self.app.processEvents()
+                    self.host.press((50, 50))
+                    self.host.move_to((400, 330))
+                    self.host.release((400, 330))
+                    self.app.processEvents()
+                    for panel in (self.host.tools, self.host.dock):
+                        self.assertTrue(panel.isVisible())
+                        self.assertTrue(panel.isEnabled())
+                        self.assertIs(panel.windowHandle().transientParent(), self.host.layers[0].windowHandle())
+                        if os.name == "nt" and os.environ.get("QT_QPA_PLATFORM") == "windows":
+                            import ctypes
+                            from ctypes import wintypes
+                            user32 = ctypes.windll.user32
+                            user32.IsWindowVisible.argtypes = [wintypes.HWND]
+                            self.assertTrue(user32.IsWindowVisible(int(panel.winId())))
+                            user32.WindowFromPoint.argtypes = [wintypes.POINT]
+                            user32.WindowFromPoint.restype = wintypes.HWND
+                            user32.GetAncestor.argtypes = [wintypes.HWND, wintypes.UINT]
+                            user32.GetAncestor.restype = wintypes.HWND
+                            user32.GetWindowRect.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.RECT)]
+                            bounds = wintypes.RECT()
+                            self.assertTrue(user32.GetWindowRect(int(panel.winId()), ctypes.byref(bounds)))
+                            center = wintypes.POINT((bounds.left + bounds.right) // 2,
+                                                   (bounds.top + bounds.bottom) // 2)
+                            top = user32.GetAncestor(user32.WindowFromPoint(center), 2)
+                            self.assertEqual(int(top or 0), int(panel.winId()))
+                    for index, (key, _label) in enumerate(TOOLS):
+                        button = self.host.tools.group.button(index)
+                        self.assertTrue(button.isEnabled())
+                        QTest.mouseClick(button, Qt.MouseButton.LeftButton)
+                        self.assertEqual(self.host.tool, key)
+                    selected_color = self.host.tools.color_group.checkedButton()
+                    self.assertEqual(selected_color.property("color"), self.host.color)
+                    QTest.mouseClick(self.host.tools.color_group.button(cycle % 6), Qt.MouseButton.LeftButton)
+                    self.host.tool = "arrow"
+                    self.host.press((100, 100))
+                    self.host.move_to((220, 180))
+                    self.host.release((220, 180))
+                    if cycle % 2:
+                        QTest.keyClick(self.host.layers[0], Qt.Key.Key_C, Qt.KeyboardModifier.ControlModifier)
+                    else:
+                        self.host.copy_image()
+                    self.app.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+                    self.app.processEvents()
+                    self.assertEqual(self.host.layers, [])
+
     def test_escape_closes_even_while_typing_without_a_question(self):
         self.open_selection()
         self.host.dock.observed.setFocus()

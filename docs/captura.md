@@ -20,7 +20,7 @@
 
 Copiar, salvar e anexar usam o mesmo renderizador: a saída contém o recorte e as anotações, sem barras, alças, dimensões ou painel do editor. Continuar desenhando depois de anexar não modifica a evidência que já foi confirmada. Um novo clique em Anexar é outra ação explícita e pode criar outra evidência.
 
-O editor permanece aberto depois de salvar ou anexar. Copiar fecha; para outra captura, pressione o atalho novamente e selecione outra área. O rascunho da imagem fica em memória e não é recuperado ao encerrar o aplicativo.
+O editor permanece aberto depois de salvar ou anexar. Copiar fecha; para outra captura, pressione o atalho novamente e selecione outra área. As ferramentas reaparecem em cada nova seleção, mesmo depois de copiar e reabrir várias vezes; a cor escolhida é mantida. O rascunho da imagem fica em memória e não é recuperado ao encerrar o aplicativo.
 
 Setas, linhas, retângulos, círculos e traços livres usam bordas suavizadas. Linhas têm pontas e junções arredondadas; retângulos têm um arredondamento discreto nos cantos. A prévia e a imagem exportada usam o mesmo desenho, mantendo os pixels da captura original sem redimensionamento.
 
