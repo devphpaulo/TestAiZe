@@ -115,7 +115,14 @@ def _tray_image() -> Image.Image:
     return image
 
 
-def _run_tray(root: Path, port: int) -> None:
+def _notify(text: str) -> None:
+    if os.name != "nt":
+        logging.info(text)
+        return
+    ctypes.windll.user32.MessageBoxW(None, text, "TestAíZé", 0x40)
+
+
+def _run_tray(root: Path, port: int, broker) -> None:
     url = f"http://127.0.0.1:{port}/"
 
     def open_app(icon, item):
@@ -124,11 +131,21 @@ def _run_tray(root: Path, port: int) -> None:
     def open_data(icon, item):
         os.startfile(root)
 
+    def define_hotkey(icon, item):
+        if not broker.host_seen:
+            _notify("A captura ainda está iniciando. Tente de novo em alguns segundos.")
+            return
+        broker.request_hotkey_record()
+
+    def hotkey_text(item):
+        return f"Atalho da captura    {broker.hotkey_label or 'PrintScreen'}"
+
     def quit_app(icon, item):
         icon.stop()
 
     menu = pystray.Menu(
         pystray.MenuItem("Abrir aplicativo", open_app, default=True),
+        pystray.MenuItem(hotkey_text, define_hotkey),
         pystray.MenuItem("Abrir pasta de dados", open_data),
         pystray.Menu.SEPARATOR,
         pystray.MenuItem("Encerrar aplicativo", quit_app),
@@ -281,7 +298,7 @@ def main():
             server.run()
         else:
             threading.Thread(target=server.run, daemon=True).start()
-            _run_tray(root, port)
+            _run_tray(root, port, app.extensions["capture_broker"])
     except KeyboardInterrupt:
         _notice("Aplicativo encerrado.")
     finally:

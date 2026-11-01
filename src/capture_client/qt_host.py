@@ -54,7 +54,7 @@ from .geometry import (
     stitch_origin,
     tool_side,
 )
-from .hotkey import HOTKEY_ID, WM_HOTKEY, try_register, try_unregister
+from .hotkey import HOTKEY_ID, WM_HOTKEY, Hotkey, hotkey_label, load_hotkey, save_hotkey, try_register, try_unregister
 from .render import Annotation
 from .transport import LocalApi
 
@@ -372,11 +372,13 @@ class CaptureHost(QObject):
         self.rubber: Rect | None = None
         self.rubber_points: list[tuple[int, int]] = []
         self.context: dict | None = None
+        self.hotkey = Hotkey(0x2C, 0)
         self.hotkey_ok = False
         self._busy = False
         self._attaching = False
         self._silence = False
         self._text_blocked = False
+        self._recording = False
         self._hwnd = 0
         self.tools = ToolPanel(self)
         self.dock = DockPanel(self)
@@ -397,7 +399,10 @@ class CaptureHost(QObject):
             logging.info("atalho global indisponivel fora do Windows")
             return
         user32 = ctypes.windll.user32
-        ok, code = try_register(user32.RegisterHotKey, self._hwnd)
+        directory = os.environ.get("TESTAIZE_DATA_DIR")
+        if directory:
+            self.hotkey = load_hotkey(Path(directory))
+        ok, code = try_register(user32.RegisterHotKey, self._hwnd, self.hotkey)
         self.hotkey_ok = ok
         if ok:
             logging.info("atalho de captura registrado")
@@ -408,6 +413,9 @@ class CaptureHost(QObject):
         self.poll = QTimer(self)
         self.poll.timeout.connect(self._peek_hotkey)
         self.poll.start(80)
+        self.hotkey_timer = QTimer(self)
+        self.hotkey_timer.timeout.connect(self._poll_hotkey_request)
+        self.hotkey_timer.start(500)
 
     def _peek_hotkey(self) -> None:
         if os.name != "nt" or not self._hwnd:
@@ -419,10 +427,50 @@ class CaptureHost(QObject):
                 self.begin()
 
     def _ping(self) -> None:
-        self.api.post("/api/captura/host/ping", {"hotkey": self.hotkey_ok})
+        self.api.post("/api/captura/host/ping", {"hotkey": self.hotkey_ok, "label": hotkey_label(self.hotkey)})
+
+    def _poll_hotkey_request(self) -> None:
+        if self._recording or self.layers or self._busy:
+            return
+        payload, status = self.api.get("/api/captura/host/atalho")
+        if status != 200 or not payload.get("record"):
+            return
+        self.api.post("/api/captura/host/atalho", {})
+        self._recording = True
+        chosen = None
+        restored = False
+        try:
+            from .shortcut_dialog import record_hotkey
+            chosen, restored = record_hotkey(self.hotkey, self._hwnd)
+        except Exception:
+            logging.exception("falha ao abrir a gravacao do atalho")
+            user32 = ctypes.windll.user32
+            restored, _code = try_register(user32.RegisterHotKey, self._hwnd, self.hotkey)
+        finally:
+            self._recording = False
+        if chosen is None:
+            self.hotkey_ok = restored
+            self._ping()
+            return
+        directory = os.environ.get("TESTAIZE_DATA_DIR")
+        if directory:
+            try:
+                save_hotkey(Path(directory), chosen)
+            except OSError:
+                logging.exception("nao foi possivel gravar o atalho")
+                user32 = ctypes.windll.user32
+                try_unregister(user32.UnregisterHotKey, self._hwnd)
+                restored, _code = try_register(user32.RegisterHotKey, self._hwnd, self.hotkey)
+                self.hotkey_ok = restored
+                self._ping()
+                return
+        self.hotkey = chosen
+        self.hotkey_ok = True
+        logging.info("atalho de captura atualizado")
+        self._ping()
 
     def begin(self) -> None:
-        if self._busy or self.layers:
+        if self._busy or self.layers or self._recording:
             return
         self._busy = True
         try:

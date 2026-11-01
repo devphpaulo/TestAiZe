@@ -45,7 +45,7 @@
   <main class="player-main">
     <div class="player-toolbar">
       <div class="toolbar-left"><button type="button" class="sidebar-toggle" id="toggle-left" aria-label="Recolher lista de casos" aria-expanded="true" title="Recolher ou abrir lista de casos">☰</button><div class="breadcrumb">Sessões <span>/</span> {{ 'Concluída' if meta.state == 'concluida' else 'Em andamento' }} <span>/</span> <b id="breadcrumb-case">Caso 01</b></div></div>
-      <div class="toolbar-right"><span id="save-state" class="save-state">{{ 'Tudo salvo' if writable else 'Somente leitura' }}</span><span class="toolbar-divider"></span><span id="capture-state" class="session-id" title="Atalho global da captura de tela">PrintScreen</span><span class="toolbar-divider"></span><span class="session-id">#{{ meta.id[:8] }}</span><button type="button" class="sidebar-toggle" id="toggle-right" aria-label="Recolher resumo" aria-expanded="true" title="Recolher ou abrir resumo">▤</button></div>
+      <div class="toolbar-right"><span id="save-state" class="save-state">{{ 'Tudo salvo' if writable else 'Somente leitura' }}</span><span class="toolbar-divider"></span><span id="capture-state" class="session-id" title="Atalho global da captura. Altere com o botão direito no ícone da bandeja.">PrintScreen</span><span class="toolbar-divider"></span><span class="session-id">#{{ meta.id[:8] }}</span><button type="button" class="sidebar-toggle" id="toggle-right" aria-label="Recolher resumo" aria-expanded="true" title="Recolher ou abrir resumo">▤</button></div>
     </div>
 
     <div class="player-content">

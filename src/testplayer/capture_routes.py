@@ -145,9 +145,28 @@ def register_capture_routes(app, root: Path) -> None:
             return jsonify(error="Cliente não autorizado.", code="UNAUTHORIZED_CLIENT"), 403
         body = request.get_json(silent=True)
         hotkey = body.get("hotkey") if isinstance(body, dict) else None
-        _broker().mark_host(hotkey if isinstance(hotkey, bool) else None)
+        label = body.get("label") if isinstance(body, dict) else None
+        _broker().mark_host(
+            hotkey if isinstance(hotkey, bool) else None,
+            label if isinstance(label, str) else None,
+        )
         app.logger.info("captura host vinculado")
         return jsonify(ok=True, instance_id=_broker().instance_id)
+
+    @app.get("/api/captura/host/atalho")
+    def capture_hotkey_status():
+        if not _host_ok():
+            return jsonify(error="Cliente não autorizado.", code="UNAUTHORIZED_CLIENT"), 403
+        broker = _broker()
+        return jsonify(record=broker.hotkey_record_pending(), label=broker.hotkey_label)
+
+    @app.post("/api/captura/host/atalho")
+    def capture_hotkey_accept():
+        if not _host_ok():
+            return jsonify(error="Cliente não autorizado.", code="UNAUTHORIZED_CLIENT"), 403
+        _broker().accept_hotkey_record()
+        app.logger.info("captura gravacao de atalho aberta")
+        return jsonify(ok=True)
 
     @app.post("/api/captura/host/preparar")
     def capture_prepare():
@@ -330,8 +349,8 @@ def register_capture_routes(app, root: Path) -> None:
             after = int(request.args.get("after", "0"))
         except ValueError:
             after = 0
-        events, cursor, hotkey = _broker().poll(max(0, after))
-        return jsonify(events=events, cursor=cursor, hotkey=hotkey)
+        events, cursor, hotkey, label = _broker().poll(max(0, after))
+        return jsonify(events=events, cursor=cursor, hotkey=hotkey, hotkey_label=label)
 
     @app.post("/api/captura/web/preparado")
     def capture_web_prepared():

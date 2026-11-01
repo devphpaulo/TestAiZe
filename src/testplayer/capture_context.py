@@ -37,13 +37,29 @@ class CaptureBroker:
         self.prepare_ack: str | None = None
         self.host_seen = False
         self.hotkey_ok: bool | None = None
+        self.hotkey_label = "PrintScreen"
+        self._record_hotkey = False
         self._seq = 0
 
-    def mark_host(self, hotkey_ok: bool | None) -> None:
+    def mark_host(self, hotkey_ok: bool | None, label: str | None = None) -> None:
         with self._lock:
             self.host_seen = True
             if hotkey_ok is not None:
                 self.hotkey_ok = hotkey_ok
+            if isinstance(label, str) and label.strip():
+                self.hotkey_label = label.strip()[:80]
+
+    def request_hotkey_record(self) -> None:
+        with self._lock:
+            self._record_hotkey = True
+
+    def hotkey_record_pending(self) -> bool:
+        with self._lock:
+            return self._record_hotkey
+
+    def accept_hotkey_record(self) -> None:
+        with self._lock:
+            self._record_hotkey = False
 
     def pulse(self, client_id: str) -> None:
         if not client_id:
@@ -77,11 +93,11 @@ class CaptureBroker:
                 self.context.valid = False
                 self.context.code = code
 
-    def poll(self, after: int) -> tuple[list[dict], int, bool | None]:
+    def poll(self, after: int) -> tuple[list[dict], int, bool | None, str]:
         with self._lock:
             events = [item for item in self.events if item["seq"] > after]
             cursor = self.events[-1]["seq"] if self.events else after
-            return events, cursor, self.hotkey_ok
+            return events, cursor, self.hotkey_ok, self.hotkey_label
 
     def request_prepare(self) -> str:
         request_id = uuid.uuid4().hex

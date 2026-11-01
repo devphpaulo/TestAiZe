@@ -1735,6 +1735,7 @@
       captureCursor = payload.cursor || captureCursor;
       const state = document.getElementById('capture-state');
       if (state && payload.hotkey === false) state.textContent = 'Atalho de captura indisponível';
+      else if (state && payload.hotkey_label) state.textContent = payload.hotkey_label;
       for (const event of payload.events || []) {
         if (event.type === 'prepare') {
           if (pipWindow && !pipWindow.closed) pipWindow.close();

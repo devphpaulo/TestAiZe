@@ -22,7 +22,17 @@ from capture_client.bitmap import stitch_bitmaps
 from capture_client.chrome import decorate_crop
 from capture_client.draft import Draft
 from capture_client.geometry import Monitor, Rect, normalize_rect, resize_rect, stitch_origin, tool_side
-from capture_client.hotkey import try_register, try_unregister
+from capture_client.hotkey import (
+    MOD_CONTROL,
+    MOD_SHIFT,
+    Hotkey,
+    hotkey_label,
+    load_hotkey,
+    save_hotkey,
+    try_register,
+    try_unregister,
+    valid_hotkey,
+)
 from capture_client.render import Annotation, render_capture
 from testplayer.capture_service import (
     CaptureError,
@@ -95,10 +105,33 @@ class GeometryRenderTests(unittest.TestCase):
         ok, code = try_register(register, 7)
         self.assertFalse(ok)
         self.assertEqual(code, "HOTKEY_CONFLICT")
-        self.assertEqual(calls[0][0], 7)
+        self.assertEqual(calls[0], (7, 1, 0x4000, 0x2C))
         removed = []
         try_unregister(lambda hwnd, hotkey_id: removed.append((hwnd, hotkey_id)), 7)
         self.assertEqual(removed, [(7, 1)])
+        calls.clear()
+
+        def remember(hwnd, hotkey_id, modifiers, virtual_key):
+            calls.append((hwnd, hotkey_id, modifiers, virtual_key))
+            return 1
+
+        page_up = Hotkey(0x21, MOD_SHIFT)
+        ok, code = try_register(remember, 7, page_up)
+        self.assertTrue(ok)
+        self.assertEqual(code, "")
+        self.assertEqual(calls[0], (7, 1, 0x4004, 0x21))
+        self.assertEqual(hotkey_label(Hotkey(0x41, MOD_CONTROL | MOD_SHIFT)), "Ctrl + Shift + A")
+        self.assertEqual(hotkey_label(Hotkey(0x2C, MOD_SHIFT)), "Shift + PrintScreen")
+        self.assertFalse(valid_hotkey(Hotkey(0x11, 0)))
+
+    def test_saved_shortcut_survives_and_invalid_file_keeps_print_screen(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            save_hotkey(root, Hotkey(0x21, 0))
+            self.assertEqual(load_hotkey(root), Hotkey(0x21, 0))
+            path = root / "config" / "atalho-captura.json"
+            path.write_text("{", encoding="utf-8")
+            self.assertEqual(load_hotkey(root), Hotkey(0x2C, 0))
 
 
 class CapturePersistenceTests(unittest.TestCase):
@@ -358,6 +391,24 @@ class CaptureRouteTests(unittest.TestCase):
                          headers={"X-CSRF-Token": csrf})
         ready = self.client.get(f"/api/captura/host/preparar?request_id={request_id}", headers=headers)
         self.assertTrue(ready.get_json()["ready"])
+
+    def test_tray_requests_a_shortcut_and_the_player_learns_its_name(self):
+        headers = {"X-Testaize-Capture": self.token}
+        self.assertEqual(self.client.get("/api/captura/host/atalho").status_code, 403)
+        broker = self.app.extensions["capture_broker"]
+        broker.request_hotkey_record()
+        pending = self.client.get("/api/captura/host/atalho", headers=headers)
+        self.assertTrue(pending.get_json()["record"])
+        self.assertEqual(pending.get_json()["label"], "PrintScreen")
+        accepted = self.client.post("/api/captura/host/atalho", headers=headers)
+        self.assertEqual(accepted.status_code, 200)
+        self.assertFalse(self.client.get("/api/captura/host/atalho", headers=headers).get_json()["record"])
+        ping = self.client.post("/api/captura/host/ping", json={"hotkey": True, "label": "Ctrl + Shift + A"}, headers=headers)
+        self.assertEqual(ping.status_code, 200)
+        csrf = self._csrf()
+        events = self.client.get("/api/captura/web/eventos?after=0&client_id=player-label", headers={"X-CSRF-Token": csrf})
+        self.assertEqual(events.get_json()["hotkey_label"], "Ctrl + Shift + A")
+        self.assertTrue(events.get_json()["hotkey"])
 
 
 if __name__ == "__main__":
