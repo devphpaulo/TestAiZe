@@ -55,6 +55,7 @@ from .geometry import (
     tool_side,
 )
 from .hotkey import HOTKEY_ID, WM_HOTKEY, Hotkey, hotkey_label, load_hotkey, save_hotkey, try_register, try_unregister
+from .overlay import escape_action, live_screen_during, show_capture_chrome
 from .render import Annotation
 from .transport import LocalApi
 
@@ -145,7 +146,7 @@ class KeyFilter(QObject):
         if isinstance(focus, QPlainTextEdit):
             return False
         if event.key() == Qt.Key.Key_Escape:
-            self.host.cancel()
+            self.host.step_back()
             return True
         if event.matches(QKeySequence.StandardKey.Undo):
             self.host.undo()
@@ -164,6 +165,7 @@ class ScreenLayer(QWidget):
         self.setGeometry(monitor.dip_x, monitor.dip_y, monitor.dip_w, monitor.dip_h)
         self.setCursor(Qt.CursorShape.CrossCursor)
         self.setMouseTracking(True)
+        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
 
     def paintEvent(self, _event) -> None:
         painter = QPainter(self)
@@ -172,7 +174,18 @@ class ScreenLayer(QWidget):
         crop = self.host.current_crop()
         if crop is not None:
             self._paint_crop(painter, crop)
+        else:
+            self._paint_hint(painter)
         painter.end()
+
+    def _paint_hint(self, painter: QPainter) -> None:
+        painter.setPen(QColor("#f5f5f5"))
+        painter.setFont(QFont("Segoe UI", 16))
+        painter.drawText(
+            self.rect().adjusted(24, 48, -24, 0),
+            Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop,
+            "Arraste para selecionar a área.\nEsc ou botão direito cancela.",
+        )
 
     def _paint_crop(self, painter: QPainter, crop: Rect) -> None:
         origin_x, origin_y = physical_to_stitch(self.host.monitors, self.monitor.origin_x, self.monitor.origin_y)
@@ -185,7 +198,11 @@ class ScreenLayer(QWidget):
         scale = self.monitor.scale or 1
         dest = QRectF((left - origin_x) / scale, (top - origin_y) / scale, (right - left) / scale, (bottom - top) / scale)
         preview = self.host.preview
-        if preview is not None and not preview.isNull():
+        if (
+            preview is not None
+            and not preview.isNull()
+            and not live_screen_during(self.host.drag)
+        ):
             source = QRect(left - crop.x, top - crop.y, right - left, bottom - top)
             painter.drawPixmap(dest, preview, source)
         else:
@@ -236,7 +253,16 @@ class ScreenLayer(QWidget):
         absolute_x, absolute_y = dip_global_to_physical(self.host.monitors, point.x(), point.y())
         return physical_to_stitch(self.host.monitors, absolute_x, absolute_y)
 
+    def keyPressEvent(self, event) -> None:
+        if event.key() == Qt.Key.Key_Escape:
+            self.host.step_back()
+            return
+        super().keyPressEvent(event)
+
     def mousePressEvent(self, event) -> None:
+        if event.button() == Qt.MouseButton.RightButton:
+            self.host.step_back()
+            return
         if event.button() == Qt.MouseButton.LeftButton:
             self.grabMouse()
             self.host.press(self._pointer(event))
@@ -343,7 +369,7 @@ class DockPanel(QWidget):
         for button in (self.attach, copy, save, cancel):
             actions.addWidget(button)
         layout.addLayout(actions)
-        self.status = QLabel("Selecione a região. Copiar e salvar não anexam.")
+        self.status = QLabel("Copiar e salvar não anexam. Esc ou botão direito descarta a seleção.")
         self.status.setWordWrap(True)
         layout.addWidget(self.status)
         self.setStyleSheet(
@@ -529,10 +555,10 @@ class CaptureHost(QObject):
         for layer in self.layers:
             layer.show()
             _exclude(layer)
-        self.tools.show()
-        self.dock.show()
-        _exclude(self.tools)
-        _exclude(self.dock)
+        self._set_chrome_visible(False)
+        if self.layers:
+            self.layers[0].activateWindow()
+            self.layers[0].setFocus(Qt.FocusReason.OtherFocusReason)
         self.context_timer.start(1000)
         self.refresh_context()
         logging.info("captura iniciada")
@@ -556,14 +582,16 @@ class CaptureHost(QObject):
         handle = hit_crop_handle(point[0], point[1], self.draft.crop, radius)
         if self.tool == "crop" and handle:
             self.drag = handle
-            return
-        if self.tool == "crop" and self._inside(point, self.draft.crop):
+        elif self.tool == "crop" and self._inside(point, self.draft.crop):
             self.drag = "move"
-            return
-        if self.tool == "crop":
+        elif self.tool == "crop":
             self.drag = None
             return
-        self.drag = self.tool
+        else:
+            self.drag = self.tool
+        if live_screen_during(self.drag):
+            self.tools.hide()
+            self.dock.hide()
 
     def move_to(self, point: tuple[int, int]) -> None:
         if not self.drag or self.anchor is None or self.base is None:
@@ -617,7 +645,7 @@ class CaptureHost(QObject):
         self.rubber_points = []
         self.anchor = None
         self._update_preview()
-        self._place()
+        self._set_chrome_visible(show_capture_chrome(self.draft is not None))
 
     def _add_text(self, point: tuple[int, int]) -> None:
         text, accepted = QInputDialog.getMultiLineText(self.dock, "Texto na imagem", "Anotação sobre a imagem:")
@@ -770,6 +798,45 @@ class CaptureHost(QObject):
                 return
         self._close_editor()
 
+    def step_back(self) -> None:
+        action = escape_action(bool(self.drag or self.rubber), self.draft is not None)
+        if action == "clear_gesture":
+            self._clear_gesture()
+            return
+        if action == "clear_region":
+            if self.draft and self.draft.annotations:
+                answer = QMessageBox.question(
+                    self.dock, "TestAíZé", "Descartar a seleção e as anotações?",
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                )
+                if answer != QMessageBox.StandardButton.Yes:
+                    return
+            self._clear_region()
+            return
+        self.cancel()
+
+    def _clear_gesture(self) -> None:
+        self.drag = None
+        self.rubber = None
+        self.rubber_points = []
+        self.anchor = None
+        for layer in self.layers:
+            if layer.mouseGrabber() is layer:
+                layer.releaseMouse()
+        self._refresh()
+
+    def _clear_region(self) -> None:
+        self._clear_gesture()
+        self.draft = None
+        self.preview = None
+        self.tool = "crop"
+        if self.tools.group.button(0) is not None:
+            self.tools.group.button(0).setChecked(True)
+        self._set_chrome_visible(False)
+        self._refresh()
+        if self.layers:
+            self.layers[0].setFocus(Qt.FocusReason.OtherFocusReason)
+
     def _close_editor(self) -> None:
         self.context_timer.stop()
         self.text_timer.stop()
@@ -793,8 +860,24 @@ class CaptureHost(QObject):
         self._refresh()
 
     def _refresh(self) -> None:
+        live = live_screen_during(self.drag)
         for layer in self.layers:
-            layer.update()
+            if live:
+                layer.repaint()
+            else:
+                layer.update()
+        if not live:
+            self._place()
+
+    def _set_chrome_visible(self, visible: bool) -> None:
+        if not visible:
+            self.tools.hide()
+            self.dock.hide()
+            return
+        self.tools.show()
+        self.dock.show()
+        _exclude(self.tools)
+        _exclude(self.dock)
         self._place()
 
     def _place(self) -> None:

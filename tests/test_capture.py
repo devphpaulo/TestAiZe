@@ -22,6 +22,7 @@ from capture_client.bitmap import stitch_bitmaps
 from capture_client.chrome import decorate_crop
 from capture_client.draft import Draft
 from capture_client.geometry import Monitor, Rect, normalize_rect, resize_rect, stitch_origin, tool_side
+from capture_client.overlay import escape_action, live_screen_during, show_capture_chrome
 from capture_client.hotkey import (
     MOD_CONTROL,
     MOD_SHIFT,
@@ -79,6 +80,18 @@ class GeometryRenderTests(unittest.TestCase):
         decorated = decorate_crop(rendered)
         self.assertGreater(decorated.width, rendered.width)
         self.assertEqual(tool_side(Rect(0, 0, base.width - 10, 20), base.width, 150), "inside")
+
+    def test_tools_wait_for_a_region_and_escape_walks_the_selection_back(self):
+        self.assertFalse(show_capture_chrome(False))
+        self.assertTrue(show_capture_chrome(True))
+        self.assertTrue(live_screen_during("new"))
+        self.assertTrue(live_screen_during("move"))
+        self.assertTrue(live_screen_during("se"))
+        self.assertFalse(live_screen_during("rect"))
+        self.assertFalse(live_screen_during(None))
+        self.assertEqual(escape_action(True, False), "clear_gesture")
+        self.assertEqual(escape_action(False, True), "clear_region")
+        self.assertEqual(escape_action(False, False), "leave")
 
     def test_empty_region_is_rejected_and_undo_restores_the_previous_drawing(self):
         self.assertIsNone(normalize_rect(0, 0, 1, 8))

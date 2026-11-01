@@ -6,7 +6,17 @@ import ctypes
 from ctypes import wintypes
 
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtWidgets import QDialog, QHBoxLayout, QLabel, QLineEdit, QMessageBox, QPushButton, QVBoxLayout
+from PySide6.QtGui import QFont
+from PySide6.QtWidgets import (
+    QDialog,
+    QFrame,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QMessageBox,
+    QPushButton,
+    QVBoxLayout,
+)
 
 from .hotkey import (
     MOD_ALT,
@@ -78,22 +88,72 @@ class HotkeyDialog(QDialog):
         self.setWindowTitle("Atalho da captura")
         self.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint, True)
         self.setModal(True)
+        self.setMinimumWidth(460)
         layout = QVBoxLayout(self)
-        layout.addWidget(QLabel("Pressione a combinação que vai abrir a captura."))
-        layout.addWidget(QLabel(f"Atalho atual: {hotkey_label(current)}"))
+        layout.setContentsMargins(22, 20, 22, 18)
+        layout.setSpacing(12)
+        title = QLabel("Qual tecla abre a captura?")
+        title_font = QFont()
+        title_font.setPointSize(14)
+        title_font.setBold(True)
+        title.setFont(title_font)
+        layout.addWidget(title)
+        intro = QLabel(
+            "Essa combinação funciona mesmo com outra janela na frente. "
+            "Depois de salvar, use-a para escurecer a tela e selecionar a área."
+        )
+        intro.setWordWrap(True)
+        layout.addWidget(intro)
+        current_box = QFrame()
+        current_box.setObjectName("currentBox")
+        current_layout = QVBoxLayout(current_box)
+        current_caption = QLabel("Atalho atual")
+        current_caption.setObjectName("muted")
+        self.current_value = QLabel(hotkey_label(current))
+        value_font = QFont()
+        value_font.setPointSize(16)
+        value_font.setBold(True)
+        self.current_value.setFont(value_font)
+        current_layout.addWidget(current_caption)
+        current_layout.addWidget(self.current_value)
+        layout.addWidget(current_box)
+        instruction = QLabel("Pressione agora a nova combinação. Não precisa clicar no campo.")
+        instruction.setWordWrap(True)
+        layout.addWidget(instruction)
         self.field = QLineEdit()
         self.field.setReadOnly(True)
         self.field.setPlaceholderText("Aguardando tecla…")
+        self.field.setMinimumHeight(40)
         layout.addWidget(self.field)
+        self.hint = QLabel("Esc fecha sem alterar. Se outro programa já usar a combinação, o TestAíZé avisa e mantém a atual.")
+        self.hint.setObjectName("muted")
+        self.hint.setWordWrap(True)
+        layout.addWidget(self.hint)
+        tray = QLabel("Para abrir esta tela de novo: botão direito no ícone do TestAíZé, ao lado do relógio, e depois “Atalho da captura”.")
+        tray.setObjectName("muted")
+        tray.setWordWrap(True)
+        layout.addWidget(tray)
         actions = QHBoxLayout()
-        self.save_button = QPushButton("Salvar")
-        self.save_button.setEnabled(False)
-        self.save_button.clicked.connect(self._save)
+        actions.addStretch(1)
         cancel = QPushButton("Cancelar")
         cancel.clicked.connect(self.reject)
-        actions.addWidget(self.save_button)
+        self.save_button = QPushButton("Salvar atalho")
+        self.save_button.setDefault(True)
+        self.save_button.setEnabled(False)
+        self.save_button.clicked.connect(self._save)
         actions.addWidget(cancel)
+        actions.addWidget(self.save_button)
         layout.addLayout(actions)
+        self.setStyleSheet(
+            "QDialog { background:#161616; color:#f5f5f5; }"
+            "QLabel { color:#f5f5f5; }"
+            "QLabel#muted { color:#bdbdbd; }"
+            "QFrame#currentBox { background:#111; border:1px solid #333; border-radius:8px; padding:8px; }"
+            "QLineEdit { background:#111; color:#f5f5f5; border:1px solid #555; border-radius:6px; padding:8px 10px; font-size:16px; }"
+            "QPushButton { background:#2a2a2a; color:#f5f5f5; border:1px solid #444; border-radius:6px; padding:8px 16px; }"
+            "QPushButton:disabled { color:#777; }"
+            "QPushButton:default { background:#2F6FED; border-color:#2F6FED; }"
+        )
         self._captured.connect(self._apply_capture, Qt.ConnectionType.QueuedConnection)
         self._cancel_requested.connect(self.reject, Qt.ConnectionType.QueuedConnection)
         self._install_hook()
@@ -143,8 +203,10 @@ class HotkeyDialog(QDialog):
         if not valid_hotkey(spec):
             return
         self.chosen = spec
-        self.field.setText(hotkey_label(spec))
+        label = hotkey_label(spec)
+        self.field.setText(label)
         self.save_button.setEnabled(True)
+        self.hint.setText(f"Salve para passar a usar {label}. Esc ainda cancela e mantém {hotkey_label(self.current)}.")
 
     def keyPressEvent(self, event) -> None:
         if self._hook or event.isAutoRepeat():
