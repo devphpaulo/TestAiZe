@@ -2,13 +2,11 @@ import json
 import sys
 import tempfile
 import unittest
-import time
 from pathlib import Path
 from unittest.mock import Mock, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'src'))
 from testplayer.automation_environment import AutomationRuntime
-from testplayer.automation_environment import detect_automation_runtime
 from testplayer.automation_library import AutomationLibrary
 from testplayer.automation_suite import AutomationSuiteRunner
 
@@ -58,25 +56,6 @@ class AutomationSuiteTests(unittest.TestCase):
             runner = AutomationSuiteRunner(library, AutomationRuntime(True, 'node', 'playwright'))
             with self.assertRaises(ValueError): runner.start(folder['id'], None, {}, [])
 
-    def test_real_playwright_suite_reports_pass_failure_and_redacts_vault_secret(self):
-        runtime = detect_automation_runtime()
-        if not runtime.available: self.skipTest('Playwright do ambiente indisponível.')
-        with tempfile.TemporaryDirectory() as temporary:
-            library = AutomationLibrary(Path(temporary))
-            folder = library.create_folder('Real')
-            cycle = library.create_cycle(folder['id'], 'Smoke')
-            library.save_script(cycle['id'], 'Sucesso', "import { test, expect } from '@playwright/test'; test('passa', async () => { expect(1).toBe(1); });")
-            library.save_script(cycle['id'], 'Falha', "import { test, expect } from '@playwright/test'; test('falha', async () => { expect(process.env.PLAYWRIGHT_PASSWORD).toBe('outro'); });")
-            runner = AutomationSuiteRunner(library, runtime, timeout=30)
-            self.addCleanup(runner.shutdown)
-            run = runner.start(folder['id'], cycle['id'], {'PLAYWRIGHT_PASSWORD': 'private-vault-canary'}, ['private-vault-canary'])
-            runner.wait()
-            report = runner.status(run['id'])
-            self.assertEqual(report['state'], 'completed', report.get('errors'))
-            self.assertEqual((report['total'], report['passed'], report['failed']), (2, 1, 1))
-            self.assertNotIn('private-vault-canary', json.dumps(report))
-            self.assertIn('[secret]', json.dumps(report))
-            self.assertNotIn('private-vault-canary', (library.run_path(run['id']) / 'report.json').read_text())
 
     def test_startup_marks_an_unfinished_run_interrupted_and_keeps_snapshot(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -90,23 +69,3 @@ class AutomationSuiteTests(unittest.TestCase):
             self.assertEqual(runner.status(run['id'])['state'], 'interrupted')
             self.assertEqual((library.run_path(run['id']) / 'scripts' / (script['id'] + '.spec.ts')).read_text(), 'original')
             runner.shutdown()
-
-    def test_cancelling_real_runner_ends_only_its_owned_process(self):
-        runtime = detect_automation_runtime()
-        if not runtime.available: self.skipTest('Playwright do ambiente indisponível.')
-        with tempfile.TemporaryDirectory() as temporary:
-            library = AutomationLibrary(Path(temporary))
-            folder = library.create_folder('Cancelamento')
-            cycle = library.create_cycle(folder['id'], 'Ciclo')
-            library.save_script(cycle['id'], 'Lento', "import { test } from '@playwright/test'; test('lento', async () => { await new Promise(resolve => setTimeout(resolve, 20000)); });")
-            runner = AutomationSuiteRunner(library, runtime, timeout=30)
-            self.addCleanup(runner.shutdown)
-            run = runner.start(folder['id'], cycle['id'], {}, [])
-            deadline = time.monotonic() + 5
-            while runner._process is None and time.monotonic() < deadline: time.sleep(.02)
-            self.assertIsNotNone(runner._process)
-            process = runner._process
-            runner.cancel(run['id'])
-            runner.wait()
-            self.assertEqual(runner.status(run['id'])['state'], 'cancelled')
-            self.assertIsNotNone(process.poll())

@@ -44,6 +44,8 @@ executar.bat               # ou: python src/launcher.py
 
 Importar planilha → executar casos no Test Player → exportar relatório. O aplicativo salva sessões, evidências, relatórios e logs em **Documentos/TestAiZe**. O passo a passo completo está no [manual de uso](docs/manual.md).
 
+Para capturar evidências com **PrintScreen**, selecionar uma área, desenhar e anexar ao passo, consulte o [guia de captura de tela](docs/captura.md).
+
 > Por enquanto os casos de teste entram somente via planilha. A criação e edição manual de casos dentro do app está em idealização para uma versão futura.
 
 ## Automação com Playwright

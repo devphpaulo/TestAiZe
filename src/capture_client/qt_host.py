@@ -12,11 +12,12 @@ import uuid
 from pathlib import Path
 
 from PIL import Image
-from PySide6.QtCore import QAbstractNativeEventFilter, QEvent, QObject, QPointF, QRect, QRectF, Qt, QTimer
+from PySide6.QtCore import QAbstractNativeEventFilter, QEvent, QObject, QPoint, QPointF, QRect, QRectF, QSize, Qt, QTimer
 from PySide6.QtGui import (
     QColor,
     QCursor,
     QFont,
+    QFontDatabase,
     QGuiApplication,
     QImage,
     QKeySequence,
@@ -28,8 +29,8 @@ from PySide6.QtWidgets import (
     QApplication,
     QButtonGroup,
     QFileDialog,
+    QGridLayout,
     QHBoxLayout,
-    QInputDialog,
     QLabel,
     QListWidget,
     QListWidgetItem,
@@ -55,8 +56,11 @@ from .geometry import (
     tool_side,
 )
 from .hotkey import HOTKEY_ID, WM_HOTKEY, Hotkey, hotkey_label, load_hotkey, save_hotkey, try_register, try_unregister
-from .overlay import escape_action, live_screen_during, show_capture_chrome
-from .render import Annotation
+from .icons import tool_icon
+from .inline_text import InlineTextEdit
+from .overlay import live_screen_during, show_capture_chrome
+from .painting import paint_annotation
+from .render import Annotation, DEFAULT_FONT_SIZE, font_path
 from .transport import LocalApi
 
 WDA_EXCLUDEFROMCAPTURE = 0x00000011
@@ -143,11 +147,14 @@ class KeyFilter(QObject):
         if event.type() != QEvent.Type.KeyPress or not self.host.layers:
             return False
         focus = QApplication.focusWidget()
+        if event.key() == Qt.Key.Key_Escape:
+            self.host.cancel()
+            return True
+        if event.matches(QKeySequence.StandardKey.Copy) and focus is not self.host.dock.observed:
+            self.host.copy_image()
+            return True
         if isinstance(focus, QPlainTextEdit):
             return False
-        if event.key() == Qt.Key.Key_Escape:
-            self.host.step_back()
-            return True
         if event.matches(QKeySequence.StandardKey.Undo):
             self.host.undo()
             return True
@@ -224,21 +231,8 @@ class ScreenLayer(QWidget):
         painter.setBrush(Qt.BrushStyle.NoBrush)
         rubber = self.host.rubber_points
         if rubber and len(rubber) >= 2:
-            painter.setPen(QPen(QColor(self.host.color), 3))
-            start = self._to_local(rubber[0], origin_x, origin_y, scale)
-            end = self._to_local(rubber[-1], origin_x, origin_y, scale)
-            if self.host.drag in {"free"} and len(rubber) > 1:
-                painter.drawPolyline([self._to_local(point, origin_x, origin_y, scale) for point in rubber])
-            elif self.host.drag == "line" or self.host.drag == "arrow":
-                painter.drawLine(start, end)
-            elif self.host.drag == "rect":
-                painter.drawRect(QRectF(start, end))
-            elif self.host.drag == "circle":
-                radius = min(abs(end.x() - start.x()), abs(end.y() - start.y()))
-                painter.drawEllipse(start, radius, radius)
-
-    def _to_local(self, point: tuple[int, int], origin_x: int, origin_y: int, scale: float) -> QPointF:
-        return QPointF((point[0] - origin_x) / scale, (point[1] - origin_y) / scale)
+            paint_annotation(painter, Annotation(self.host.drag, self.host.color, list(rubber)),
+                             origin_x, origin_y, scale)
 
     def _handle_point(self, crop: Rect, name: str) -> tuple[float, float] | None:
         points = {
@@ -264,8 +258,9 @@ class ScreenLayer(QWidget):
             self.host.step_back()
             return
         if event.button() == Qt.MouseButton.LeftButton:
-            self.grabMouse()
             self.host.press(self._pointer(event))
+            if self.host.drag:
+                self.grabMouse()
 
     def mouseMoveEvent(self, event) -> None:
         if self.host.drag:
@@ -275,7 +270,8 @@ class ScreenLayer(QWidget):
         if event.button() == Qt.MouseButton.LeftButton:
             if self.mouseGrabber() is self:
                 self.releaseMouse()
-            self.host.release(self._pointer(event))
+            if self.host.drag:
+                self.host.release(self._pointer(event))
 
 
 class ToolPanel(QWidget):
@@ -288,7 +284,11 @@ class ToolPanel(QWidget):
         self.group = QButtonGroup(self)
         self.group.setExclusive(True)
         for index, (key, label) in enumerate(TOOLS):
-            button = QPushButton(label)
+            button = QPushButton()
+            button.setIcon(tool_icon(key))
+            button.setIconSize(QSize(24, 24))
+            button.setFixedSize(36, 36)
+            button.setAccessibleName(label)
             button.setCheckable(True)
             button.setToolTip(label)
             button.setProperty("tool", key)
@@ -297,35 +297,48 @@ class ToolPanel(QWidget):
             self.group.addButton(button, index)
             layout.addWidget(button)
         self.group.idClicked.connect(self._choose)
-        undo = QPushButton("Desfazer")
-        undo.setToolTip("Desfazer a última anotação")
+        undo = QPushButton()
+        undo.setIcon(tool_icon("undo"))
+        undo.setIconSize(QSize(24, 24))
+        undo.setFixedSize(36, 36)
+        undo.setAccessibleName("Desfazer")
+        undo.setToolTip("Desfazer a última anotação (Ctrl+Z)")
         undo.clicked.connect(host.undo)
         layout.addWidget(undo)
-        colors = QHBoxLayout()
+        colors = QGridLayout()
+        colors.setSpacing(4)
         self.color_group = QButtonGroup(self)
         self.color_group.setExclusive(True)
         for index, color in enumerate(COLORS):
             swatch = QPushButton()
-            swatch.setFixedSize(22, 22)
+            swatch.setFixedSize(16, 16)
             swatch.setCheckable(True)
             swatch.setToolTip(color)
-            swatch.setStyleSheet(f"background:{color}; border:1px solid #888;")
+            swatch.setAccessibleName(f"Cor {color}")
+            swatch.setStyleSheet(
+                f"QPushButton {{ background:{color}; border:1px solid #888; padding:0; }} "
+                "QPushButton:checked { border:2px solid #2F6FED; }"
+            )
             swatch.setProperty("color", color)
             if color == "#E10600":
                 swatch.setChecked(True)
             self.color_group.addButton(swatch, index)
-            colors.addWidget(swatch)
+            colors.addWidget(swatch, index // 2, index % 2)
         self.color_group.idClicked.connect(self._color)
         layout.addLayout(colors)
         self.setStyleSheet(
             "QWidget { background:#161616; color:#f5f5f5; } "
-            "QPushButton { background:#2a2a2a; color:#f5f5f5; border:1px solid #444; padding:6px; text-align:left; } "
-            "QPushButton:checked { border:1px solid #f5f5f5; }"
+            "QPushButton { background:#2a2a2a; color:#f5f5f5; border:1px solid #444; padding:0; } "
+            "QPushButton:hover { background:#393939; } "
+            "QPushButton:checked { background:#254c85; border:2px solid #78a9ff; } "
+            "QPushButton:focus { border:2px solid #f5f5f5; } "
+            "QToolTip { background:#262626; color:#f5f5f5; border:1px solid #666; padding:4px; }"
         )
 
     def _choose(self, button_id: int) -> None:
         button = self.group.button(button_id)
         if button is not None:
+            self.host.finish_text()
             self.host.tool = button.property("tool")
 
     def _color(self, button_id: int) -> None:
@@ -369,7 +382,7 @@ class DockPanel(QWidget):
         for button in (self.attach, copy, save, cancel):
             actions.addWidget(button)
         layout.addLayout(actions)
-        self.status = QLabel("Copiar e salvar não anexam. Esc ou botão direito descarta a seleção.")
+        self.status = QLabel("Ctrl+C copia e fecha. Anexar mantém aberto. Esc sai sem confirmação.")
         self.status.setWordWrap(True)
         layout.addWidget(self.status)
         self.setStyleSheet(
@@ -385,6 +398,15 @@ class DockPanel(QWidget):
 class CaptureHost(QObject):
     def __init__(self, base_url: str, token: str) -> None:
         super().__init__()
+        # The offscreen Qt platform does not enumerate Windows fonts. Register
+        # the same local font used by export so inline text stays readable there.
+        if "Segoe UI" not in QFontDatabase.families():
+            path = font_path()
+            if path is not None:
+                font_id = QFontDatabase.addApplicationFont(str(path))
+                families = QFontDatabase.applicationFontFamilies(font_id)
+                if families:
+                    QApplication.instance().setFont(QFont(families[0]))
         self.api = LocalApi(base_url, token)
         self.monitors: list[Monitor] = []
         self.layers: list[ScreenLayer] = []
@@ -404,6 +426,10 @@ class CaptureHost(QObject):
         self._attaching = False
         self._silence = False
         self._text_blocked = False
+        self.pending_observed: dict | None = None
+        self.text_editor: InlineTextEdit | None = None
+        self.text_point: tuple[int, int] | None = None
+        self.text_color = self.color
         self._recording = False
         self._hwnd = 0
         self.tools = ToolPanel(self)
@@ -414,8 +440,9 @@ class CaptureHost(QObject):
         self.context_timer = QTimer(self)
         self.context_timer.timeout.connect(self.refresh_context)
         self._install_hotkey()
-        QApplication.instance().installEventFilter(KeyFilter(self))
-        QTimer.singleShot(300, self._ping)
+        self.key_filter = KeyFilter(self)
+        QApplication.instance().installEventFilter(self.key_filter)
+        QTimer.singleShot(300, self, self._ping)
 
     def _install_hotkey(self) -> None:
         self.hotkey_window = QWidget()
@@ -534,8 +561,8 @@ class CaptureHost(QObject):
             image = qimage_to_pil(pixmap.toImage())
             monitor = Monitor(
                 f"screen-{index}",
-                int(round(geo.x() * scale)),
-                int(round(geo.y() * scale)),
+                geo.x() if os.name == "nt" else int(round(geo.x() * scale)),
+                geo.y() if os.name == "nt" else int(round(geo.y() * scale)),
                 image.width,
                 image.height,
                 scale,
@@ -569,6 +596,7 @@ class CaptureHost(QObject):
         return self.rubber
 
     def press(self, point: tuple[int, int]) -> None:
+        self.finish_text()
         self.anchor = point
         self.rubber_points = [point]
         if self.draft is None:
@@ -577,6 +605,8 @@ class CaptureHost(QObject):
         if self.tool == "text":
             self._add_text(point)
             self.drag = None
+            self.anchor = None
+            self.rubber_points = []
             return
         radius = int(10 * (self.monitors[0].scale if self.monitors else 1))
         handle = hit_crop_handle(point[0], point[1], self.draft.crop, radius)
@@ -589,9 +619,7 @@ class CaptureHost(QObject):
             return
         else:
             self.drag = self.tool
-        if live_screen_during(self.drag):
-            self.tools.hide()
-            self.dock.hide()
+        self._raise_chrome()
 
     def move_to(self, point: tuple[int, int]) -> None:
         if not self.drag or self.anchor is None or self.base is None:
@@ -648,9 +676,64 @@ class CaptureHost(QObject):
         self._set_chrome_visible(show_capture_chrome(self.draft is not None))
 
     def _add_text(self, point: tuple[int, int]) -> None:
-        text, accepted = QInputDialog.getMultiLineText(self.dock, "Texto na imagem", "Anotação sobre a imagem:")
-        if accepted and text.strip() and self.draft is not None:
-            self.draft.add(Annotation("text", self.color, [point], text))
+        self.finish_text()
+        if self.draft is None or not self._inside(point, self.draft.crop):
+            return
+        for layer in self.layers:
+            origin_x, origin_y = physical_to_stitch(self.monitors, layer.monitor.origin_x, layer.monitor.origin_y)
+            if not (origin_x <= point[0] < origin_x + layer.monitor.width
+                    and origin_y <= point[1] < origin_y + layer.monitor.height):
+                continue
+            self.text_point = point
+            self.text_color = self.color
+            self.text_editor = InlineTextEdit(self, layer)
+            scale = layer.monitor.scale or 1
+            font = QFont("Segoe UI")
+            font.setPixelSize(max(1, round(DEFAULT_FONT_SIZE / scale)))
+            self.text_editor.setFont(font)
+            self.text_editor.setStyleSheet(
+                f"QPlainTextEdit {{ background:transparent; color:{self.text_color}; "
+                f"border:1px dashed {self.text_color}; padding:0; }}"
+            )
+            self.text_editor.move(round((point[0] - origin_x) / scale),
+                                  round((point[1] - origin_y) / scale))
+            self.text_editor.textChanged.connect(self._resize_text_editor)
+            self._resize_text_editor()
+            self.text_editor.show()
+            self.text_editor.raise_()
+            layer.activateWindow()
+            self.text_editor.setFocus(Qt.FocusReason.OtherFocusReason)
+            return
+
+    def _resize_text_editor(self) -> None:
+        editor = self.text_editor
+        if editor is None:
+            return
+        metrics = editor.fontMetrics()
+        lines = editor.toPlainText().split("\n")
+        width = max(80, max(metrics.horizontalAdvance(line) for line in lines) + 10)
+        height = metrics.lineSpacing() * len(lines) + 8
+        parent = editor.parentWidget()
+        scale = parent.monitor.scale or 1
+        crop = self.draft.crop
+        origin_x, origin_y = physical_to_stitch(self.monitors, parent.monitor.origin_x, parent.monitor.origin_y)
+        right = min(parent.width(), (crop.right - origin_x) / scale)
+        bottom = min(parent.height(), (crop.bottom - origin_y) / scale)
+        editor.resize(max(2, min(width, round(right - editor.x()))),
+                      max(2, min(height, round(bottom - editor.y()))))
+
+    def finish_text(self, editor: InlineTextEdit | None = None) -> None:
+        current = self.text_editor
+        if current is None or (editor is not None and current is not editor):
+            return
+        text = current.toPlainText()
+        point = self.text_point
+        self.text_editor = None
+        self.text_point = None
+        current.hide()
+        current.deleteLater()
+        if text.strip() and point is not None and self.draft is not None:
+            self.draft.add(Annotation("text", self.text_color, [point], text))
             self._update_preview()
 
     def _inside(self, point: tuple[int, int], rect: Rect) -> bool:
@@ -663,31 +746,43 @@ class CaptureHost(QObject):
     def observed_changed(self) -> None:
         if self._silence:
             return
-        self._text_blocked = False
+        if self.pending_observed is None:
+            if not self.context or not self.context.get("valid"):
+                return
+            self.pending_observed = {
+                key: self.context[key] for key in
+                ("session_id", "case_id", "step_id", "execution_generation")
+            }
+            self.pending_observed["expected_revision"] = self.context["result_revision"]
+        self.pending_observed["text"] = self.dock.observed.toPlainText()
         self.text_timer.start(650)
 
-    def send_observed(self) -> None:
-        if not self.context or not self.context.get("valid"):
-            self.dock.status.setText("Sem destino válido. O texto da imagem continua só na captura.")
-            return
-        payload, status = self.api.post("/api/captura/host/resultado", {
-            "session_id": self.context["session_id"],
-            "step_id": self.context["step_id"],
-            "case_id": self.context["case_id"],
-            "text": self.dock.observed.toPlainText(),
-            "expected_revision": self.context["result_revision"],
-            "execution_generation": self.context["execution_generation"],
-        })
+    def send_observed(self) -> bool:
+        self.text_timer.stop()
+        if self.pending_observed is None:
+            return True
+        payload, status = self.api.post("/api/captura/host/resultado", self.pending_observed)
         if status == 200 and payload.get("ok"):
-            self.context["result_revision"] = payload["revision"]
-            self.context["observed"] = payload.get("actual", "")
+            if self._context_key(self.context) == self._context_key(self.pending_observed):
+                self.context["result_revision"] = payload["revision"]
+                self.context["observed"] = payload.get("actual", "")
+            self.pending_observed = None
+            self._text_blocked = False
             self.dock.status.setText("Resultado observado sincronizado. A imagem ainda não foi anexada.")
-            return
-        self._text_blocked = payload.get("code") == "REVISION_CONFLICT"
+            return True
+        self._text_blocked = True
         self.dock.status.setText(payload.get("error") or "Texto não sincronizado.")
+        return False
+
+    @staticmethod
+    def _context_key(context: dict | None) -> tuple:
+        return tuple((context or {}).get(key) for key in
+                     ("session_id", "case_id", "step_id", "execution_generation"))
 
     def select_step(self, step_id: int) -> None:
         if not self.context or not self.context.get("session_id"):
+            return
+        if not self.send_observed():
             return
         payload, status = self.api.post("/api/captura/host/selecao", {
             "session_id": self.context["session_id"],
@@ -708,10 +803,14 @@ class CaptureHost(QObject):
             self.dock.attach.setEnabled(False)
             return
         if status == 200:
-            typing = self.dock.observed.hasFocus() or self.text_timer.isActive() or self._text_blocked
+            typing = self.dock.observed.hasFocus() or self.pending_observed is not None
             self._apply_context(payload, force_text=not typing)
 
     def _apply_context(self, payload: dict, force_text: bool) -> None:
+        changed = self._context_key(payload) != self._context_key(self.context)
+        if changed and not self.send_observed():
+            self.dock.attach.setEnabled(False)
+            return
         self.context = payload
         if payload.get("case_name"):
             self.dock.case_label.setText(str(payload.get("case_name")))
@@ -726,7 +825,7 @@ class CaptureHost(QObject):
             if step.get("selected"):
                 self.dock.steps.setCurrentItem(item)
         self.dock.steps.blockSignals(False)
-        if force_text:
+        if (force_text or changed) and self.pending_observed is None:
             observed = payload.get("observed") or ""
             if self.dock.observed.toPlainText() != observed:
                 self._silence = True
@@ -741,12 +840,14 @@ class CaptureHost(QObject):
             self.dock.attach.setToolTip("Anexar a imagem ao passo selecionado")
 
     def copy_image(self) -> None:
+        self.finish_text()
         if self.draft is None:
             return
         QApplication.clipboard().setImage(pil_to_qpixmap(self.draft.image()).toImage())
-        self.dock.status.setText("Imagem copiada. Nada foi anexado ao teste.")
+        self._close_editor()
 
     def save_image(self) -> None:
+        self.finish_text()
         if self.draft is None:
             return
         path, _selected = QFileDialog.getSaveFileName(self.dock, "Salvar captura", "captura.png", "PNG (*.png)")
@@ -758,8 +859,11 @@ class CaptureHost(QObject):
         self.dock.status.setText("Imagem salva neste computador. Nada foi anexado ao teste.")
 
     def attach(self) -> None:
+        self.finish_text()
         if self._attaching or self.draft is None or not self.context or not self.context.get("valid"):
             self.dock.status.setText(self.context.get("message") if self.context else "Escolha um passo antes de anexar.")
+            return
+        if not self.send_observed():
             return
         self._attaching = True
         self.dock.attach.setEnabled(False)
@@ -785,63 +889,37 @@ class CaptureHost(QObject):
             logging.info("captura anexada command=%s", body["command_id"])
             return
         self.dock.attach.setEnabled(True)
+        if status == 409 and payload.get("code") == "REVISION_CONFLICT":
+            # The server explicitly rejected this command; a new click can use the new revision.
+            self.draft.finish_command()
+            self.context["result_revision"] = payload["revision"]
         self.dock.status.setText(payload.get("error") or "Não foi possível anexar. A captura continua aqui.")
         logging.info("captura anexo falhou code=%s", payload.get("code", ""))
 
     def cancel(self) -> None:
-        if self.draft and self.draft.annotations:
-            answer = QMessageBox.question(
-                self.dock, "TestAíZé", "Descartar a captura em edição?",
-                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            )
-            if answer != QMessageBox.StandardButton.Yes:
-                return
         self._close_editor()
 
     def step_back(self) -> None:
-        action = escape_action(bool(self.drag or self.rubber), self.draft is not None)
-        if action == "clear_gesture":
-            self._clear_gesture()
-            return
-        if action == "clear_region":
-            if self.draft and self.draft.annotations:
-                answer = QMessageBox.question(
-                    self.dock, "TestAíZé", "Descartar a seleção e as anotações?",
-                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-                )
-                if answer != QMessageBox.StandardButton.Yes:
-                    return
-            self._clear_region()
-            return
         self.cancel()
-
-    def _clear_gesture(self) -> None:
-        self.drag = None
-        self.rubber = None
-        self.rubber_points = []
-        self.anchor = None
-        for layer in self.layers:
-            if layer.mouseGrabber() is layer:
-                layer.releaseMouse()
-        self._refresh()
-
-    def _clear_region(self) -> None:
-        self._clear_gesture()
-        self.draft = None
-        self.preview = None
-        self.tool = "crop"
-        if self.tools.group.button(0) is not None:
-            self.tools.group.button(0).setChecked(True)
-        self._set_chrome_visible(False)
-        self._refresh()
-        if self.layers:
-            self.layers[0].setFocus(Qt.FocusReason.OtherFocusReason)
 
     def _close_editor(self) -> None:
         self.context_timer.stop()
         self.text_timer.stop()
+        editor = self.text_editor
+        self.text_editor = None
+        self.text_point = None
+        if editor is not None:
+            editor.hide()
+            editor.deleteLater()
+        for panel in (self.tools, self.dock):
+            panel.hide()
+            if panel.windowHandle() is not None:
+                panel.windowHandle().setTransientParent(None)
         for layer in self.layers:
+            if layer.mouseGrabber() is layer:
+                layer.releaseMouse()
             layer.close()
+            layer.deleteLater()
         self.layers = []
         self.tools.hide()
         self.dock.hide()
@@ -850,6 +928,13 @@ class CaptureHost(QObject):
         self.base = None
         self.rubber = None
         self.drag = None
+        self.anchor = None
+        self.rubber_points = []
+        self.tool = "crop"
+        self.tools.group.button(0).setChecked(True)
+        self.pending_observed = None
+        self.context = None
+        self._text_blocked = False
         logging.info("captura cancelada")
 
     def _update_preview(self) -> None:
@@ -868,6 +953,7 @@ class CaptureHost(QObject):
                 layer.update()
         if not live:
             self._place()
+        self._raise_chrome()
 
     def _set_chrome_visible(self, visible: bool) -> None:
         if not visible:
@@ -879,12 +965,24 @@ class CaptureHost(QObject):
         _exclude(self.tools)
         _exclude(self.dock)
         self._place()
+        self._raise_chrome()
+
+    def _raise_chrome(self) -> None:
+        if self.draft is None or not self.layers:
+            return
+        owner = self.layers[0].windowHandle()
+        for panel in (self.tools, self.dock):
+            if panel.windowHandle() is not None:
+                panel.windowHandle().setTransientParent(owner)
+            panel.raise_()
+        if self.text_editor is not None:
+            self.text_editor.raise_()
 
     def _place(self) -> None:
         if self.draft is None or not self.monitors or self.base is None:
             return
         crop = self.draft.crop
-        side = tool_side(crop, self.base.width, 150)
+        side = tool_side(crop, self.base.width, self.tools.width())
         min_x, min_y = stitch_origin(self.monitors)
         if side == "left":
             tool_x, tool_y = self._dip(min_x + crop.x - 8, min_y + crop.y)
@@ -896,7 +994,16 @@ class CaptureHost(QObject):
         if dock_y + self.dock.height() > self._bottom():
             dock_x, dock_y = self._dip(min_x + crop.x, min_y + crop.y - self.dock.height() - 12)
         self.dock.move(int(dock_x), int(dock_y))
-        self.dock.attach.setEnabled(bool(self.context and self.context.get("valid")))
+        anchor_x, anchor_y = self._dip(min_x + crop.x, min_y + crop.y)
+        screen = QGuiApplication.screenAt(QPoint(int(anchor_x), int(anchor_y))) or QGuiApplication.primaryScreen()
+        if screen is not None:
+            bounds = screen.availableGeometry()
+            for panel in (self.tools, self.dock):
+                panel.move(
+                    max(bounds.left(), min(panel.x(), bounds.right() + 1 - panel.width())),
+                    max(bounds.top(), min(panel.y(), bounds.bottom() + 1 - panel.height())),
+                )
+        self.dock.attach.setEnabled(bool(self.context and self.context.get("valid")) and not self._attaching)
 
     def _dip(self, absolute_x: int, absolute_y: int) -> tuple[float, float]:
         from .geometry import physical_to_dip

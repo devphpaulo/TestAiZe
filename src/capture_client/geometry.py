@@ -112,6 +112,13 @@ HANDLE_RADIUS = 8
 _HANDLE_NAMES = ("nw", "n", "ne", "e", "se", "s", "sw", "w")
 
 
+def circle_bounds(start: tuple[float, float], end: tuple[float, float]) -> tuple[float, float, float, float]:
+    diameter = min(abs(end[0] - start[0]), abs(end[1] - start[1]))
+    left = start[0] - diameter if end[0] < start[0] else start[0]
+    top = start[1] - diameter if end[1] < start[1] else start[1]
+    return left, top, left + diameter, top + diameter
+
+
 def handle_positions(width: int, height: int, margin: int = HANDLE_MARGIN) -> dict[str, tuple[int, int]]:
     """Positions of the crop handles in a preview that keeps a margin around the bitmap."""
     left, top = margin, margin

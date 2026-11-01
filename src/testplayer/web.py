@@ -384,10 +384,10 @@ def create_app(root: Path) -> Flask:
             return jsonify(error="Envie um objeto JSON válido."), 400
         try:
             comment = body.get("comment")
-            if "expected_revision" not in body and app.extensions["capture_broker"].host_seen:
-                return jsonify(error="Recarregue a página para sincronizar o resultado.", code="RELOAD"), 409
             raw_revision = body.get("expected_revision") if "expected_revision" in body else None
             raw_generation = body.get("expected_generation") if "expected_generation" in body else None
+            if app.extensions["capture_broker"].host_seen and (raw_revision is None or not raw_generation):
+                return jsonify(error="Recarregue a página para sincronizar o resultado.", code="RELOAD"), 409
             if raw_revision is not None and type(raw_revision) is not int:
                 return jsonify(error="Revisão do resultado inválida."), 422
             if raw_generation is not None and not isinstance(raw_generation, str):

@@ -52,13 +52,16 @@ class Draft:
         same = (
             self.pending is not None
             and self.pending["render_revision"] == str(self.render_revision)
+            and self.pending["session_id"] == context["session_id"]
+            and self.pending["case_id"] == context["case_id"]
             and self.pending["step_id"] == context["step_id"]
             and self.pending["execution_generation"] == context["execution_generation"]
-            and self.pending["expected_revision"] == context["result_revision"]
             and self.pending["command_id"] == self.command_id
         )
         if same:
             return self.pending
+        if self.pending is not None:
+            self.command_id = uuid.uuid4().hex
         self.pending = {
             "command_id": self.command_id,
             "render_revision": str(self.render_revision),

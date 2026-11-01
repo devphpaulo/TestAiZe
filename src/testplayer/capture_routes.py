@@ -238,6 +238,7 @@ def register_capture_routes(app, root: Path) -> None:
             "step_id": body.get("step_id"),
             "revision": saved["revision"],
             "actual": saved["actual"],
+            "execution_generation": saved["execution_generation"],
             "status": saved["status"],
             "source_client_id": "capture-host",
         })
@@ -292,6 +293,7 @@ def register_capture_routes(app, root: Path) -> None:
             "evidence_id": saved["evidence_id"],
             "revision": saved["revision"],
             "status": saved["status"],
+            "execution_generation": saved["execution_generation"],
             "name": saved["name"],
             "url": url_for("view_image", session_id=session_id, evidence_id=saved["evidence_id"]),
             "delete_url": url_for("delete_image", session_id=session_id, evidence_id=saved["evidence_id"]),

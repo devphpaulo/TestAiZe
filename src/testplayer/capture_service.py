@@ -149,6 +149,7 @@ def save_observed_text(directory: Path, step_id: int, text: str, expected_revisi
                 "actual": saved["actual"],
                 "status": saved["status"],
                 "case_id": row["case_id"],
+                "execution_generation": row["execution_generation"],
             }
         except Exception:
             connection.rollback()

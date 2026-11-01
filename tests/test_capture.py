@@ -22,7 +22,7 @@ from capture_client.bitmap import stitch_bitmaps
 from capture_client.chrome import decorate_crop
 from capture_client.draft import Draft
 from capture_client.geometry import Monitor, Rect, normalize_rect, resize_rect, stitch_origin, tool_side
-from capture_client.overlay import escape_action, live_screen_during, show_capture_chrome
+from capture_client.overlay import live_screen_during, show_capture_chrome
 from capture_client.hotkey import (
     MOD_CONTROL,
     MOD_SHIFT,
@@ -34,7 +34,7 @@ from capture_client.hotkey import (
     try_unregister,
     valid_hotkey,
 )
-from capture_client.render import Annotation, render_capture
+from capture_client.render import Annotation, circle_bounds, render_capture
 from testplayer.capture_service import (
     CaptureError,
     cleanup_capture_temporaries,
@@ -62,6 +62,26 @@ def _png(color: tuple[int, int, int], size: tuple[int, int] = (24, 16)) -> bytes
 
 
 class GeometryRenderTests(unittest.TestCase):
+    def test_circle_preview_and_export_share_bounds_in_both_directions(self):
+        self.assertEqual(circle_bounds((10, 20), (40, 60)), (10, 20, 40, 50))
+        self.assertEqual(circle_bounds((40, 60), (10, 20)), (10, 30, 40, 60))
+        image = render_capture(Image.new("RGBA", (80, 80), "white"), Rect(0, 0, 80, 80),
+                               [Annotation("circle", "#E10600", [(10, 20), (40, 60)])])
+        self.assertEqual(image.getpixel((25, 20)), (225, 6, 0, 255))
+        self.assertEqual(image.getpixel((25, 16)), (255, 255, 255, 255))
+
+    def test_attach_retry_keeps_frozen_revision_and_separates_sessions(self):
+        draft = Draft(Image.new("RGBA", (40, 40), "white"), Rect(0, 0, 40, 40))
+        context = {"session_id": "first", "case_id": 1, "step_id": 10,
+                   "execution_generation": "generation", "result_revision": 0}
+        first = draft.freeze(context)
+        retry = draft.freeze({**context, "result_revision": 2})
+        self.assertIs(retry, first)
+        self.assertEqual(retry["expected_revision"], 0)
+        another = draft.freeze({**context, "session_id": "second"})
+        self.assertEqual(another["session_id"], "second")
+        self.assertNotEqual(another["command_id"], first["command_id"])
+
     def test_negative_monitor_origin_and_crop_resize_keep_annotations_in_bitmap_space(self):
         left = Monitor("left", -1920, 0, 1920, 1080, 1.0, dip_x=-1920, dip_y=0, dip_w=1920, dip_h=1080)
         right = Monitor("right", 0, 0, 1280, 800, 1.25, dip_x=0, dip_y=0, dip_w=1024, dip_h=640)
@@ -81,7 +101,7 @@ class GeometryRenderTests(unittest.TestCase):
         self.assertGreater(decorated.width, rendered.width)
         self.assertEqual(tool_side(Rect(0, 0, base.width - 10, 20), base.width, 150), "inside")
 
-    def test_tools_wait_for_a_region_and_escape_walks_the_selection_back(self):
+    def test_tools_wait_for_a_region_and_crop_geometry_uses_the_live_bitmap(self):
         self.assertFalse(show_capture_chrome(False))
         self.assertTrue(show_capture_chrome(True))
         self.assertTrue(live_screen_during("new"))
@@ -89,9 +109,6 @@ class GeometryRenderTests(unittest.TestCase):
         self.assertTrue(live_screen_during("se"))
         self.assertFalse(live_screen_during("rect"))
         self.assertFalse(live_screen_during(None))
-        self.assertEqual(escape_action(True, False), "clear_gesture")
-        self.assertEqual(escape_action(False, True), "clear_region")
-        self.assertEqual(escape_action(False, False), "leave")
 
     def test_empty_region_is_rejected_and_undo_restores_the_previous_drawing(self):
         self.assertIsNone(normalize_rect(0, 0, 1, 8))
@@ -357,6 +374,20 @@ class CaptureRouteTests(unittest.TestCase):
         self.assertEqual(context.status_code, 200)
         self.assertEqual(context.get_json()["step_id"], 10)
         self.assertNotIn(self.token, json.dumps(context.get_json()))
+
+    def test_web_cannot_bypass_revision_or_generation_with_null_when_capture_is_active(self):
+        self.app.extensions["capture_broker"].mark_host(True)
+        headers = {"X-CSRF-Token": self._csrf()}
+        endpoint = f"/api/sessao/{self.persistence.session_id}/passo/10"
+        body = {"status": "em_andamento", "actual": "Texto obsoleto",
+                "expected_revision": 0, "expected_generation": self.persistence.generation}
+        for changes in ({"expected_revision": None}, {"expected_generation": None},
+                        {"expected_generation": ""}):
+            with self.subTest(changes=changes):
+                response = self.client.post(endpoint, json={**body, **changes}, headers=headers)
+                self.assertEqual(response.status_code, 409)
+        record = read_session(self.persistence.directory)
+        self.assertEqual(record["cases"][0]["steps"][0]["actual"], "texto inicial")
 
     def test_attach_endpoint_confirms_only_after_persistence_and_retries(self):
         csrf = self._csrf()

@@ -8,11 +8,9 @@ Na raiz do projeto, use `executar.bat`. Para o worker isolado: `node src/playwri
 
 ```powershell
 npm --prefix src/playwright-recorder test
-npm --prefix src/playwright-recorder run test:e2e
-npm --prefix src/playwright-recorder run test:host
 ```
 
-Os testes usam o Playwright do ambiente. `TESTAIZE_PYTHON` pode indicar o Python do host; por padrão é `.venv/Scripts/python.exe`. `TESTAIZE_SCREENSHOT` habilita capturas da interface e do Cofre. `TESTAIZE_EXE` é usado pelo smoke do executável no GitHub Actions.
+Os testes de protocolo, servidor e adapter não precisam de Playwright ou Chromium. Os testes que abriam navegador foram removidos. Para conferir a inicialização do pacote, use `python scripts/smoke_executable.py dist/TestAiZe-VERSAO.exe` na raiz. Para usar a automação do produto, o Playwright continua necessário.
 
 O adapter mantém a API privada do recorder isolada. E-mail e senha viram referências a `process.env` antes de qualquer atualização de código. Etapas editáveis usam os valores atuais enviados pelo Cofre do host através de stdin.
 

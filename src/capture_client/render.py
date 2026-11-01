@@ -3,18 +3,19 @@
 from __future__ import annotations
 
 import io
-import math
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont
+from PySide6.QtCore import QPointF
+from PySide6.QtGui import QImage, QPainter
 
-from .geometry import Rect
+from .geometry import Rect, circle_bounds
+from .painting import paint_annotation
 
 DEFAULT_STROKE = 4
 DEFAULT_FONT_SIZE = 18
-ARROW_HEAD = 16
 
 
 def font_path() -> Path | None:
@@ -78,12 +79,20 @@ def render_capture(base: Image.Image, crop: Rect, annotations: list[Annotation])
     if clipped.width < 2 or clipped.height < 2:
         raise ValueError("Região vazia.")
     image = source.crop((clipped.x, clipped.y, clipped.right, clipped.bottom))
-    draw = ImageDraw.Draw(image)
-    offset_x = clipped.x
-    offset_y = clipped.y
-    for note in annotations:
-        _draw_annotation(draw, note, offset_x, offset_y)
-    return image
+    if not annotations:
+        return image
+    pixels = bytearray(image.tobytes())
+    canvas = QImage(pixels, image.width, image.height, image.width * 4, QImage.Format.Format_RGBA8888)
+    painter = QPainter(canvas)
+    try:
+        for note in annotations:
+            if note.kind == "text":
+                _paint_text(painter, note, clipped)
+            else:
+                paint_annotation(painter, note, clipped.x, clipped.y)
+    finally:
+        painter.end()
+    return Image.frombytes("RGBA", image.size, bytes(canvas.constBits()))
 
 
 def png_bytes(image: Image.Image) -> bytes:
@@ -92,41 +101,19 @@ def png_bytes(image: Image.Image) -> bytes:
     return buffer.getvalue()
 
 
-def _local(points: list[tuple[float, float]], offset_x: int, offset_y: int) -> list[tuple[float, float]]:
-    return [(x - offset_x, y - offset_y) for x, y in points]
-
-
-def _draw_annotation(draw: ImageDraw.ImageDraw, note: Annotation, offset_x: int, offset_y: int) -> None:
-    color = _parse_color(note.color)
-    points = _local(note.points, offset_x, offset_y)
-    stroke = max(1, note.stroke)
-    if note.kind == "rect" and len(points) >= 2:
-        draw.rectangle((*points[0], *points[1]), outline=color, width=stroke)
-    elif note.kind == "line" and len(points) >= 2:
-        draw.line((*points[0], *points[1]), fill=color, width=stroke)
-    elif note.kind == "arrow" and len(points) >= 2:
-        _draw_arrow(draw, points[0], points[1], color, stroke)
-    elif note.kind == "circle" and len(points) >= 2:
-        start, end = points[0], points[1]
-        radius = min(abs(end[0] - start[0]), abs(end[1] - start[1])) / 2
-        if radius < 1:
-            return
-        center = (start[0] + math.copysign(radius, end[0] - start[0]),
-                  start[1] + math.copysign(radius, end[1] - start[1]))
-        box = (center[0] - radius, center[1] - radius, center[0] + radius, center[1] + radius)
-        draw.ellipse(box, outline=color, width=stroke)
-    elif note.kind == "free" and len(points) >= 2:
-        draw.line(points, fill=color, width=stroke, joint="curve")
-    elif note.kind == "text" and points and note.text:
-        draw.text(points[0], note.text, fill=color, font=load_font(note.font_size))
-
-
-def _draw_arrow(draw: ImageDraw.ImageDraw, start: tuple[float, float], end: tuple[float, float],
-                color: tuple[int, int, int, int], stroke: int) -> None:
-    draw.line((start, end), fill=color, width=stroke)
-    angle = math.atan2(end[1] - start[1], end[0] - start[0])
-    length = max(ARROW_HEAD, stroke * 4)
-    spread = math.radians(28)
-    left = (end[0] - length * math.cos(angle - spread), end[1] - length * math.sin(angle - spread))
-    right = (end[0] - length * math.cos(angle + spread), end[1] - length * math.sin(angle + spread))
-    draw.polygon((end, left, right), fill=color)
+def _paint_text(painter: QPainter, note: Annotation, crop: Rect) -> None:
+    if not note.points or not note.text:
+        return
+    x, y = note.points[0][0] - crop.x, note.points[0][1] - crop.y
+    font = load_font(note.font_size)
+    measure = ImageDraw.Draw(Image.new("RGBA", (1, 1)))
+    box = measure.multiline_textbbox((x, y), note.text, font=font)
+    left, top = max(0, int(box[0])), max(0, int(box[1]))
+    right, bottom = min(crop.width, int(box[2]) + 1), min(crop.height, int(box[3]) + 1)
+    if right <= left or bottom <= top:
+        return
+    tile = Image.new("RGBA", (right - left, bottom - top))
+    ImageDraw.Draw(tile).multiline_text((x - left, y - top), note.text, font=font, fill=_parse_color(note.color))
+    data = tile.tobytes()
+    image = QImage(data, tile.width, tile.height, tile.width * 4, QImage.Format.Format_RGBA8888)
+    painter.drawImage(QPointF(left, top), image)

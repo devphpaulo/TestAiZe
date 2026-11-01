@@ -77,7 +77,9 @@ Abrir a biblioteca não inicia recorder ou Chromium. O worker inicia somente ao 
 
 Na raiz: `python -m unittest discover -s tests`.
 
-Com Playwright instalado no ambiente: `npm --prefix src/playwright-recorder test`, `npm --prefix src/playwright-recorder run test:e2e` e `npm --prefix src/playwright-recorder run test:host`. Não há `npm ci`, TypeScript ou build intermediário para executar o código da aplicação.
+Execute `npm --prefix src/playwright-recorder test` e `python -m unittest discover -s tests`. Esses testes usam contratos e simulações locais, sem instalar Playwright ou Chromium. Os testes que abriam o navegador foram removidos para reduzir o tempo de CI. O uso da automação no produto continua exigindo as ferramentas descritas acima.
+
+O build usa `python scripts/build_executable.py`, inclui apenas os recursos de execução do recorder e informa o tamanho do `.exe` no resumo do CI. `python scripts/smoke_executable.py dist/TestAiZe-VERSAO.exe` verifica o servidor local e a inicialização do host de captura sem Playwright. O teste de PDF utiliza Edge ou Chrome já instalado no Windows.
 
 O workflow prepara Node e Playwright somente no runner para testar a integração. PyInstaller inclui o código JavaScript e os assets do aplicativo no `.exe`, mas não inclui Node, Playwright, browsers nem diretório de runtime portátil. `dist` existe apenas como saída do job de build no Actions. O smoke do executável usa as ferramentas do runner, como acontecerá na máquina de quem usar a aplicação.
 

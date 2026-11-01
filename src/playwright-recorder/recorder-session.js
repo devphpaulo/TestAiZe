@@ -1,4 +1,3 @@
-import { chromium, expect, } from "./runtime.js";
 import { VIEWPORT, } from "./protocol.js";
 import { PlaywrightRecorderAdapter, RecorderAdapterError } from "./playwright-recorder-adapter.js";
 const NAVIGATION_TIMEOUT_MS = 20_000;
@@ -97,6 +96,7 @@ export class RecorderSession {
         const generation = ++this.#generation;
         let phase = "browser";
         try {
+            const { chromium } = await import("./runtime.js");
             const browser = await chromium.launch({ headless: true });
             this.#browser = browser;
             browser.once("disconnected", () => {
@@ -503,6 +503,7 @@ export class RecorderSession {
         try {
             await page.reload({ waitUntil: "domcontentloaded", timeout: NAVIGATION_TIMEOUT_MS });
             const AsyncFunction = Object.getPrototypeOf(async () => { }).constructor;
+            const { expect } = await import("./runtime.js");
             const execute = new AsyncFunction("page", "expect", "process", steps);
             await Promise.race([
                 execute(page, expect, process),

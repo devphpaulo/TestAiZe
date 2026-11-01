@@ -1,4 +1,4 @@
-"""Overlay rules that do not need Qt: when chrome appears, and how the person walks back."""
+"""Overlay rules that do not need Qt: selection visibility and crop gestures."""
 
 from __future__ import annotations
 
@@ -15,12 +15,3 @@ def show_capture_chrome(has_region: bool) -> bool:
 def live_screen_during(drag: str | None) -> bool:
     """While the crop moves, the hole in the dim overlay follows the pointer."""
     return drag in CROP_GEOMETRY_DRAGGING
-
-
-def escape_action(has_gesture: bool, has_region: bool) -> str:
-    """Right-click and Escape undo the last capture step, then leave."""
-    if has_gesture:
-        return "clear_gesture"
-    if has_region:
-        return "clear_region"
-    return "leave"

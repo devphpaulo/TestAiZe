@@ -1022,6 +1022,10 @@
     const id = card.dataset.stepId;
     if (timers.has(id)) { clearTimeout(timers.get(id)); timers.delete(id); }
     if (inFlight.has(id)) { try { await inFlight.get(id); } catch (_) { /* Save the latest edit. */ } }
+    if (card.dataset.revisionConflict === 'true') {
+      setSaveState('Recarregue a página antes de salvar este passo. O texto digitado aqui foi mantido.', true);
+      throw new Error('Resultado em conflito. O texto local foi mantido.');
+    }
     const version = versions.get(id) || 0;
     const promise = (async () => {
       const response = await fetch(card.dataset.saveUrl, {
@@ -1696,13 +1700,18 @@
     const card = document.querySelector(`.step-card[data-step-id="${event.step_id}"]`);
     const editor = card?.querySelector('[data-rich-editor]');
     if (!card || !editor) return;
+    const view = card.closest('.case-view');
+    if (event.execution_generation !== view?.dataset.executionGeneration) return;
+    const revision = Number(card.dataset.resultRevision || 0);
+    if (!Number.isInteger(event.revision) || event.revision <= revision) return;
     const focused = editor === document.activeElement || editor.contains(document.activeElement);
-    card.dataset.resultRevision = String(event.revision);
-    if (focused) {
+    const pending = timers.has(card.dataset.stepId) || inFlight.has(card.dataset.stepId);
+    if (focused || pending || card.dataset.revisionConflict === 'true' || event.revision !== revision + 1) {
       card.dataset.revisionConflict = 'true';
       setSaveState('O resultado observado mudou na captura. O texto que você está digitando foi mantido.', true);
       return;
     }
+    card.dataset.resultRevision = String(event.revision);
     card.dataset.revisionConflict = 'false';
     captureSilent = true;
     syncObservedText(editor, event.actual || '');
@@ -1713,6 +1722,12 @@
     const card = document.querySelector(`.step-card[data-step-id="${event.step_id}"]`);
     const editor = card?.querySelector('[data-rich-editor]');
     if (!card || !editor || !editor._imageUrls) return;
+    const view = card.closest('.case-view');
+    if (event.execution_generation !== view?.dataset.executionGeneration) return;
+    const revision = Number(card.dataset.resultRevision || 0);
+    if (!Number.isInteger(event.revision) || event.revision <= revision) return;
+    const conflict = card.dataset.revisionConflict === 'true' || inFlight.has(card.dataset.stepId)
+      || event.revision !== revision + 1;
     if (!editor.querySelector(`.rich-image[data-evidence-id="${event.evidence_id}"]`)) {
       insertFigure(editor, makeImageFigure({
         id: event.evidence_id,
@@ -1720,8 +1735,12 @@
         delete_url: event.delete_url
       }, event.name || 'captura.png'), null, null, false);
     }
+    if (conflict) {
+      card.dataset.revisionConflict = 'true';
+      setSaveState('Captura anexada. Recarregue para reconciliar o resultado; seu texto local foi mantido.', true);
+      return;
+    }
     card.dataset.resultRevision = String(event.revision);
-    card.dataset.revisionConflict = 'false';
     renderMiniPlayer();
     setSaveState('Captura anexada ao passo');
   }
@@ -1750,5 +1769,13 @@
       }
     } catch (_) { /* Local polling resumes on the next tick. */ }
   }
-  if (writable) setInterval(pollCapture, 700);
+  if (writable) {
+    let pollingCapture = false;
+    setInterval(async () => {
+      if (pollingCapture) return;
+      pollingCapture = true;
+      try { await pollCapture(); }
+      finally { pollingCapture = false; }
+    }, 700);
+  }
 })();
