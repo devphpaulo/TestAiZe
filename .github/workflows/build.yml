@@ -32,7 +32,7 @@ jobs:
           python -m unittest discover -s tests
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Gerar executável versionado
-        id: pkg
+        id: exe
         shell: pwsh
         run: |
           $env:PYTHONPATH = "$PWD/src"
@@ -44,10 +44,10 @@ jobs:
         shell: pwsh
         run: |
           $env:TESTAIZE_PYTHON = "python"
-          $env:TESTAIZE_EXE = "$PWD/dist/TestAiZe-${{ steps.pkg.outputs.version }}.exe"
+          $env:TESTAIZE_EXE = "$PWD/dist/TestAiZe-${{ steps.exe.outputs.version }}.exe"
           npm --prefix src/playwright-recorder run test:host
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - uses: actions/upload-artifact@v4
         with:
-          name: TestAiZe-windows-${{ steps.pkg.outputs.version }}
+          name: TestAiZe-windows-${{ steps.exe.outputs.version }}
           path: dist/TestAiZe-*.exe
