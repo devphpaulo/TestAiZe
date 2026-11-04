@@ -16,4 +16,4 @@ O adapter mantém a API privada do recorder isolada. E-mail e senha viram refer�
 
 `RECORDER_PORT`, `RECORDER_PARENT_ORIGIN`, `RECORDER_PLAYWRIGHT_MODULE`, `RECORDER_MANAGED` e `RECORDER_PARENT_PID` são configurações internas do host. A readiness é `PLAYWRIGHT_RECORDER_READY http://127.0.0.1:<porta>`. HTTP/WS aceitam somente loopback e a origem correspondente; CSP permite somente o pai configurado.
 
-`shutdown` ou EOF na pipe de controle encerram o worker. A biblioteca `ws` vendorizada preserva a licença MIT. Consulte [operação e Cofre](../../docs/automacao.md) para os limites e a distribuição.
+`shutdown` ou EOF na pipe de controle encerram o worker. A biblioteca `ws` vendorizada preserva a licença MIT. Consulte [Automação e Cofre](../../docs/manual.md#automação-e-cofre) para instruções de uso.

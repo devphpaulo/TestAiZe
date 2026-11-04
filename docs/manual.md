@@ -126,13 +126,20 @@ A data e a hora da alteração de status ficam registradas no caso e aparecem ta
 
 ## 6. Registrar resultado e evidências
 
-Use **PrintScreen** ou o atalho configurado para recortar e anotar a tela. Para anexar a imagem diretamente ao passo, siga o [guia de captura integrada](captura.md).
-
 O campo **Pré-condições da planilha** é apenas informativo. Para registrar o que aconteceu durante a execução, use:
 
 - **Resultado observado**: descreva o comportamento encontrado;
 - **Anotações e evidências**: registre informações complementares;
 - **Comentário do caso**: anote uma conclusão ou observação geral.
+
+### Capturar a tela
+
+1. Selecione o caso e o passo no Test Player e pressione **PrintScreen** ou o atalho configurado.
+2. Arraste para selecionar a área. Use as alças para ajustar o recorte. As ferramentas e a lista de passos aparecem quando você solta o mouse.
+3. Use os ícones para desenhar ou escrever na imagem. Na ferramenta **Texto**, clique no recorte e digite. **Enter** conclui a anotação e **Shift+Enter** quebra a linha. Use **Ctrl+Z** para desfazer um desenho.
+4. Confira o destino e clique em **Anexar**. O passo fica verde na lista quando o envio é confirmado. A evidência aparece em **Resultado observado** e a captura continua aberta.
+
+**Copiar** ou **Ctrl+C** copia a imagem e fecha a captura. **Salvar** grava um PNG. **Esc** fecha a captura sem confirmação. Para alterar o atalho, abra **Atalho da captura** no menu do ícone do TestAíZé na bandeja do Windows.
 
 ### Colar imagens
 
@@ -342,6 +349,21 @@ Use **Abrir pasta de dados** na bandeja e verifique as pastas `rascunhos/`, `ses
 - cada seção de evidências aceita até 12 imagens;
 - cada imagem pode ter até 10 MB e 40 megapixels;
 - cada passo aceita até 5 anexos de até 5 MB cada.
+
+## Automação e Cofre
+
+Para habilitar a aba **Automação**, instale Node.js 20 ou superior, Playwright e Chromium. Reinicie o TestAíZé depois da instalação.
+
+```powershell
+npm install --global @playwright/test@1.62.1
+playwright install chromium
+```
+
+- Em **Gravar teste avulso**, informe a URL e inicie a gravação. Use **Salvar .spec.ts** para baixar o script ou **Salvar na biblioteca** para organizá-lo em pasta e ciclo.
+- Use **Rodar suíte** para executar os scripts salvos de uma pasta ou de um ciclo. A biblioteca guarda os resultados e o histórico das execuções.
+- Use o **Cofre** para cadastrar valores usados pelos scripts, como `PLAYWRIGHT_EMAIL` e `PLAYWRIGHT_PASSWORD`. Esses valores ficam em memória durante a execução do aplicativo. Scripts e histórico ficam na pasta `automacao` dentro da pasta de dados.
+
+Para instruções sobre o worker e seus testes, consulte a [documentação do recorder](../src/playwright-recorder/README.md).
 
 ## Executar pelo código-fonte
 

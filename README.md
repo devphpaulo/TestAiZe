@@ -44,7 +44,7 @@ executar.bat               # ou: python src/launcher.py
 
 Importar planilha → executar casos no Test Player → exportar relatório. O aplicativo salva sessões, evidências, relatórios e logs em **Documentos/TestAiZe**. O passo a passo completo está no [manual de uso](docs/manual.md).
 
-Para capturar evidências com **PrintScreen**, selecionar uma área, desenhar e anexar ao passo, consulte o [guia de captura de tela](docs/captura.md).
+Para capturar evidências com **PrintScreen**, selecionar uma área, desenhar e anexar ao passo, consulte [Capturar a tela](docs/manual.md#capturar-a-tela).
 
 > Por enquanto os casos de teste entram somente via planilha. A criação e edição manual de casos dentro do app está em idealização para uma versão futura.
 
@@ -66,7 +66,7 @@ executar.bat
 
 Não há instalação automática dessas ferramentas. Sair ou recarregar descarta apenas a gravação não salva; a biblioteca permanece no diretório de dados. O **Cofre** permite cadastrar chaves e marcar valores como Secret. E-mail e senha gravados usam `process.env.PLAYWRIGHT_EMAIL` e `process.env.PLAYWRIGHT_PASSWORD`, tanto nas etapas avulsas quanto nas suítes. Os valores do Cofre duram somente enquanto o aplicativo estiver aberto.
 
-Veja [operação e build da automação](docs/automacao.md) e [testes do recorder](src/playwright-recorder/README.md).
+Veja [Automação e Cofre](docs/manual.md#automação-e-cofre) e os [testes do recorder](src/playwright-recorder/README.md).
 
 ## Planilha de casos
 
