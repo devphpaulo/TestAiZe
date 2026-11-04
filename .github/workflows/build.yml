@@ -11,17 +11,37 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+          cache: pip
       - run: python -m pip install -r requirements.txt pyinstaller
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Testes Python e contratos JavaScript
+        shell: pwsh
+        run: |
+          npm --prefix src/playwright-recorder test
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node --test tests/capture_sync.test.cjs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python -m unittest discover -s tests
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Gerar executável versionado
-        id: pkg
+        id: exe
         shell: pwsh
         run: |
           $env:PYTHONPATH = "$PWD/src"
           $version = python -c "from testplayer.version import PACKAGE_VERSION; print(PACKAGE_VERSION)"
           "version=$version" >> $env:GITHUB_OUTPUT
-          python -m PyInstaller --noconfirm --clean --onefile --windowed --name "TestAiZe-$version" --icon assets/testaize.ico --paths src --add-data "src/testplayer/templates;testplayer/templates" --add-data "src/testplayer/static;testplayer/static" --hidden-import pystray._win32 src/launcher.py
+          python scripts/build_executable.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $size = (Get-Item "dist/TestAiZe-$version.exe").Length
+          "Executável: $([math]::Round($size / 1000000, 2)) MB ($size bytes)" >> $env:GITHUB_STEP_SUMMARY
+      - name: Testar inicialização do executável
+        shell: pwsh
+        run: |
+          python scripts/smoke_executable.py "dist/TestAiZe-${{ steps.exe.outputs.version }}.exe"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - uses: actions/upload-artifact@v4
         with:
-          name: TestAiZe-windows-${{ steps.pkg.outputs.version }}
+          name: TestAiZe-windows-${{ steps.exe.outputs.version }}
           path: dist/TestAiZe-*.exe

@@ -10,7 +10,8 @@ import time
 import uuid
 from pathlib import Path
 
-import pymupdf
+from pypdf import PdfReader
+from pypdf.errors import PyPdfError
 
 from .html_export import render_report_html
 from .storage import read_session
@@ -81,10 +82,10 @@ def _wait_for_valid_pdf(path: Path, seconds: int) -> bool:
     while True:
         try:
             if path.stat().st_size > 1000:
-                with pymupdf.open(path) as document:
-                    if document.page_count > 0:
+                with path.open("rb") as stream:
+                    if len(PdfReader(stream, strict=True).pages) > 0:
                         return True
-        except (FileNotFoundError, OSError, ValueError, pymupdf.FileDataError):
+        except (OSError, ValueError, PyPdfError):
             pass
         if time.monotonic() >= deadline:
             return False

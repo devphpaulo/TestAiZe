@@ -10,7 +10,7 @@ from contextlib import closing
 from html.parser import HTMLParser
 from pathlib import Path
 
-import pymupdf
+from pypdf import PdfReader
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
@@ -371,9 +371,11 @@ class FolderLinkTests(unittest.TestCase):
 
         report = generate_pdf(self.directory, {1, 3})
 
-        with pymupdf.open(report) as document:
-            links = [link.get("uri") for page in document for link in page.get_links()]
-            text = "".join(page.get_text() for page in document)
+        with report.open("rb") as stream:
+            document = PdfReader(stream)
+            links = [annotation.get_object().get("/A", {}).get("/URI")
+                     for page in document.pages for annotation in page.get("/Annots", [])]
+            text = "".join(page.extract_text() for page in document.pages)
         self.assertIn(card_url, links)
         self.assertEqual(text.count("Card vinculado:"), 1)
 

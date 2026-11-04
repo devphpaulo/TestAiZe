@@ -24,7 +24,8 @@ CREATE TABLE IF NOT EXISTS cases (
   source_row INTEGER NOT NULL, name TEXT NOT NULL, precondition TEXT NOT NULL,
   source_status TEXT NOT NULL, priority TEXT NOT NULL, folder TEXT NOT NULL,
   manual_status TEXT NOT NULL DEFAULT '', comment TEXT NOT NULL DEFAULT '',
-  comment_doc TEXT, precondition_doc TEXT, precondition_note_mode INTEGER NOT NULL DEFAULT 0
+  comment_doc TEXT, precondition_doc TEXT, precondition_note_mode INTEGER NOT NULL DEFAULT 0,
+  execution_generation TEXT NOT NULL DEFAULT ''
 );
 CREATE TABLE IF NOT EXISTS steps (
   id INTEGER PRIMARY KEY, case_id INTEGER NOT NULL REFERENCES cases(id),
@@ -34,7 +35,7 @@ CREATE TABLE IF NOT EXISTS steps (
 CREATE TABLE IF NOT EXISTS results (
   step_id INTEGER PRIMARY KEY REFERENCES steps(id), status TEXT NOT NULL DEFAULT 'nao_executado',
   actual TEXT NOT NULL DEFAULT '', comment TEXT NOT NULL DEFAULT '', updated_at TEXT,
-  status_changed_at TEXT, actual_doc TEXT
+  status_changed_at TEXT, actual_doc TEXT, revision INTEGER NOT NULL DEFAULT 0
 );
 CREATE TABLE IF NOT EXISTS evidence (
   id TEXT PRIMARY KEY, step_id INTEGER NOT NULL REFERENCES steps(id),
@@ -79,8 +80,31 @@ CREATE TABLE IF NOT EXISTS folder_links (
   folder_path TEXT PRIMARY KEY, card_url TEXT NOT NULL,
   provider TEXT, updated_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS capture_commands (
+  command_id TEXT PRIMARY KEY,
+  step_id INTEGER NOT NULL,
+  execution_generation TEXT NOT NULL,
+  render_revision TEXT NOT NULL,
+  content_hash TEXT NOT NULL,
+  evidence_id TEXT,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS ix_capture_commands_step ON capture_commands(step_id);
 """
 STATUSES = {"nao_executado", "em_andamento", "aprovado", "reprovado", "bloqueado"}
+
+
+class StaleExecution(Exception):
+    def __init__(self) -> None:
+        super().__init__("O caso recebeu outra execução. Selecione o passo de novo.")
+
+
+class RevisionConflict(Exception):
+    def __init__(self, revision: int, actual: str, actual_doc: str | None) -> None:
+        super().__init__("O resultado observado foi atualizado em outro lugar. O texto local foi mantido.")
+        self.revision = revision
+        self.actual = actual
+        self.actual_doc = actual_doc
 
 
 def now() -> str:
@@ -152,6 +176,30 @@ def migrate_sessions(root: Path) -> None:
                     connection.execute("CREATE TABLE IF NOT EXISTS folder_links ("
                                        "folder_path TEXT PRIMARY KEY, card_url TEXT NOT NULL,"
                                        "provider TEXT, updated_at TEXT NOT NULL)")
+                    case_columns = {row[1] for row in connection.execute("PRAGMA table_info(cases)")}
+                    if "execution_generation" not in case_columns:
+                        connection.execute(
+                            "ALTER TABLE cases ADD COLUMN execution_generation TEXT NOT NULL DEFAULT ''"
+                        )
+                    result_columns = {row[1] for row in connection.execute("PRAGMA table_info(results)")}
+                    if "revision" not in result_columns:
+                        connection.execute("ALTER TABLE results ADD COLUMN revision INTEGER NOT NULL DEFAULT 0")
+                    connection.execute(
+                        "CREATE TABLE IF NOT EXISTS capture_commands ("
+                        "command_id TEXT PRIMARY KEY, step_id INTEGER NOT NULL,"
+                        "execution_generation TEXT NOT NULL, render_revision TEXT NOT NULL,"
+                        "content_hash TEXT NOT NULL, evidence_id TEXT, created_at TEXT NOT NULL)"
+                    )
+                    connection.execute(
+                        "CREATE INDEX IF NOT EXISTS ix_capture_commands_step ON capture_commands(step_id)"
+                    )
+                    for case_row in connection.execute(
+                        "SELECT id FROM cases WHERE execution_generation IS NULL OR execution_generation=''"
+                    ):
+                        connection.execute(
+                            "UPDATE cases SET execution_generation=? WHERE id=?",
+                            (uuid.uuid4().hex, case_row[0]),
+                        )
                     step_columns = {row[1] for row in connection.execute("PRAGMA table_info(step_attachments)")}
                     if "extension" not in step_columns:
                         connection.execute("ALTER TABLE step_attachments ADD COLUMN extension TEXT NOT NULL DEFAULT ''")
@@ -324,6 +372,10 @@ def create_draft(root: Path, parsed: dict, source_path: Path, selected: set[str]
                              case["source_status"], case["priority"], case["folder"]),
                         )
                         case_id = cursor.lastrowid
+                        connection.execute(
+                            "UPDATE cases SET execution_generation=? WHERE id=?",
+                            (uuid.uuid4().hex, case_id),
+                        )
                         for position, step in enumerate(case["steps"], start=1):
                             cursor = connection.execute(
                                 "INSERT INTO steps(case_id,position,action,test_data,expected) VALUES (?,?,?,?,?)",
@@ -449,7 +501,7 @@ def precondition_notes(blocks: list[dict], source: str, note_mode: int) -> list[
 
 def _hydrate_case(connection: sqlite3.Connection, case: dict) -> dict:
     steps = [dict(row) for row in connection.execute(
-        "SELECT s.*,r.status,r.actual,r.actual_doc,r.comment,r.updated_at,r.status_changed_at FROM steps s "
+        "SELECT s.*,r.status,r.actual,r.actual_doc,r.comment,r.updated_at,r.status_changed_at,r.revision FROM steps s "
         "JOIN results r ON r.step_id=s.id WHERE s.case_id=? ORDER BY s.position", (case["id"],)
     )]
     for step in steps:
@@ -690,11 +742,14 @@ def sync_step_evidence(directory: Path, source_step_id: int, target_step_ids: li
                 document, _ = normalize_document(blocks, all_ids)
                 if replicate_status:
                     connection.execute(
-                        "UPDATE results SET status=?,actual_doc=?,updated_at=?,status_changed_at=? WHERE step_id=?",
+                        "UPDATE results SET status=?,actual_doc=?,updated_at=?,status_changed_at=?,revision=revision+1 WHERE step_id=?",
                         (source["status"], document, now(), now(), target_step_id),
                     )
                 else:
-                    connection.execute("UPDATE results SET actual_doc=? WHERE step_id=?", (document, target_step_id))
+                    connection.execute(
+                        "UPDATE results SET actual_doc=?,revision=revision+1 WHERE step_id=?",
+                        (document, target_step_id),
+                    )
             connection.commit()
         except Exception:
             connection.rollback()
@@ -725,32 +780,61 @@ def list_sessions(root: Path) -> list[dict]:
 
 
 def save_result(directory: Path, step_id: int, status: str, actual: str, comment: str | None = None,
-                status_action: bool = False, actual_doc: object | None = None) -> str | None:
+                status_action: bool = False, actual_doc: object | None = None,
+                expected_revision: int | None = None, expected_generation: str | None = None) -> tuple[str | None, int]:
     if status not in STATUSES:
         raise ValueError("Status de passo inválido.")
     if len(actual) > 20_000 or (comment is not None and len(comment) > 20_000):
         raise ValueError("Resultado ou comentário excede 20.000 caracteres.")
+    if expected_revision is not None and (type(expected_revision) is not int or expected_revision < 0):
+        raise ValueError("Revisão do resultado inválida.")
     with db(directory) as connection:
-        with connection:
+        connection.execute("BEGIN IMMEDIATE")
+        try:
+            if expected_generation:
+                current_generation = connection.execute(
+                    "SELECT c.execution_generation FROM steps s JOIN cases c ON c.id=s.case_id WHERE s.id=?",
+                    (step_id,),
+                ).fetchone()
+                if current_generation is None:
+                    raise LookupError("Passo não encontrado.")
+                if current_generation[0] != expected_generation:
+                    raise StaleExecution()
             normalized_doc = None
             if actual_doc is not None:
                 ids = {row[0] for row in connection.execute("SELECT id FROM evidence WHERE step_id=?", (step_id,))}
                 normalized_doc, actual = normalize_document(actual_doc, ids)
+            revision_sql = " AND revision=?" if expected_revision is not None else ""
+            revision_param = (expected_revision,) if expected_revision is not None else ()
             if comment is None:
                 cursor = connection.execute(
                     "UPDATE results SET status=?,actual=?,actual_doc=COALESCE(?,actual_doc),updated_at=?,"
-                    "status_changed_at=CASE WHEN ? OR status<>? THEN ? ELSE status_changed_at END WHERE step_id=?",
-                    (status, actual, normalized_doc, now(), status_action, status, now(), step_id),
+                    "status_changed_at=CASE WHEN ? OR status<>? THEN ? ELSE status_changed_at END,"
+                    f"revision=revision+1 WHERE step_id=?{revision_sql}",
+                    (status, actual, normalized_doc, now(), status_action, status, now(), step_id, *revision_param),
                 )
             else:
                 cursor = connection.execute(
                     "UPDATE results SET status=?,actual=?,actual_doc=COALESCE(?,actual_doc),comment=?,updated_at=?,"
-                    "status_changed_at=CASE WHEN ? OR status<>? THEN ? ELSE status_changed_at END WHERE step_id=?",
-                    (status, actual, normalized_doc, comment, now(), status_action, status, now(), step_id),
+                    "status_changed_at=CASE WHEN ? OR status<>? THEN ? ELSE status_changed_at END,"
+                    f"revision=revision+1 WHERE step_id=?{revision_sql}",
+                    (status, actual, normalized_doc, comment, now(), status_action, status, now(), step_id, *revision_param),
                 )
             if cursor.rowcount != 1:
-                raise LookupError("Passo não encontrado.")
-            return connection.execute("SELECT status_changed_at FROM results WHERE step_id=?", (step_id,)).fetchone()[0]
+                row = connection.execute(
+                    "SELECT revision,actual,actual_doc FROM results WHERE step_id=?", (step_id,)
+                ).fetchone()
+                if row is None:
+                    raise LookupError("Passo não encontrado.")
+                raise RevisionConflict(int(row["revision"]), row["actual"], row["actual_doc"])
+            saved = connection.execute(
+                "SELECT status_changed_at,revision FROM results WHERE step_id=?", (step_id,)
+            ).fetchone()
+            connection.commit()
+            return saved["status_changed_at"], int(saved["revision"])
+        except Exception:
+            connection.rollback()
+            raise
 
 
 def save_case(directory: Path, case_id: int, status: str, comment: str, comment_doc: object | None = None,
@@ -819,12 +903,17 @@ def start_case_run(directory: Path, case_id: int) -> int:
             connection.execute("DELETE FROM case_evidence WHERE case_id=?", (case_id,))
             connection.execute(
                 "UPDATE results SET status='nao_executado',actual='',actual_doc=NULL,comment='',"
-                "updated_at=NULL,status_changed_at=NULL WHERE step_id IN (SELECT id FROM steps WHERE case_id=?)",
+                "updated_at=NULL,status_changed_at=NULL,revision=0 "
+                "WHERE step_id IN (SELECT id FROM steps WHERE case_id=?)",
                 (case_id,),
             )
             connection.execute(
                 "UPDATE cases SET manual_status='',comment='',comment_doc=NULL,precondition_doc=NULL,"
-                "precondition_note_mode=1 WHERE id=?",
+                "precondition_note_mode=1,execution_generation=? WHERE id=?",
+                (uuid.uuid4().hex, case_id),
+            )
+            connection.execute(
+                "DELETE FROM capture_commands WHERE step_id IN (SELECT id FROM steps WHERE case_id=?)",
                 (case_id,),
             )
             connection.commit()
@@ -912,6 +1001,10 @@ def rerun(root: Path, source_dir: Path) -> str:
                          case["precondition"], case["source_status"], case["priority"], case["folder"]),
                     )
                     ids[case["id"]] = cursor.lastrowid
+                    connection.execute(
+                        "UPDATE cases SET execution_generation=? WHERE id=?",
+                        (uuid.uuid4().hex, cursor.lastrowid),
+                    )
                 for step in original_steps:
                     cursor = connection.execute(
                         "INSERT INTO steps(case_id,position,action,test_data,expected) VALUES (?,?,?,?,?)",

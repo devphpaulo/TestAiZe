@@ -6,6 +6,7 @@ import json
 import logging
 import os
 import socket
+import subprocess
 import sys
 import threading
 import time
@@ -114,7 +115,14 @@ def _tray_image() -> Image.Image:
     return image
 
 
-def _run_tray(root: Path, port: int) -> None:
+def _notify(text: str) -> None:
+    if os.name != "nt":
+        logging.info(text)
+        return
+    ctypes.windll.user32.MessageBoxW(None, text, "TestAíZé", 0x40)
+
+
+def _run_tray(root: Path, port: int, broker) -> None:
     url = f"http://127.0.0.1:{port}/"
 
     def open_app(icon, item):
@@ -123,11 +131,21 @@ def _run_tray(root: Path, port: int) -> None:
     def open_data(icon, item):
         os.startfile(root)
 
+    def define_hotkey(icon, item):
+        if not broker.host_seen:
+            _notify("A captura ainda está iniciando. Tente de novo em alguns segundos.")
+            return
+        broker.request_hotkey_record()
+
+    def hotkey_text(item):
+        return f"Atalho da captura    {broker.hotkey_label or 'PrintScreen'}"
+
     def quit_app(icon, item):
         icon.stop()
 
     menu = pystray.Menu(
         pystray.MenuItem("Abrir aplicativo", open_app, default=True),
+        pystray.MenuItem(hotkey_text, define_hotkey),
         pystray.MenuItem("Abrir pasta de dados", open_data),
         pystray.Menu.SEPARATOR,
         pystray.MenuItem("Encerrar aplicativo", quit_app),
@@ -135,7 +153,85 @@ def _run_tray(root: Path, port: int) -> None:
     pystray.Icon("testaize", _tray_image(), "TestAíZé", menu).run()
 
 
+def _capture_job():
+    """Kill the capture host if this process is terminated without running shutdown."""
+    if os.name != "nt":
+        return None
+    kernel = ctypes.windll.kernel32
+    job = kernel.CreateJobObjectW(None, None)
+    if not job:
+        return None
+
+    class BasicLimit(ctypes.Structure):
+        _fields_ = [
+            ("PerProcessUserTimeLimit", ctypes.c_int64),
+            ("PerJobUserTimeLimit", ctypes.c_int64),
+            ("LimitFlags", ctypes.c_uint32),
+            ("MinimumWorkingSetSize", ctypes.c_size_t),
+            ("MaximumWorkingSetSize", ctypes.c_size_t),
+            ("ActiveProcessLimit", ctypes.c_uint32),
+            ("Affinity", ctypes.c_size_t),
+            ("PriorityClass", ctypes.c_uint32),
+            ("SchedulingClass", ctypes.c_uint32),
+        ]
+
+    class ExtendedLimit(ctypes.Structure):
+        _fields_ = [
+            ("BasicLimitInformation", BasicLimit),
+            ("IoInfo", ctypes.c_uint64 * 6),
+            ("ProcessMemoryLimit", ctypes.c_size_t),
+            ("JobMemoryLimit", ctypes.c_size_t),
+            ("PeakProcessMemoryUsed", ctypes.c_size_t),
+            ("PeakJobMemoryUsed", ctypes.c_size_t),
+        ]
+
+    info = ExtendedLimit()
+    info.BasicLimitInformation.LimitFlags = 0x2000
+    if not kernel.SetInformationJobObject(job, 9, ctypes.byref(info), ctypes.sizeof(info)):
+        kernel.CloseHandle(job)
+        return None
+    return job
+
+
+def _assign_capture_job(job, process: subprocess.Popen) -> None:
+    if job is None:
+        return
+    try:
+        ctypes.windll.kernel32.AssignProcessToJobObject(job, int(process._handle))
+    except (OSError, AttributeError, ValueError):
+        logging.info("captura seguira sem vinculo de encerramento automatico")
+
+
+def _start_capture_host(port: int, token: str, root: Path) -> subprocess.Popen | None:
+    env = os.environ.copy()
+    env["TESTAIZE_CAPTURE_URL"] = f"http://127.0.0.1:{port}"
+    env["TESTAIZE_CAPTURE_TOKEN"] = token
+    env["TESTAIZE_DATA_DIR"] = str(root)
+    src = str(Path(__file__).resolve().parent)
+    env["PYTHONPATH"] = src + (os.pathsep + env["PYTHONPATH"] if env.get("PYTHONPATH") else "")
+    command = [sys.executable, "--capture-host"] if getattr(sys, "frozen", False) else [sys.executable, "-m", "capture_client"]
+    try:
+        return subprocess.Popen(command, env=env, cwd=src)
+    except OSError:
+        logging.exception("Nao foi possivel iniciar o host de captura")
+        return None
+
+
+def _stop_capture_host(process: subprocess.Popen | None) -> None:
+    if process is None or process.poll() is not None:
+        return
+    process.terminate()
+    try:
+        process.wait(timeout=3)
+    except subprocess.TimeoutExpired:
+        process.kill()
+    logging.info("host de captura encerrado")
+
+
 def main():
+    if "--capture-host" in sys.argv:
+        from capture_client.qt_host import main as capture_main
+        raise SystemExit(capture_main())
     parser = argparse.ArgumentParser(description="TestAíZé: executor local de casos de teste")
     parser.add_argument("--data-dir", type=Path, default=None)
     parser.add_argument("--no-browser", action="store_true", help="Não abrir o navegador automaticamente")
@@ -177,24 +273,42 @@ def main():
         return
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     server = None
+    app = None
+    capture_process = None
+    capture_job = None
     try:
         app = create_app(root)
+        runtime = app.extensions["automation_runtime"]
+        if not runtime.available:
+            _notice(runtime.message)
         sock.bind(("127.0.0.1", 0))
         sock.listen(128)
         port = sock.getsockname()[1]
         runtime_file.write_text(json.dumps({"port": port, "pid": os.getpid()}), encoding="utf-8")
         _notice(f"TestAíZé v{APP_VERSION} iniciado: http://127.0.0.1:{port}/")
         server = create_server(app, sockets=[sock], threads=4, expose_tracebacks=False)
+        capture_job = _capture_job()
+        capture_process = _start_capture_host(port, app.extensions["capture_broker"].token, root)
+        _assign_capture_job(capture_job, capture_process) if capture_process is not None else None
+        if capture_process is not None:
+            _notice("Host de captura iniciado.")
         if not args.no_browser:
             threading.Thread(target=_open_browser, args=(port,), daemon=True).start()
         if args.no_tray:
             server.run()
         else:
             threading.Thread(target=server.run, daemon=True).start()
-            _run_tray(root, port)
+            _run_tray(root, port, app.extensions["capture_broker"])
     except KeyboardInterrupt:
         _notice("Aplicativo encerrado.")
     finally:
+        _stop_capture_host(capture_process)
+        if capture_job is not None:
+            ctypes.windll.kernel32.CloseHandle(capture_job)
+        if app is not None:
+            app.extensions['automation_suite'].shutdown()
+            app.extensions["automation_recorder"].shutdown()
+            app.extensions["automation_vault"].clear()
         runtime_file.unlink(missing_ok=True)
         if server is not None:
             server.close()

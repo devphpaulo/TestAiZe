@@ -1,4 +1,19 @@
 /* Corrections shared by the light and dark player themes. */
+:root[data-theme="dark"][data-accent="roxo"] { --accent: #b493ff; --accent-hover: #c7aeff; --accent-ink: #1b1030; }
+:root[data-theme="dark"][data-accent="verde"] { --accent: #78d6a0; --accent-hover: #9ae5b8; --accent-ink: #102418; }
+:root[data-theme="dark"][data-accent="vermelho"] { --accent: #ff9696; --accent-hover: #ffb3b3; --accent-ink: #301314; }
+:root[data-theme="dark"][data-accent="amarelo"] { --accent: #f3d06c; --accent-hover: #f8dd94; --accent-ink: #2c240d; }
+.topbar > .brand, .topbar > .brand:hover { color: var(--ink) !important; }
+:root:not([data-accent="neutro"]) .topbar > .brand > span { color: var(--accent) !important; }
+.case-sidebar .search-wrap { display: flex; align-items: center; width: 100%; min-width: 0; height: 44px; padding: 0 12px; gap: 8px; overflow: hidden; border-radius: 0; box-sizing: border-box; }
+.case-sidebar .search-wrap > span { flex: 0 0 18px; }
+.case-sidebar .search-wrap > input#case-search { flex: 1 1 0; min-width: 0; width: 0; height: 100%; margin: 0; padding: 0; border: 0; border-radius: 0; background: transparent !important; box-shadow: none; }
+.automation-environment-notice { margin: 16px 32px 0; padding: 12px 16px; border-left: 3px solid var(--warning); background: var(--soft); color: var(--ink); font-size: 13px; }
+@media (max-width: 672px) {
+  .top-links > a.automation-nav { display: inline-flex !important; padding: 0 8px; }
+  .top-links .theme-toggle { font-size: 0 !important; min-width: 40px; padding: 0 8px !important; }
+  .top-links .theme-toggle::after { content: '◐'; font-size: 20px; }
+}
 .step-card .observed-area {
   padding: 0 !important;
   border: 0 !important;
