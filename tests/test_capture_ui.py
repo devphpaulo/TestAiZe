@@ -109,9 +109,9 @@ class CaptureUiTests(unittest.TestCase):
         self.host._set_chrome_visible(True)
         return layer
 
-    def test_tools_stay_visible_during_drawing_and_crop_adjustments(self):
+    def test_tools_stay_visible_during_drawing(self):
         self.open_selection()
-        for tool in ("arrow", "rect", "circle", "free", "crop"):
+        for tool in ("arrow", "rect", "circle", "free"):
             with self.subTest(tool=tool):
                 self.host.tool = tool
                 self.host.press((100, 100))
@@ -121,6 +121,41 @@ class CaptureUiTests(unittest.TestCase):
                 self.host.release((170, 160))
                 self.assertTrue(self.host.tools.isVisible())
                 self.assertTrue(self.host.dock.isVisible())
+
+    def test_panels_hide_during_crop_adjustment_and_reappear_at_new_position(self):
+        self.open_selection()
+        for start, end in (((400, 330), (450, 350)), ((150, 150), (170, 170))):
+            with self.subTest(start=start):
+                previous = self.host.tools.pos()
+                self.host.press(start)
+                self.assertFalse(self.host.tools.isVisible())
+                self.assertFalse(self.host.dock.isVisible())
+                self.host.move_to(end)
+                self.app.processEvents()
+                self.assertFalse(self.host.tools.isVisible())
+                self.assertFalse(self.host.dock.isVisible())
+                self.host.release(end)
+                self.app.processEvents()
+                self.assertTrue(self.host.tools.isVisible())
+                self.assertTrue(self.host.dock.isVisible())
+                self.assertNotEqual(self.host.tools.pos(), previous)
+
+    def test_attachment_highlights_only_the_confirmed_step_even_if_refresh_fails(self):
+        self.open_selection()
+        payload = context()
+        payload["steps"] = [
+            {"id": 10, "position": 1, "action": "Login", "selected": True},
+            {"id": 11, "position": 2, "action": "Consulta", "selected": False},
+        ]
+        self.host._apply_context(payload, force_text=True)
+        self.host.api.get.return_value = ({}, 0)
+        self.host.attach()
+        self.assertEqual(self.host.dock.steps.item(0).background().style(), Qt.BrushStyle.NoBrush)
+        self.host.api.post.return_value = ({"ok": True, "step_position": 1}, 200)
+        self.host.attach()
+        self.assertNotEqual(self.host.dock.steps.item(0).background().style(), Qt.BrushStyle.NoBrush)
+        self.assertEqual(self.host.dock.steps.item(1).background().style(), Qt.BrushStyle.NoBrush)
+        self.assertIs(self.host.dock.steps.currentItem(), self.host.dock.steps.item(0))
 
     def test_copy_exports_final_image_then_closes_and_can_start_another_selection(self):
         self.open_selection()
@@ -155,6 +190,12 @@ class CaptureUiTests(unittest.TestCase):
                     self.host.press((50, 50))
                     self.host.move_to((400, 330))
                     self.host.release((400, 330))
+                    self.app.processEvents()
+                    self.host.press((400, 330))
+                    self.host.move_to((420, 340))
+                    self.assertFalse(self.host.tools.isVisible())
+                    self.assertFalse(self.host.dock.isVisible())
+                    self.host.release((420, 340))
                     self.app.processEvents()
                     for panel in (self.host.tools, self.host.dock):
                         self.assertTrue(panel.isVisible())

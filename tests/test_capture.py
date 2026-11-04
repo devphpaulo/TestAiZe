@@ -39,6 +39,7 @@ from testplayer.capture_service import (
     CaptureError,
     cleanup_capture_temporaries,
     commit_capture,
+    load_case_context,
     replace_observed_text,
     save_observed_text,
 )
@@ -238,7 +239,9 @@ class CapturePersistenceTests(unittest.TestCase):
     def test_retest_invalidates_the_old_generation_and_keeps_history(self):
         saved = self._attach("command-run-03", _png((4, 5, 6)))
         evidence_id = saved["evidence_id"]
+        self.assertTrue(load_case_context(self.directory, 1, 10)["steps"][0]["capture_sent"])
         start_case_run(self.directory, 1)
+        self.assertFalse(load_case_context(self.directory, 1, 10)["steps"][0]["capture_sent"])
         with self.assertRaises(StaleExecution):
             self._attach("command-run-04", _png((7, 8, 9)), generation=self.generation, revision=0)
         current = read_session(self.directory)["cases"][0]
@@ -408,6 +411,8 @@ class CaptureRouteTests(unittest.TestCase):
             "image_base64": base64.b64encode(_png((30, 30, 30))).decode("ascii"),
         }
         headers = {"X-Testaize-Capture": self.token}
+        endpoint = "/api/captura/host/contexto"
+        self.assertFalse(self.client.get(endpoint, headers=headers).get_json()["steps"][0]["capture_sent"])
         first = self.client.post("/api/captura/host/anexar", json=body, headers=headers)
         second = self.client.post("/api/captura/host/anexar", json=body, headers=headers)
         self.assertEqual(first.status_code, 200)
@@ -416,6 +421,7 @@ class CaptureRouteTests(unittest.TestCase):
         self.assertTrue(second.get_json()["duplicate"])
         self.assertEqual(first.get_json()["evidence_id"], second.get_json()["evidence_id"])
         self.assertEqual(first.get_json()["status"], "em_andamento")
+        self.assertTrue(self.client.get(endpoint, headers=headers).get_json()["steps"][0]["capture_sent"])
         events = self.client.get("/api/captura/web/eventos?after=0&client_id=player-test", headers={"X-CSRF-Token": csrf})
         self.assertTrue(any(item["type"] == "evidence" for item in events.get_json()["events"]))
         operation = self.client.get(

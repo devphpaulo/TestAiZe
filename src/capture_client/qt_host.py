@@ -22,6 +22,7 @@ from PySide6.QtGui import (
     QImage,
     QKeySequence,
     QPainter,
+    QPalette,
     QPen,
     QPixmap,
 )
@@ -37,6 +38,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QPlainTextEdit,
     QPushButton,
+    QStyledItemDelegate,
     QVBoxLayout,
     QWidget,
 )
@@ -350,6 +352,14 @@ class ToolPanel(QWidget):
             self.host.draft.color = self.host.color
 
 
+class CaptureStepDelegate(QStyledItemDelegate):
+    def initStyleOption(self, option, index) -> None:
+        super().initStyleOption(option, index)
+        if index.data(Qt.ItemDataRole.BackgroundRole) is not None:
+            option.palette.setColor(QPalette.ColorRole.Highlight, QColor("#216840"))
+            option.palette.setColor(QPalette.ColorRole.HighlightedText, QColor("#e6ffed"))
+
+
 class DockPanel(QWidget):
     def __init__(self, host: "CaptureHost") -> None:
         super().__init__()
@@ -361,6 +371,7 @@ class DockPanel(QWidget):
         self.case_label.setWordWrap(True)
         layout.addWidget(self.case_label)
         self.steps = QListWidget()
+        self.steps.setItemDelegate(CaptureStepDelegate(self.steps))
         self.steps.setFixedHeight(140)
         self.steps.itemClicked.connect(self._click_step)
         layout.addWidget(self.steps)
@@ -393,6 +404,12 @@ class DockPanel(QWidget):
 
     def _click_step(self, item: QListWidgetItem) -> None:
         self.host.select_step(int(item.data(Qt.ItemDataRole.UserRole)))
+
+    @staticmethod
+    def mark_evidence_sent(item: QListWidgetItem) -> None:
+        item.setBackground(QColor("#153c29"))
+        item.setForeground(QColor("#a8efbf"))
+        item.setToolTip("Evidência enviada pela captura de tela")
 
 
 class CaptureHost(QObject):
@@ -619,7 +636,10 @@ class CaptureHost(QObject):
             return
         else:
             self.drag = self.tool
-        self._raise_chrome()
+        if live_screen_during(self.drag):
+            self._set_chrome_visible(False)
+        else:
+            self._raise_chrome()
 
     def move_to(self, point: tuple[int, int]) -> None:
         if not self.drag or self.anchor is None or self.base is None:
@@ -821,6 +841,8 @@ class CaptureHost(QObject):
         for step in payload.get("steps") or []:
             item = QListWidgetItem(f"{int(step['position']):02d}  {step.get('action') or 'Passo'}")
             item.setData(Qt.ItemDataRole.UserRole, int(step["id"]))
+            if step.get("capture_sent"):
+                self.dock.mark_evidence_sent(item)
             self.dock.steps.addItem(item)
             if step.get("selected"):
                 self.dock.steps.setCurrentItem(item)
@@ -882,6 +904,11 @@ class CaptureHost(QObject):
         self._attaching = False
         if status == 200 and payload.get("ok"):
             self.draft.finish_command()
+            for index in range(self.dock.steps.count()):
+                item = self.dock.steps.item(index)
+                if item.data(Qt.ItemDataRole.UserRole) == frozen["step_id"]:
+                    self.dock.mark_evidence_sent(item)
+                    break
             self.dock.status.setText(
                 f"Anexado ao passo {payload.get('step_position')}. Continuar editando não altera essa evidência."
             )
@@ -958,7 +985,7 @@ class CaptureHost(QObject):
                 layer.update()
         if not live:
             self._place()
-        self._raise_chrome()
+            self._raise_chrome()
 
     def _set_chrome_visible(self, visible: bool) -> None:
         if not visible:
@@ -970,11 +997,15 @@ class CaptureHost(QObject):
             # Changing a visible tool window's owner can hide its native HWND
             # while QWidget still reports it visible. Bind before showing it.
             panel.winId()
-            panel.windowHandle().setTransientParent(owner)
+            if panel.windowHandle().transientParent() is not owner:
+                panel.windowHandle().setTransientParent(owner)
+            if not panel.isVisible():
+                panel.adjustSize()
+        self._place()
+        for panel in (self.tools, self.dock):
             panel.show()
         _exclude(self.tools)
         _exclude(self.dock)
-        self._place()
         self._raise_chrome()
 
     def _raise_chrome(self) -> None:

@@ -78,7 +78,11 @@ def load_case_context(directory: Path, case_id: int, step_id: int) -> dict:
         if case is None:
             raise CaptureError("INVALID_TARGET", "Caso não encontrado.", 404)
         steps = [dict(row) for row in connection.execute(
-            "SELECT id,position,action FROM steps WHERE case_id=? ORDER BY position", (case_id,)
+            "SELECT s.id,s.position,s.action,EXISTS("
+            "SELECT 1 FROM capture_commands c JOIN evidence e ON e.id=c.evidence_id "
+            "WHERE c.step_id=s.id AND c.execution_generation=?"
+            ") AS capture_sent FROM steps s WHERE s.case_id=? ORDER BY s.position",
+            (case["execution_generation"], case_id),
         )]
         selected = next((item for item in steps if item["id"] == step_id), None)
         if selected is None:
@@ -100,7 +104,7 @@ def load_case_context(directory: Path, case_id: int, step_id: int) -> dict:
         "status": result["status"],
         "steps": [
             {"id": item["id"], "position": item["position"], "action": item["action"],
-             "selected": item["id"] == step_id}
+             "selected": item["id"] == step_id, "capture_sent": bool(item["capture_sent"])}
             for item in steps
         ],
     }
