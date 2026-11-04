@@ -339,3 +339,27 @@
 [data-theme="light"] .report-scope{border-color:#d6dfe7}[data-theme="light"] .report-scope legend{color:#607080}[data-theme="light"] .report-scope label{background:#f6f8fa;border-color:#ccd6df}[data-theme="light"] .report-scope label:has(input:checked){background:var(--accent-soft,#eaf1f8);border-color:var(--accent-border,#8baac4)}[data-theme="light"] .report-scope small{color:#5c6c79}[data-theme="light"] .failure-actions{background:#fff2f3;border-color:#c77b80}[data-theme="light"] .failure-actions strong{color:#8c3039}[data-theme="light"] .failure-actions small{color:#78565a}
 @media(max-width:680px){.report-scope{grid-template-columns:1fr;margin:0 17px}.failure-actions{align-items:stretch;flex-direction:column}.failure-action-buttons,.failure-action-buttons form,.failure-action-buttons .button{width:100%}}
 
+
+/* Bug surfaces reuse the application's panels, controls and Kanban cards. */
+.bugs-board { grid-template-columns: repeat(4, minmax(220px, 1fr)); }
+.bug-page { max-width: 1150px; margin: auto; }
+.bug-panel { padding: 24px; margin: 20px 0; border: 1px solid var(--border, #6665); border-radius: 8px; background: var(--panel, transparent); }
+.bug-panel fieldset { border: 0; padding: 0; min-width: 0; }
+.bug-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-bottom: 24px; }
+.bug-fields label, .bug-proof label { display: grid; gap: 8px; }
+.bug-fields textarea, .bug-proof textarea { min-height: 100px; width: 100%; }
+#bug-editor { min-height: 240px; padding: 18px; border: 1px solid var(--border, #666); }
+#bug-editor p { white-space: pre-wrap; }
+#bug-editor .rich-image { margin: 16px 0; }
+#bug-editor .rich-image img { max-width: 100%; display: block; }
+.bug-image-controls { display: flex; flex-wrap: wrap; gap: 12px; padding: 8px; }
+.bug-proof { display: grid; gap: 14px; margin: 20px 0; }
+.bug-proofs img { max-width: 100%; max-height: 350px; }
+.bug-proofs article { padding: 16px 0; border-bottom: 1px solid var(--border, #6665); }
+.bug-link-dialog { width: min(720px, 92vw); max-height: 85vh; overflow: auto; padding: 26px; color: inherit; background: var(--bg, #202020); }
+.bug-link-dialog::backdrop { background: #0009; }
+#bug-link-cases label { display: block; padding: 10px; }
+#bug-feedback:not(:empty) { border-left: 3px solid #da1e28; padding: 12px; }
+@media(max-width: 740px) { .bug-fields { grid-template-columns: 1fr; } .bugs-board { grid-template-columns: repeat(4, 260px); } }
+
+.bug-page .observed-actions { display: flex; flex-wrap: wrap; }

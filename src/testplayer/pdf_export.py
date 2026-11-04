@@ -152,7 +152,14 @@ def generate_pdf(directory: Path, selected_case_ids: set[int] | None = None,
 
     html = render_report_html(directory, selected, include_history, report_kind=report_kind,
                               print_all=True, pdf_mode=True)
-    report = directory / "relatorios" / output_name
+    return render_html_to_pdf(html, directory / "relatorios" / output_name)
+
+
+def render_html_to_pdf(html: str, report: Path) -> Path:
+    """Render ready HTML and atomically publish a validated PDF."""
+    report = Path(report)
+    if report.suffix.lower() != '.pdf':
+        raise ValueError('Nome do relatório inválido.')
     report.parent.mkdir(parents=True, exist_ok=True)
     # Remove temporary files left by releases that used fixed intermediate names.
     _safe_unlink(report.with_suffix(".rendered.pdf.tmp"))
@@ -160,6 +167,8 @@ def generate_pdf(directory: Path, selected_case_ids: set[int] | None = None,
     rendered = report.parent / f".{report.stem}-{token}.rendered.pdf.tmp"
     try:
         _render_html_with_browser(html, rendered)
+        if not _wait_for_valid_pdf(rendered, 0):
+            raise RuntimeError('PDF gerado está incompleto ou ilegível.')
         os.replace(rendered, report)
     finally:
         _safe_unlink(rendered)

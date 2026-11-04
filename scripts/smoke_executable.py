@@ -30,6 +30,12 @@ def check(executable: Path) -> None:
                         assert response.status == 200
                     with urllib.request.urlopen(origin, timeout=2) as response:
                         assert response.status == 200
+                    with urllib.request.urlopen(origin + '/bugs', timeout=2) as response:
+                        assert 'Bugs por estado' in response.read().decode('utf-8')
+                    for asset in ('bugs.js', 'document-editor.js'):
+                        with urllib.request.urlopen(origin + '/static/' + asset, timeout=2) as response:
+                            assert response.status == 200 and response.read()
+                    assert (root / 'bugs' / 'bugs.sqlite').is_file()
                     capture_log = (root / "logs/captura.log").read_text(encoding="utf-8")
                     if "host de captura pronto" in capture_log:
                         print("Executável: servidor local e host Qt de captura iniciados.")

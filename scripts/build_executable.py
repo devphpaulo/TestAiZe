@@ -1,6 +1,7 @@
 """Build the Windows executable from explicit runtime resources."""
 
 from pathlib import Path
+import os
 import sys
 
 import PyInstaller.__main__
@@ -11,6 +12,11 @@ from testplayer.version import PACKAGE_VERSION
 
 
 def main() -> None:
+    # Qt uses the Windows ICU ABI. Developer tools (e.g. Poppler) can put an
+    # incompatible icuuc.dll on PATH; prefer the OS libraries during analysis.
+    if os.name == 'nt':
+        system_libraries = Path(os.environ['SystemRoot']) / 'System32'
+        os.environ['PATH'] = str(system_libraries) + os.pathsep + os.environ.get('PATH', '')
     recorder = ROOT / "src" / "playwright-recorder"
     resources = [
         (ROOT / "src/testplayer/templates", "testplayer/templates"),

@@ -11,6 +11,7 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='carbon.css') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='ui-fixes.css') }}">
+  <script defer src="{{ url_for('static', filename='document-editor.js') }}"></script>
   <script defer src="{{ url_for('static', filename='app.js') }}"></script>
   {% block head %}{% endblock %}
 </head>
@@ -22,6 +23,7 @@
     </a>
     <nav class="top-links" aria-label="Navegação principal">
       <a href="{{ url_for('home') }}">Sessões</a>
+      <a href="{{ url_for('bugs.board') }}">Bugs</a>
       {% if automation_available %}<a class="automation-nav" href="{{ url_for('automation') }}" {% if request.path.startswith('/iniciativas/automacao') %}aria-current="page"{% endif %}>Automação</a>{% endif %}
       {% block header_actions %}{% endblock %}
       <div class="accent-picker" id="accent-picker">

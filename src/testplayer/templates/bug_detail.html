@@ -1,0 +1,30 @@
+{% extends 'base.html' %}
+{% block title %}{{ bug.title if bug else 'Reportar bug' }} · TestAíZé{% endblock %}
+{% block head %}<script defer src="{{ url_for('static', filename='bugs.js') }}"></script>{% endblock %}
+{% block content %}
+<main class="kanban-page bug-page" data-bug-page data-session-id="{{ session_id }}" data-origin-case="{{ origin_case_id or '' }}" data-bug-id="{{ bug.id if bug else '' }}">
+  <script type="application/json" id="bug-data">{{ bug|tojson }}</script>
+  <div class="kanban-intro"><div><a class="back-link" href="{{ url_for('bugs.session_bugs', session_id=session_id) if session_id else url_for('bugs.board') }}">← {{ 'Bugs da sessão' if session_id else 'Kanban de bugs' }}</a><div class="eyebrow">{{ ('BUG #' ~ bug.id[:8]) if bug else 'NOVO BUG' }}</div><h1>{{ bug.title if bug else 'Reportar bug' }}</h1><p>{% if bug %}{{ bug.status }} · Origem {{ bug.origin_type }} · sessão #{{ bug.origin_session_id[:8] }}{% else %}Descreva o fluxo e os passos no mesmo documento. Não é preciso selecionar um caso.{% endif %}</p></div>{% if bug %}<form method="post" action="{{ url_for('bugs.pdf', bug_id=bug.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="button button-secondary">Exportar PDF do bug</button></form>{% endif %}</div>
+  <p id="bug-feedback" role="alert" aria-live="polite"></p>
+  <form id="bug-form" class="bug-panel">
+    <fieldset {% if bug and bug.status == 'finalizado' %}disabled{% endif %}>
+      <div class="bug-fields"><label>Nome do bug<input name="title" required maxlength="20000" value="{{ bug.title if bug else '' }}"></label><label>Severidade<input name="severity" required maxlength="20000" value="{{ bug.severity if bug else '' }}"></label><label>Resultado obtido<textarea name="actual" required maxlength="20000">{{ bug.actual if bug else '' }}</textarea></label><label>Resultado esperado<textarea name="expected" required maxlength="20000">{{ bug.expected if bug else '' }}</textarea></label></div>
+      <label id="bug-document-label">Fluxo, passo a passo e evidências de abertura</label>
+      <p>Escreva ou cole imagens no ponto desejado. Ajuste a largura de cada imagem pelo controle abaixo dela.</p>
+      <div id="bug-editor" class="rich-editor" data-rich-editor contenteditable="{{ 'false' if bug and bug.status == 'finalizado' else 'true' }}" role="textbox" aria-multiline="true" aria-labelledby="bug-document-label"></div>
+      {% if not bug or bug.status != 'finalizado' %}<div class="observed-actions"><label class="button button-secondary">Adicionar imagem<input id="bug-images" type="file" accept="image/png,image/jpeg,image/webp" multiple hidden></label><button class="button button-primary" type="submit">{{ 'Salvar alterações' if bug else 'Criar bug' }}</button></div>{% endif %}
+    </fieldset>
+  </form>
+  {% if bug %}
+  <section class="bug-panel"><h2>Reteste</h2><p>Finalizar mantém o status dos casos. Ajuste manualmente no Player quando não houver outro vínculo ativo.</p>
+    <div class="observed-actions">{% if bug.status in ['aberto','reaberto'] %}<button type="button" class="button button-primary" data-transition="em_reteste">Iniciar reteste</button>{% elif bug.status == 'em_reteste' %}<button type="button" class="button button-secondary" data-transition="reaberto">Segue bug</button><button type="button" class="button button-primary" data-transition="finalizado">Finalizar bug</button>{% endif %}</div>
+    {% if bug.status == 'em_reteste' %}<form id="bug-proof" class="bug-proof"><label>Prova deste reteste<textarea name="note" maxlength="20000" placeholder="Descreva o que foi verificado"></textarea></label><label>Ou adicione uma imagem<input name="imagem" type="file" accept="image/png,image/jpeg,image/webp"></label><button class="button button-secondary">Salvar prova atual</button></form>{% endif %}
+    <div class="bug-proofs">{% for item in bug.evidence if item.kind == 'reteste' %}<article><strong>{{ 'Reteste atual' if bug.status == 'em_reteste' and item.retest_token == bug.current_retest_token else 'Prova preservada' }}</strong><p>{{ item.note }}</p>{% if item.relative_path %}<img src="{{ url_for('bugs.image', bug_id=bug.id, evidence_id=item.id) }}" alt="Prova de reteste">{% endif %}<small>{{ item.created_at }}</small></article>{% else %}<p>Nenhuma prova de reteste.</p>{% endfor %}</div>
+  </section>
+  <section class="bug-panel"><h2>Casos vinculados</h2>{% if session_id and bug.status != 'finalizado' %}<button type="button" class="button button-secondary" id="bug-link-open">Vincular casos da sessão atual</button>{% elif not session_id %}<p>Abra uma sessão e selecione este bug na área Bugs para vincular casos.</p>{% endif %}
+    <ul>{% for link in bug.links %}<li>Sessão #{{ link.session_id[:8] }} · caso {{ link.case_id }} · {{ 'Ativo' if link.active else 'Inativo' }} {% if link.active %}<button type="button" class="button button-ghost" data-unlink-session="{{ link.session_id }}" data-unlink-case="{{ link.case_id }}">Desvincular</button>{% endif %}</li>{% else %}<li>Sem vínculos.</li>{% endfor %}</ul>
+  </section>
+  <dialog id="bug-link-dialog" class="bug-link-dialog" aria-labelledby="bug-link-title"><h2 id="bug-link-title">Vincular casos</h2><p>Selecione casos ou pastas desta sessão. Casos aprovados são recusados.</p><div id="bug-link-cases"></div><p id="bug-link-feedback" role="alert"></p><div class="observed-actions"><button type="button" class="button button-secondary" id="bug-link-close">Fechar</button><button type="button" class="button button-primary" id="bug-link-confirm">Confirmar vínculos</button></div></dialog>
+  {% endif %}
+</main>
+{% endblock %}

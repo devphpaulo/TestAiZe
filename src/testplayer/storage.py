@@ -12,6 +12,9 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from urllib.parse import unquote, urlsplit
 
+from .bugs_coordinator import coordinated, root_for, root_operation, session_operation, StateConflict
+from .bugs_store import BugsStore
+
 from .attachments import attachment_content_type, attachment_extension
 from .bug_prompt import DEFAULT_PROMPT, PROMPT_FILENAME
 
@@ -25,7 +28,7 @@ CREATE TABLE IF NOT EXISTS cases (
   source_status TEXT NOT NULL, priority TEXT NOT NULL, folder TEXT NOT NULL,
   manual_status TEXT NOT NULL DEFAULT '', comment TEXT NOT NULL DEFAULT '',
   comment_doc TEXT, precondition_doc TEXT, precondition_note_mode INTEGER NOT NULL DEFAULT 0,
-  execution_generation TEXT NOT NULL DEFAULT ''
+  execution_generation TEXT NOT NULL DEFAULT '', status_revision INTEGER NOT NULL DEFAULT 0
 );
 CREATE TABLE IF NOT EXISTS steps (
   id INTEGER PRIMARY KEY, case_id INTEGER NOT NULL REFERENCES cases(id),
@@ -112,13 +115,14 @@ def now() -> str:
 
 
 def ensure_root(root: Path) -> None:
-    for name in ("rascunhos", "sessoes", "excluidas", "temporarios", "backups", "logs", "config"):
+    for name in ("rascunhos", "sessoes", "excluidas", "temporarios", "backups", "logs", "config", "bugs"):
         (root / name).mkdir(parents=True, exist_ok=True)
     prompt_path = root / PROMPT_FILENAME
     if not prompt_path.exists():
         prompt_path.write_text(DEFAULT_PROMPT, encoding="utf-8")
 
 
+@root_operation
 def migrate_sessions(root: Path) -> None:
     """Add columns and case evidence to sessions created by earlier versions."""
     paths = list((root / "rascunhos").glob("*/sessao.sqlite"))
@@ -139,6 +143,8 @@ def migrate_sessions(root: Path) -> None:
                         connection.execute("ALTER TABLE cases ADD COLUMN precondition_doc TEXT")
                     if "precondition_note_mode" not in columns:
                         connection.execute("ALTER TABLE cases ADD COLUMN precondition_note_mode INTEGER NOT NULL DEFAULT 0")
+                    if "status_revision" not in columns:
+                        connection.execute("ALTER TABLE cases ADD COLUMN status_revision INTEGER NOT NULL DEFAULT 0")
                     result_columns = {row[1] for row in connection.execute("PRAGMA table_info(results)")}
                     if "status_changed_at" not in result_columns:
                         connection.execute("ALTER TABLE results ADD COLUMN status_changed_at TEXT")
@@ -240,6 +246,13 @@ def migrate_sessions(root: Path) -> None:
 
 @contextmanager
 def db(directory: Path):
+    with coordinated(root_for(directory)):
+        with _session_db(directory) as connection:
+            yield connection
+
+
+@contextmanager
+def _session_db(directory: Path):
     connection = sqlite3.connect(directory / "sessao.sqlite", timeout=10)
     connection.row_factory = sqlite3.Row
     connection.execute("PRAGMA foreign_keys=ON")
@@ -407,28 +420,8 @@ def find_directory(root: Path, session_id: str) -> Path | None:
 
 
 def remove_session(root: Path, session_id: str, delete_files: bool) -> Path | None:
-    """Hide an active session by moving it to excluidas, or delete its verified directory."""
-    directory = find_directory(root, session_id)
-    if directory is None:
-        raise LookupError("Sessão não encontrada.")
-    source = directory.resolve()
-    draft_root = (root / "rascunhos").resolve()
-    completed_root = (root / "sessoes").resolve()
-    if directory.is_symlink() or not (source.parent == draft_root or source.parent.parent == completed_root):
-        raise ValueError("Pasta da sessão fora da área de dados.")
-    with db(source) as connection:
-        if get_meta(connection).get("id") != session_id:
-            raise ValueError("Identidade da sessão inválida.")
-    if delete_files:
-        shutil.rmtree(source)
-        return None
-    excluded_root = (root / "excluidas").resolve()
-    excluded_root.mkdir(parents=True, exist_ok=True)
-    target = (excluded_root / session_id).resolve()
-    if not target.is_relative_to(excluded_root) or target == excluded_root or target.exists():
-        raise FileExistsError("Já existe uma sessão com esse identificador em Excluídas.")
-    source.rename(target)
-    return target
+    from .bugs_service import remove_session_recoverably
+    return remove_session_recoverably(root, session_id, delete_files)
 
 
 def normalize_document(blocks: object, evidence_ids: set[str]) -> tuple[str, str]:
@@ -528,6 +521,7 @@ def _hydrate_case(connection: sqlite3.Connection, case: dict) -> dict:
     return case
 
 
+@session_operation
 def read_session(directory: Path) -> dict:
     folder_links = get_folder_links(directory)
     with db(directory) as connection:
@@ -655,6 +649,7 @@ def _stored_document_blocks(raw: str | None, fallback: str, evidence: list[dict]
     return blocks
 
 
+@session_operation
 def sync_step_evidence(directory: Path, source_step_id: int, target_step_ids: list[int],
                        replicate_status: bool = False) -> dict:
     if (not isinstance(target_step_ids, list) or not target_step_ids
@@ -665,6 +660,7 @@ def sync_step_evidence(directory: Path, source_step_id: int, target_step_ids: li
     temporary_files: list[Path] = []
     created_files: list[Path] = []
     target_case_ids: set[int] = set()
+    active = active_bug_cases(directory)
     with db(directory) as connection:
         connection.execute("BEGIN IMMEDIATE")
         try:
@@ -750,6 +746,7 @@ def sync_step_evidence(directory: Path, source_step_id: int, target_step_ids: li
                         "UPDATE results SET actual_doc=?,revision=revision+1 WHERE step_id=?",
                         (document, target_step_id),
                     )
+            reconcile_bug_status(connection, active, target_case_ids)
             connection.commit()
         except Exception:
             connection.rollback()
@@ -759,7 +756,7 @@ def sync_step_evidence(directory: Path, source_step_id: int, target_step_ids: li
     record = read_session(directory)
     statuses = {case["id"]: case["status"] for case in record["cases"] if case["id"] in target_case_ids}
     return {"ok": True, "synced": len(target_step_ids), "replicated_status": replicate_status,
-            "case_statuses": statuses}
+            "case_statuses": statuses, "case_states": {i: case_state(directory, i) for i in target_case_ids}}
 
 
 def list_sessions(root: Path) -> list[dict]:
@@ -779,6 +776,7 @@ def list_sessions(root: Path) -> list[dict]:
     return sorted(found, key=lambda item: item.get("finalized_at") or item.get("created_at", ""), reverse=True)
 
 
+@session_operation
 def save_result(directory: Path, step_id: int, status: str, actual: str, comment: str | None = None,
                 status_action: bool = False, actual_doc: object | None = None,
                 expected_revision: int | None = None, expected_generation: str | None = None) -> tuple[str | None, int]:
@@ -788,6 +786,7 @@ def save_result(directory: Path, step_id: int, status: str, actual: str, comment
         raise ValueError("Resultado ou comentário excede 20.000 caracteres.")
     if expected_revision is not None and (type(expected_revision) is not int or expected_revision < 0):
         raise ValueError("Revisão do resultado inválida.")
+    active = active_bug_cases(directory)
     with db(directory) as connection:
         connection.execute("BEGIN IMMEDIATE")
         try:
@@ -830,6 +829,8 @@ def save_result(directory: Path, step_id: int, status: str, actual: str, comment
             saved = connection.execute(
                 "SELECT status_changed_at,revision FROM results WHERE step_id=?", (step_id,)
             ).fetchone()
+            case_row = connection.execute("SELECT case_id FROM steps WHERE id=?", (step_id,)).fetchone()
+            reconcile_bug_status(connection, active, {case_row[0]})
             connection.commit()
             return saved["status_changed_at"], int(saved["revision"])
         except Exception:
@@ -837,14 +838,20 @@ def save_result(directory: Path, step_id: int, status: str, actual: str, comment
             raise
 
 
-def save_case(directory: Path, case_id: int, status: str, comment: str, comment_doc: object | None = None,
+@session_operation
+def save_case(directory: Path, case_id: int, status: str | None, comment: str, comment_doc: object | None = None,
               precondition_doc: object | None = None) -> None:
-    if status not in STATUSES | {""}:
+    if status is not None and (not isinstance(status, str) or status not in STATUSES | {""}):
         raise ValueError("Status de caso inválido.")
     if len(comment) > 20_000:
         raise ValueError("Comentário excede 20.000 caracteres.")
     with db(directory) as connection:
         with connection:
+            current = connection.execute("SELECT manual_status FROM cases WHERE id=?", (case_id,)).fetchone()
+            if current is None:
+                raise LookupError("Caso não encontrado.")
+            # Legacy internal callers may supply only the unchanged status. Text never writes status.
+            legacy_status_conflict = status is not None and status != current[0]
             normalized_doc = None
             if comment_doc is not None:
                 ids = {row[0] for row in connection.execute(
@@ -856,17 +863,22 @@ def save_case(directory: Path, case_id: int, status: str, comment: str, comment_
                     "SELECT id FROM case_evidence WHERE case_id=? AND scope='precondition'", (case_id,))}
                 normalized_precondition, _ = normalize_document(precondition_doc, ids)
             cursor = connection.execute(
-                "UPDATE cases SET manual_status=?,comment=?,comment_doc=COALESCE(?,comment_doc),"
+                "UPDATE cases SET comment=?,comment_doc=COALESCE(?,comment_doc),"
                 "precondition_doc=COALESCE(?,precondition_doc),"
                 "precondition_note_mode=CASE WHEN ? IS NOT NULL THEN 1 ELSE precondition_note_mode END WHERE id=?",
-                (status, comment, normalized_doc, normalized_precondition, normalized_precondition, case_id),
+                (comment, normalized_doc, normalized_precondition, normalized_precondition, case_id),
             )
             if cursor.rowcount != 1:
                 raise LookupError("Caso não encontrado.")
 
+    if legacy_status_conflict:
+        raise StateConflict("Texto salvo. Use a ação exclusiva de status. Recarregue a página.")
 
+
+@session_operation
 def start_case_run(directory: Path, case_id: int) -> int:
     """Archive one case's current execution and reset only that case in the same session."""
+    active = active_bug_cases(directory)
     with db(directory) as connection:
         connection.execute("BEGIN IMMEDIATE")
         try:
@@ -908,9 +920,9 @@ def start_case_run(directory: Path, case_id: int) -> int:
                 (case_id,),
             )
             connection.execute(
-                "UPDATE cases SET manual_status='',comment='',comment_doc=NULL,precondition_doc=NULL,"
+                "UPDATE cases SET manual_status=?,status_revision=status_revision+1,comment='',comment_doc=NULL,precondition_doc=NULL,"
                 "precondition_note_mode=1,execution_generation=? WHERE id=?",
-                (uuid.uuid4().hex, case_id),
+                ("bloqueado" if case_id in active else "", uuid.uuid4().hex, case_id),
             )
             connection.execute(
                 "DELETE FROM capture_commands WHERE step_id IN (SELECT id FROM steps WHERE case_id=?)",
@@ -923,6 +935,7 @@ def start_case_run(directory: Path, case_id: int) -> int:
             raise
 
 
+@root_operation
 def finalize(root: Path, directory: Path) -> Path:
     with db(directory) as connection:
         with connection:
@@ -937,6 +950,7 @@ def finalize(root: Path, directory: Path) -> Path:
     return promote(root, directory)
 
 
+@root_operation
 def promote(root: Path, directory: Path) -> Path:
     with db(directory) as connection:
         meta = get_meta(connection)
@@ -952,6 +966,7 @@ def promote(root: Path, directory: Path) -> Path:
     return target
 
 
+@root_operation
 def recover_promotions(root: Path) -> None:
     for db_path in (root / "rascunhos").glob("*/sessao.sqlite"):
         directory = db_path.parent
@@ -964,6 +979,7 @@ def recover_promotions(root: Path) -> None:
             continue
 
 
+@root_operation
 def rerun(root: Path, source_dir: Path) -> str:
     with db(source_dir) as source:
         source_meta = get_meta(source)
@@ -1016,3 +1032,49 @@ def rerun(root: Path, source_dir: Path) -> str:
     except Exception:
         shutil.rmtree(directory, ignore_errors=True)
         raise
+
+
+@session_operation
+def active_bug_cases(directory: Path) -> set[int]:
+    with _session_db(directory) as connection:
+        session_id = get_meta(connection).get('id')
+    return BugsStore(root_for(directory)).active_cases(session_id)
+
+
+def reconcile_bug_status(connection, active, case_ids):
+    for case_id in active.intersection(case_ids):
+        failed = connection.execute("SELECT 1 FROM results r JOIN steps s ON s.id=r.step_id "
+                                    "WHERE s.case_id=? AND r.status='reprovado'", (case_id,)).fetchone()
+        current = connection.execute('SELECT manual_status FROM cases WHERE id=?', (case_id,)).fetchone()[0]
+        status = 'reprovado' if failed or current == 'reprovado' else 'bloqueado'
+        connection.execute('UPDATE cases SET manual_status=?,status_revision=status_revision+1 WHERE id=? AND manual_status<>?',
+                           (status, case_id, status))
+
+
+@session_operation
+def set_case_status(directory, case_id, status, expected_revision, expected_generation):
+    if not isinstance(status, str) or status not in STATUSES | {''} or type(expected_revision) is not int or not isinstance(expected_generation, str):
+        raise ValueError('Envie status, revisão e geração válidos.')
+    active = active_bug_cases(directory)
+    with db(directory) as connection:
+        connection.execute('BEGIN IMMEDIATE')
+        row = connection.execute('SELECT * FROM cases WHERE id=?', (case_id,)).fetchone()
+        if row is None:
+            raise LookupError('Caso não encontrado.')
+        if row['status_revision'] != expected_revision or row['execution_generation'] != expected_generation:
+            raise StateConflict('Status ou execução mudou. Recarregue a página.')
+        if case_id in active and status not in ('reprovado', 'bloqueado'):
+            raise StateConflict('Há bug ativo vinculado. Mantenha bloqueado ou reprovado.')
+        connection.execute('UPDATE cases SET manual_status=?,status_revision=status_revision+1 WHERE id=?', (status, case_id))
+        reconcile_bug_status(connection, active, {case_id})
+        connection.commit()
+    return case_state(directory, case_id)
+
+
+@session_operation
+def case_state(directory, case_id):
+    record = read_session(directory)
+    case = next((c for c in record['cases'] if c['id'] == case_id), None)
+    if case is None:
+        raise LookupError('Caso não encontrado.')
+    return {k: case[k] for k in ('manual_status', 'status', 'status_revision', 'execution_generation')} | {'counts': record['counts']}

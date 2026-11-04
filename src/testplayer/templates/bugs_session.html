@@ -1,0 +1,9 @@
+{% extends 'base.html' %}
+{% block title %}Bugs da sessão · TestAíZé{% endblock %}
+{% block content %}
+<main class="kanban-page">
+  <div class="kanban-intro"><div><a class="back-link" href="{{ url_for('player', session_id=record.meta.id) }}">← Player</a><h1>Bugs da sessão</h1><p>{{ record.meta.source_name }} · #{{ record.meta.id[:8] }}</p></div><a class="button button-primary" href="{{ url_for('bugs.new', session_id=record.meta.id) }}">Reportar bug</a></div>
+  <section class="bug-panel"><h2>Vinculados</h2>{% for bug in bugs %}<article class="kanban-card"><h3><a href="{{ url_for('bugs.detail', bug_id=bug.id, session_id=record.meta.id) }}">{{ bug.title }}</a></h3><p>{{ bug.status }} · {{ 'Vínculo ativo' if bug.active else 'Vínculo inativo' }}</p></article>{% else %}<p>Nenhum bug vinculado a esta sessão.</p>{% endfor %}</section>
+  <section class="bug-panel"><h2>Vincular bug existente</h2><p>Abra o bug para selecionar casos desta sessão.</p>{% if record.meta.state == 'concluida' %}<p>Sessão concluída: novos vínculos indisponíveis.</p>{% else %}<ul>{% for bug in available if bug.status != 'finalizado' %}<li><a href="{{ url_for('bugs.detail', bug_id=bug.id, session_id=record.meta.id) }}">{{ bug.title }}</a> · {{ bug.status }}</li>{% else %}<li>Nenhum bug disponível.</li>{% endfor %}</ul>{% endif %}</section>
+</main>
+{% endblock %}

@@ -1,0 +1,12 @@
+{% extends 'base.html' %}
+{% block title %}Bugs · TestAíZé{% endblock %}
+{% block content %}
+<main class="kanban-page">
+  <div class="kanban-intro"><div><div class="eyebrow">REPORT DE BUGS</div><h1>Bugs por estado</h1><p>Registros globais, preservados mesmo após excluir uma sessão. Para reportar ou vincular, abra a sessão desejada.</p></div><a class="button button-secondary" href="{{ url_for('home') }}">Abrir sessões</a></div>
+  <div class="kanban-board bugs-board">
+    {% for state, label, bugs in columns %}<section class="kanban-column"><div class="kanban-column-head"><h2>{{ label }}</h2><b>{{ bugs|length }}</b></div><div class="kanban-stack">
+      {% for bug in bugs %}<article class="kanban-card"><span class="kanban-case-index">BUG #{{ bug.id[:8] }}</span><h3><a href="{{ url_for('bugs.detail', bug_id=bug.id) }}">{{ bug.title }}</a></h3><p>{{ bug.severity }}</p><small>{{ bug.created_at[:16].replace('T',' ') }}</small></article>{% else %}<p class="kanban-empty">Nenhum bug neste estado.</p>{% endfor %}
+    </div></section>{% endfor %}
+  </div>
+</main>
+{% endblock %}

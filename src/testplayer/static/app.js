@@ -240,6 +240,7 @@
   const versions = new Map();
   const caseTimers = new Map();
   const caseInFlight = new Map();
+  const statusInFlight = new Map();
   const caseVersions = new Map();
   const pendingUploads = new Set();
   const folderGroups = [...document.querySelectorAll('[data-folder-group]')];
@@ -987,28 +988,7 @@
   });
   updateSyncActions();
 
-  function serializeEditor(editor) {
-    const blocks = [];
-    function collectNode(node) {
-      if (node.nodeType === Node.TEXT_NODE) {
-        if (node.textContent.length) blocks.push({ type: 'text', text: node.textContent });
-        return;
-      }
-      if (node.nodeType !== Node.ELEMENT_NODE) return;
-      if (node.matches('.rich-image')) {
-        blocks.push({ type: 'image', id: node.dataset.evidenceId, width: Number(node.dataset.width) || 100 });
-      } else if (node.matches('p,div')) {
-        if (node.querySelector('.rich-image')) node.childNodes.forEach(collectNode);
-        else blocks.push({ type: 'text', text: node.innerText.replace(/\r/g, '').replace(/\n$/, '') });
-      } else if (node.matches('br')) {
-        blocks.push({ type: 'text', text: '' });
-      } else if (!node.matches('script,style')) {
-        node.childNodes.forEach(collectNode);
-      }
-    }
-    editor.childNodes.forEach(collectNode);
-    return blocks.length ? blocks : [{ type: 'text', text: '' }];
-  }
+  function serializeEditor(editor) { return TestaizeDocument.serialize(editor); }
   function plainText(blocks) { return blocks.filter(block => block.type === 'text').map(block => block.text).join('\n'); }
   function collect(card) {
     const blocks = serializeEditor(card.querySelector('[data-rich-editor]'));
@@ -1037,6 +1017,7 @@
         if (String(card.dataset.resultRevision) !== String(result.revision)) card.dataset.revisionConflict = 'true';
       }
       if (!response.ok) throw new Error(result.error || 'Falha ao salvar.');
+      Object.entries(result.case_states || {}).forEach(([id, state]) => applyCaseState(views.find(view => view.dataset.caseView === id), state));
       if (Number.isInteger(result.revision)) card.dataset.resultRevision = String(result.revision);
       card.dataset.revisionConflict = 'false';
       if (result.status_changed_at) {
@@ -1092,18 +1073,20 @@
   });
   async function persistCase(view) {
     const id = view.dataset.caseView;
+    if (statusInFlight.has(id)) await statusInFlight.get(id);
+    if (statusInFlight.has(id)) await statusInFlight.get(id);
     if (caseTimers.has(id)) { clearTimeout(caseTimers.get(id)); caseTimers.delete(id); }
     if (caseInFlight.has(id)) { try { await caseInFlight.get(id); } catch (_) { /* Save the latest edit. */ } }
     const version = caseVersions.get(id) || 0;
     const promise = (async () => {
       const response = await fetch(view.dataset.caseSaveUrl, {
         method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
-        body: JSON.stringify({ status: view.dataset.manualStatus,
-                               comment: plainText(serializeEditor(view.querySelector('.case-comment [data-rich-editor]'))),
+        body: JSON.stringify({ comment: plainText(serializeEditor(view.querySelector('.case-comment [data-rich-editor]'))),
                                comment_doc: serializeEditor(view.querySelector('.case-comment [data-rich-editor]')),
                                precondition_doc: serializeEditor(view.querySelector('.precondition [data-rich-editor]')) })
       });
       const result = await response.json().catch(() => ({}));
+      applyCaseState(view, result);
       if (!response.ok) throw new Error(result.error || 'Falha ao salvar o caso.');
       return version;
     })();
@@ -1129,27 +1112,47 @@
     if (caseTimers.has(id)) clearTimeout(caseTimers.get(id));
     caseTimers.set(id, setTimeout(() => { persistCase(view).catch(() => {}); }, 550));
   }
-  views.forEach(view => {
+  function applyCaseState(view, state) {
+    if (!view || !Number.isInteger(state.status_revision)) return;
+    if (state.execution_generation !== view.dataset.executionGeneration) {
+      setSaveState('Outra execução foi iniciada. Recarregue a página.', true);
+      return;
+    }
+    if (state.status_revision < Number(view.dataset.statusRevision || 0)) return;
+    view.dataset.statusRevision = String(state.status_revision);
+    view.dataset.manualStatus = state.manual_status;
     const row = view.querySelector('.case-status-buttons');
+    selectIcon(row, [...row.querySelectorAll('button')].find(button => button.dataset.value === state.manual_status) || null);
     const automatic = view.querySelector('.auto-status-button');
-    row.querySelectorAll('.status-icon-button').forEach(button => button.addEventListener('click', () => {
-      view.dataset.manualStatus = button.dataset.value;
-      selectIcon(row, button);
-      automatic.classList.remove('selected');
-      automatic.setAttribute('aria-pressed', 'false');
-      updateSummary();
-      renderMiniPlayer();
-      queueCase(view);
-    }));
-    automatic.addEventListener('click', () => {
-      view.dataset.manualStatus = '';
-      selectIcon(row, null);
-      automatic.classList.add('selected');
-      automatic.setAttribute('aria-pressed', 'true');
-      updateSummary();
-      renderMiniPlayer();
-      queueCase(view);
+    automatic.classList.toggle('selected', !state.manual_status);
+    automatic.setAttribute('aria-pressed', String(!state.manual_status));
+    updateSummary(); renderMiniPlayer();
+  }
+  function persistStatus(view, status) {
+    const id = view.dataset.caseView;
+    if (statusInFlight.has(id)) return statusInFlight.get(id);
+    const buttons = [...view.querySelectorAll('.case-status-buttons button, .auto-status-button')];
+    buttons.forEach(button => { button.disabled = true; });
+    const task = (async () => {
+      const response = await fetch(view.dataset.caseSaveUrl + '/status', {
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
+        body: JSON.stringify({status, expected_revision: Number(view.dataset.statusRevision || 0), expected_generation: view.dataset.executionGeneration})
+      });
+      const result = await response.json();
+      applyCaseState(view, result);
+      if (!response.ok) throw new Error(result.error || 'Falha ao alterar status.');
+      setSaveState('Tudo salvo');
+    })();
+    statusInFlight.set(id, task);
+    task.catch(error => { setSaveState(error.message, true); }).finally(() => {
+      if (statusInFlight.get(id) === task) statusInFlight.delete(id);
+      buttons.forEach(button => { button.disabled = false; });
     });
+    return task;
+  }
+  views.forEach(view => {
+    view.querySelectorAll('.case-status-buttons button').forEach(button => button.addEventListener('click', () => persistStatus(view, button.dataset.value)));
+    view.querySelector('.auto-status-button').addEventListener('click', () => persistStatus(view, ''));
   });
   async function flushView(view) {
     await flushPendingMedia();
@@ -1158,6 +1161,7 @@
       if (timers.has(id) || inFlight.has(id)) await persist(card);
     }
     const id = view.dataset.caseView;
+    if (statusInFlight.has(id)) await statusInFlight.get(id);
     if (caseTimers.has(id) || caseInFlight.has(id)) await persistCase(view);
   }
   document.querySelectorAll('.failure-report-form').forEach(form => form.addEventListener('submit', async event => {
@@ -1197,6 +1201,7 @@
       }
       for (const view of views) {
         const id = view.dataset.caseView;
+        if (statusInFlight.has(id)) await statusInFlight.get(id);
         if (caseTimers.has(id) || caseInFlight.has(id)) await persistCase(view);
       }
       form.submit();
@@ -1218,6 +1223,7 @@
         if (timers.has(id) || inFlight.has(id)) await persist(card);
       }
       const id = view.dataset.caseView;
+      if (statusInFlight.has(id)) await statusInFlight.get(id);
       if (caseTimers.has(id) || caseInFlight.has(id)) await persistCase(view);
       form.submit();
     } catch (error) {
