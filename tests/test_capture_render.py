@@ -5,7 +5,7 @@ import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-from PIL import Image
+from PIL import Image, ImageChops, ImageDraw
 from capture_client.geometry import Rect
 from capture_client.render import Annotation, render_capture
 
@@ -26,3 +26,15 @@ class SmoothRenderTests(unittest.TestCase):
         raw = bytes((i * 31) % 256 for i in range(80 * 60 * 4))
         base = Image.frombytes("RGBA", (80, 60), raw)
         self.assertEqual(render_capture(base, Rect(0, 0, 80, 60), []).tobytes(), raw)
+
+    def test_blur_clips_reversed_drag_to_crop_and_preserves_outside_pixels(self):
+        base = Image.new("RGBA", (80, 60), "white")
+        ImageDraw.Draw(base).rectangle((20, 0, 39, 59), fill="black")
+        crop = Rect(10, 10, 50, 40)
+        original = render_capture(base, crop, [])
+        blurred = render_capture(base, crop, [Annotation("blur", "", [(50, 40), (0, 20)])])
+        difference = ImageChops.difference(original.convert("RGB"), blurred.convert("RGB"))
+        self.assertEqual(difference.getbbox(), (0, 10, 40, 30))
+        self.assertGreater(blurred.getpixel((29, 20))[0], 0)
+        self.assertLess(blurred.getpixel((30, 20))[0], 255)
+        self.assertEqual(base.getpixel((39, 30)), (0, 0, 0, 255))

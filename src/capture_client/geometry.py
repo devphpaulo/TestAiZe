@@ -52,6 +52,16 @@ def normalize_rect(x: float, y: float, width: float, height: float) -> Rect | No
     return rect
 
 
+def clipped_drag_rect(start: tuple[float, float], end: tuple[float, float], bounds: Rect) -> Rect | None:
+    left = max(bounds.x, min(start[0], end[0]))
+    top = max(bounds.y, min(start[1], end[1]))
+    right = min(bounds.right, max(start[0], end[0]))
+    bottom = min(bounds.bottom, max(start[1], end[1]))
+    if right - left < 2 or bottom - top < 2:
+        return None
+    return normalize_rect(left, top, right - left, bottom - top)
+
+
 def stitch_origin(monitors: list[Monitor]) -> tuple[int, int]:
     if not monitors:
         return (0, 0)

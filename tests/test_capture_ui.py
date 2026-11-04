@@ -122,6 +122,22 @@ class CaptureUiTests(unittest.TestCase):
                 self.assertTrue(self.host.tools.isVisible())
                 self.assertTrue(self.host.dock.isVisible())
 
+    def test_blur_tool_commits_on_release_and_ctrl_z_restores_the_image(self):
+        layer = self.open_selection()
+        self.host.base.paste("black", (100, 100, 150, 180))
+        original = self.host.draft.png()
+        button = next(button for button in self.host.tools.group.buttons()
+                      if button.toolTip() == "Desfoque")
+        QTest.mouseClick(button, Qt.MouseButton.LeftButton)
+        self.host.press((110, 110))
+        self.host.move_to((180, 170))
+        self.assertEqual(self.host.draft.png(), original)
+        self.host.release((180, 170))
+        self.assertNotEqual(self.host.draft.png(), original)
+        self.assertTrue(self.host.tools.isVisible())
+        QTest.keyClick(layer, Qt.Key.Key_Z, Qt.KeyboardModifier.ControlModifier)
+        self.assertEqual(self.host.draft.png(), original)
+
     def test_panels_hide_during_crop_adjustment_and_reappear_at_new_position(self):
         self.open_selection()
         for start, end in (((400, 330), (450, 350)), ((150, 150), (170, 170))):

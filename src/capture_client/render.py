@@ -7,15 +7,16 @@ import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageFilter, ImageFont
 from PySide6.QtCore import QPointF
 from PySide6.QtGui import QImage, QPainter
 
-from .geometry import Rect, circle_bounds
+from .geometry import Rect, circle_bounds, clipped_drag_rect
 from .painting import paint_annotation
 
 DEFAULT_STROKE = 4
 DEFAULT_FONT_SIZE = 18
+BLUR_RADIUS = 12
 
 
 def font_path() -> Path | None:
@@ -88,11 +89,31 @@ def render_capture(base: Image.Image, crop: Rect, annotations: list[Annotation])
         for note in annotations:
             if note.kind == "text":
                 _paint_text(painter, note, clipped)
+            elif note.kind == "blur":
+                _paint_blur(painter, canvas, note, clipped)
             else:
                 paint_annotation(painter, note, clipped.x, clipped.y)
     finally:
         painter.end()
     return Image.frombytes("RGBA", image.size, bytes(canvas.constBits()))
+
+
+def _paint_blur(painter: QPainter, canvas: QImage, note: Annotation, crop: Rect) -> None:
+    if len(note.points) < 2:
+        return
+    region = clipped_drag_rect(note.points[0], note.points[-1], crop)
+    if region is None:
+        return
+    x, y = region.x - crop.x, region.y - crop.y
+    width, height = region.width, region.height
+    tile = canvas.copy(x, y, width, height)
+    pixels = Image.frombytes("RGBA", (width, height), bytes(tile.constBits()))
+    blurred = pixels.filter(ImageFilter.GaussianBlur(BLUR_RADIUS)).tobytes()
+    image = QImage(blurred, width, height, width * 4, QImage.Format.Format_RGBA8888)
+    painter.save()
+    painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_Source)
+    painter.drawImage(QPointF(x, y), image)
+    painter.restore()
 
 
 def png_bytes(image: Image.Image) -> bytes:

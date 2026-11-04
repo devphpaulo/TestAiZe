@@ -136,7 +136,7 @@ O campo **Pré-condições da planilha** é apenas informativo. Para registrar o
 
 1. Selecione o caso e o passo no Test Player e pressione **PrintScreen** ou o atalho configurado.
 2. Arraste para selecionar a área. Use as alças para ajustar o recorte. As ferramentas e a lista de passos aparecem quando você solta o mouse.
-3. Use os ícones para desenhar ou escrever na imagem. Na ferramenta **Texto**, clique no recorte e digite. **Enter** conclui a anotação e **Shift+Enter** quebra a linha. Use **Ctrl+Z** para desfazer um desenho.
+3. Use os ícones para desenhar ou escrever na imagem. Na ferramenta **Texto**, clique no recorte e digite. **Enter** conclui a anotação e **Shift+Enter** quebra a linha. Para borrar uma parte da imagem, selecione **Desfoque**, arraste sobre a área e solte. Use **Ctrl+Z** para desfazer uma edição.
 4. Confira o destino e clique em **Anexar**. O passo fica verde na lista quando o envio é confirmado. A evidência aparece em **Resultado observado** e a captura continua aberta.
 
 **Copiar** ou **Ctrl+C** copia a imagem e fecha a captura. **Salvar** grava um PNG. **Esc** fecha a captura sem confirmação. Para alterar o atalho, abra **Atalho da captura** no menu do ícone do TestAíZé na bandeja do Windows.

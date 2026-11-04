@@ -48,6 +48,7 @@ from .draft import Draft
 from .geometry import (
     Monitor,
     Rect,
+    clipped_drag_rect,
     dip_global_to_physical,
     hit_crop_handle,
     move_rect,
@@ -75,6 +76,7 @@ TOOLS = (
     ("rect", "Retângulo"),
     ("circle", "Círculo"),
     ("text", "Texto"),
+    ("blur", "Desfoque"),
 )
 
 
@@ -233,8 +235,18 @@ class ScreenLayer(QWidget):
         painter.setBrush(Qt.BrushStyle.NoBrush)
         rubber = self.host.rubber_points
         if rubber and len(rubber) >= 2:
-            paint_annotation(painter, Annotation(self.host.drag, self.host.color, list(rubber)),
-                             origin_x, origin_y, scale)
+            if self.host.drag == "blur":
+                region = clipped_drag_rect(rubber[0], rubber[-1], crop)
+                if region is not None:
+                    outline = QRectF((region.x - origin_x) / scale, (region.y - origin_y) / scale,
+                                     region.width / scale, region.height / scale)
+                    painter.setPen(QPen(QColor("#161616"), 2))
+                    painter.drawRect(outline)
+                    painter.setPen(QPen(QColor("#ffffff"), 1, Qt.PenStyle.DashLine))
+                    painter.drawRect(outline)
+            else:
+                paint_annotation(painter, Annotation(self.host.drag, self.host.color, list(rubber)),
+                                 origin_x, origin_y, scale)
 
     def _handle_point(self, crop: Rect, name: str) -> tuple[float, float] | None:
         points = {
@@ -683,6 +695,9 @@ class CaptureHost(QObject):
                 self.draft.color = self.color
         elif drag in {"move", "nw", "n", "ne", "e", "se", "s", "sw", "w"} and self.draft is not None:
             self.draft.touch()
+        elif drag == "blur" and self.draft is not None and anchor is not None:
+            if clipped_drag_rect(anchor, point, self.draft.crop) is not None:
+                self.draft.add(Annotation("blur", "", [anchor, point]))
         elif drag in {"rect", "line", "arrow", "circle", "free"} and self.draft is not None and anchor is not None:
             points = list(self.rubber_points)
             if drag != "free":

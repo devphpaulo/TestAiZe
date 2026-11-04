@@ -22,6 +22,13 @@ def tool_icon(kind: str) -> QIcon:
         painter.drawRect(QRectF(4, 5, 16, 14))
     elif kind == "circle":
         painter.drawEllipse(QRectF(4, 4, 16, 16))
+    elif kind == "blur":
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QColor("#f5f5f5"))
+        for x in (6, 12, 18):
+            for y in (6, 12, 18):
+                radius = 2 if x == y == 12 else 1.25
+                painter.drawEllipse(QPointF(x, y), radius, radius)
     elif kind in {"line", "arrow"}:
         painter.drawLine(QPointF(5, 19), QPointF(19, 5))
         if kind == "arrow":
