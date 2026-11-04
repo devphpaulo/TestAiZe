@@ -126,6 +126,8 @@ A data e a hora da alteração de status ficam registradas no caso e aparecem ta
 
 ## 6. Registrar resultado e evidências
 
+Use **PrintScreen** ou o atalho configurado para recortar e anotar a tela. Para anexar a imagem diretamente ao passo, siga o [guia de captura integrada](captura.md).
+
 O campo **Pré-condições da planilha** é apenas informativo. Para registrar o que aconteceu durante a execução, use:
 
 - **Resultado observado**: descreva o comportamento encontrado;
