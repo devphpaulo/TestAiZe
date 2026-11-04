@@ -6,7 +6,7 @@
 ![GitHub license](https://img.shields.io/github/license/devphpaulo/TestAiZe?style=for-the-badge)
 
 <p align="center">
-  <img src="testplayer/static/favicon.svg" alt="Logo TestAiZe" width="128">
+  <img src="src/testplayer/static/favicon.svg" alt="Logo TestAiZe" width="128">
 </p>
 
 TestAiZe é uma cópia do Zephyr Scale que roda inteira no seu computador — 100% local e gratuita. Sem Jira, sem nuvem, sem mensalidade: você importa a planilha de casos, executa os testes passo a passo com evidências e sai com um relatório em PDF ou HTML pronto para enviar. Tudo offline — os dados nunca saem da sua máquina.
@@ -39,7 +39,7 @@ pip install -r requirements.txt
 ## Uso
 
 ```
-TestAiZe-01.005.000.exe      # ou: python launcher.py
+TestAiZe-01.005.000.exe      # ou: python src/launcher.py
 ```
 
 Importar planilha → executar casos no Test Player → exportar relatório. O aplicativo salva sessões, evidências, relatórios e logs em **Documentos/TestAiZe**. O passo a passo completo está no [manual de uso](docs/manual.md).
