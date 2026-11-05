@@ -1006,6 +1006,7 @@
       setSaveState('Recarregue a página antes de salvar este passo. O texto digitado aqui foi mantido.', true);
       throw new Error('Resultado em conflito. O texto local foi mantido.');
     }
+    await card.querySelector('[data-rich-editor]')._imageController.flush();
     const version = versions.get(id) || 0;
     const promise = (async () => {
       const response = await fetch(card.dataset.saveUrl, {
@@ -1077,6 +1078,7 @@
     if (statusInFlight.has(id)) await statusInFlight.get(id);
     if (caseTimers.has(id)) { clearTimeout(caseTimers.get(id)); caseTimers.delete(id); }
     if (caseInFlight.has(id)) { try { await caseInFlight.get(id); } catch (_) { /* Save the latest edit. */ } }
+    for (const editor of view.querySelectorAll('.case-evidence-area [data-rich-editor]')) await editor._imageController.flush();
     const version = caseVersions.get(id) || 0;
     const promise = (async () => {
       const response = await fetch(view.dataset.caseSaveUrl, {
@@ -1274,34 +1276,12 @@
     selection.addRange(range);
   }
   function makeImageFigure(result, name) {
-    const figure = document.createElement('figure');
-    figure.className = 'rich-image';
-    figure.contentEditable = 'false';
-    figure.dataset.evidenceId = result.id;
-    figure.dataset.width = '100';
-    figure.style.width = '100%';
-    const link = document.createElement('a');
-    link.href = result.url; link.target = '_blank'; link.rel = 'noopener';
-    link.title = 'Abrir imagem em tamanho original';
-    const image = document.createElement('img'); image.src = result.url; image.alt = name;
-    link.append(image);
-    const caption = document.createElement('figcaption'); caption.textContent = name;
-    const remove = document.createElement('button');
-    remove.type = 'button'; remove.className = 'rich-image-remove'; remove.textContent = '×';
-    remove.setAttribute('aria-label', 'Excluir imagem'); remove.dataset.deleteUrl = result.delete_url;
-    const handle = document.createElement('span');
-    handle.className = 'rich-image-resize'; handle.textContent = '↘';
-    handle.tabIndex = 0; handle.setAttribute('role', 'slider');
-    handle.setAttribute('aria-label', 'Largura da imagem');
-    handle.setAttribute('aria-valuemin', '20'); handle.setAttribute('aria-valuemax', '100');
-    handle.setAttribute('aria-valuenow', '100');
-    handle.title = 'Arraste para ajustar a largura';
-    figure.append(link, caption, remove, handle);
-    return figure;
+    return TestaizeImages.create({...result, name});
   }
   function insertFigure(editor, figure, paragraph, offset, focus = true) {
     const anchor = paragraph?.isConnected ? paragraph : editor.querySelector('.rich-paragraph:last-of-type');
-    editor._imageUrls.set(figure.dataset.evidenceId, figure.querySelector('.rich-image-remove').dataset.deleteUrl);
+    editor._imageUrls.set(figure.dataset.evidenceId, figure.dataset.deleteUrl);
+    editor._imageController.register(figure);
     if (!anchor) {
       editor.append(figure, makeParagraph());
       if (focus) focusStart(editor.lastElementChild);
@@ -1324,49 +1304,44 @@
     const selection = window.getSelection();
     return paragraphFromRange(editor, selection?.rangeCount ? selection.getRangeAt(0) : null);
   }
-  async function removeFigure(editor, figure) {
-    const button = figure.querySelector('.rich-image-remove');
-    const response = await fetch(button.dataset.deleteUrl, { method: 'POST', headers: { 'X-CSRF-Token': csrf } });
-    const result = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(result.error || 'Falha ao excluir imagem.');
-    editor._imageUrls.delete(figure.dataset.evidenceId);
-    figure.remove();
-    if (!editor.children.length) editor.append(makeParagraph());
-    updateSyncActions();
-    queueEditor(editor);
-    setSaveState('Imagem removida');
-    renderMiniPlayer();
+  function removeFigure(editor, figure) {
+    editor._imageController.remove(figure);
+    return editor._imageController.flush();
   }
-  function syncRemovedImages(editor) {
-    const current = new Set([...editor.querySelectorAll('.rich-image')].map(figure => figure.dataset.evidenceId));
-    for (const [id, url] of editor._imageUrls) {
-      if (current.has(id) || editor._pendingImageDeletes.has(id)) continue;
-      editor._pendingImageDeletes.add(id);
-      const task = (async () => {
-        const response = await fetch(url, { method: 'POST', headers: { 'X-CSRF-Token': csrf } });
-        const result = await response.json().catch(() => ({}));
-        if (!response.ok) throw new Error(result.error || 'Falha ao excluir imagem.');
-      })();
-      pendingUploads.add(task);
-      task.then(() => editor._imageUrls.delete(id))
-        .catch(error => setSaveState(`${error.message} Recarregue para tentar novamente.`, true))
-        .finally(() => { editor._pendingImageDeletes.delete(id); pendingUploads.delete(task); });
-    }
-  }
+  function syncRemovedImages(editor) { editor._imageController.scan(); }
   async function flushPendingMedia() {
     await Promise.all([...pendingUploads]);
-    const editors = [...document.querySelectorAll('[data-rich-editor]')];
-    editors.forEach(syncRemovedImages);
-    await Promise.all([...pendingUploads]);
-    if (editors.some(editor => [...editor._imageUrls.keys()].some(id =>
-      !editor.querySelector(`.rich-image[data-evidence-id="${id}"]`)))) {
-      throw new Error('Uma imagem ainda não foi removida. Tente novamente.');
-    }
+    for (const editor of document.querySelectorAll('[data-rich-editor]')) await editor._imageController.flush();
   }
   document.querySelectorAll('[data-rich-editor]').forEach(editor => {
     editor._imageUrls = new Map([...editor.querySelectorAll('.rich-image')].map(figure =>
-      [figure.dataset.evidenceId, figure.querySelector('.rich-image-remove').dataset.deleteUrl]));
-    editor._pendingImageDeletes = new Set();
+      [figure.dataset.evidenceId, figure.dataset.deleteUrl]));
+    editor._imageController = TestaizeImages.mount(editor, {
+      change: () => { updateSyncActions(); queueEditor(editor); renderMiniPlayer(); },
+      error: error => setSaveState(error.message, true),
+      pending: task => { pendingUploads.add(task); task.finally(() => pendingUploads.delete(task)).catch(() => {}); },
+      remove: async entry => {
+        if (!entry.blob) {
+          const source = await fetch(entry.url);
+          if (!source.ok) throw new Error('Não foi possível preservar a imagem para desfazer.');
+          entry.blob = await source.blob();
+        }
+        const response = await fetch(entry.delete_url, {method:'POST', headers:{'X-CSRF-Token':csrf}});
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok && response.status !== 404) throw new Error(result.error || 'Falha ao excluir imagem.');
+        editor._imageUrls.delete(entry.id);
+      },
+      restore: async entry => {
+        const data = new FormData(); data.append('imagem', entry.blob, entry.name);
+        data.append('expected_generation', editor.closest('.case-view').dataset.executionGeneration);
+        const response = await fetch(editor.closest('.evidence-area').dataset.uploadUrl,
+          {method:'POST', headers:{'X-CSRF-Token':csrf}, body:data});
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(result.error || 'Falha ao restaurar a imagem.');
+        editor._imageUrls.delete(entry.id); editor._imageUrls.set(result.id, result.delete_url);
+        return {id:result.id, url:result.url, delete_url:result.delete_url};
+      }
+    });
     function rememberCaret() {
       editor._lastParagraph = selectedParagraph(editor);
       editor._lastOffset = editor._lastParagraph ? caretOffset(editor._lastParagraph) : null;
@@ -1374,13 +1349,12 @@
     editor.addEventListener('mouseup', rememberCaret);
     editor.addEventListener('keyup', rememberCaret);
     editor.addEventListener('input', () => {
-      syncRemovedImages(editor);
       updateSyncActions();
       queueEditor(editor);
       syncMiniObservedText(editor);
     });
     editor.addEventListener('keydown', event => {
-      if (event.key !== 'Backspace' && event.key !== 'Delete') return;
+      if (event.defaultPrevented || (event.key !== 'Backspace' && event.key !== 'Delete')) return;
       const selection = window.getSelection();
       if (!selection?.isCollapsed) return;
       const paragraph = selectedParagraph(editor);
@@ -1439,35 +1413,7 @@
       }
       queueEditor(editor);
     });
-    editor.addEventListener('pointerdown', event => {
-      const handle = event.target.closest('.rich-image-resize');
-      if (!handle) return;
-      event.preventDefault();
-      const figure = handle.closest('.rich-image');
-      const startX = event.clientX;
-      const initial = Number(figure.dataset.width);
-      handle.setPointerCapture(event.pointerId);
-      function move(pointer) {
-        const width = Math.max(20, Math.min(100, Math.round(initial + (pointer.clientX - startX) / editor.clientWidth * 100)));
-        figure.dataset.width = String(width);
-        figure.style.width = `${width}%`;
-        handle.setAttribute('aria-valuenow', String(width));
-        queueEditor(editor);
-      }
-      handle.addEventListener('pointermove', move);
-      handle.addEventListener('pointerup', () => handle.removeEventListener('pointermove', move), { once: true });
-      handle.addEventListener('pointercancel', () => handle.removeEventListener('pointermove', move), { once: true });
-    });
-    editor.addEventListener('keydown', event => {
-      const handle = event.target.closest('.rich-image-resize');
-      if (!handle || !['ArrowLeft', 'ArrowRight'].includes(event.key)) return;
-      event.preventDefault();
-      const figure = handle.closest('.rich-image');
-      const width = Math.max(20, Math.min(100, Number(figure.dataset.width) + (event.key === 'ArrowRight' ? 5 : -5)));
-      figure.dataset.width = String(width); figure.style.width = `${width}%`;
-      handle.setAttribute('aria-valuenow', String(width));
-      queueEditor(editor);
-    });
+
   });
 
   async function uploadImage(area, file, anchor = null, offset = null, selectionRange = null) {
@@ -1634,13 +1580,6 @@
       queueEditor(editor);
     }
   });
-  document.querySelectorAll('[data-rich-editor]').forEach(editor => editor.addEventListener('click', async event => {
-    const button = event.target.closest('.rich-image-remove');
-    if (!button) return;
-    try {
-      await removeFigure(editor, button.closest('.rich-image'));
-    } catch (error) { setSaveState(error.message, true); }
-  }));
   document.querySelectorAll('.evidence-list').forEach(list => list.addEventListener('click', async event => {
     const button = event.target.closest('.remove-evidence');
     if (!button) return;

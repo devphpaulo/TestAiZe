@@ -525,10 +525,15 @@ def create_app(root: Path) -> Flask:
         with db(directory) as connection:
             connection.execute("BEGIN IMMEDIATE")
             try:
-                step = connection.execute("SELECT s.position,s.case_id FROM steps s WHERE s.id=?", (step_id,)).fetchone()
+                step = connection.execute("SELECT s.position,s.case_id,c.execution_generation FROM steps s "
+                                          "JOIN cases c ON c.id=s.case_id WHERE s.id=?", (step_id,)).fetchone()
                 if step is None:
                     connection.rollback()
                     return jsonify(error="Passo não encontrado."), 404
+                generation = request.form.get('expected_generation')
+                if generation is not None and generation != step['execution_generation']:
+                    connection.rollback()
+                    return jsonify(error="A execução mudou. Recarregue a página antes de restaurar a imagem."), 409
                 count = connection.execute("SELECT COUNT(*) FROM evidence WHERE step_id=?", (step_id,)).fetchone()[0]
                 if count >= 12:
                     connection.rollback()
@@ -668,8 +673,12 @@ def create_app(root: Path) -> Flask:
             return jsonify(error=str(exc) or "Imagem inválida."), 415
         mime, extension = IMAGE_TYPES[kind]
         with db(directory) as connection:
-            if connection.execute("SELECT 1 FROM cases WHERE id=?", (case_id,)).fetchone() is None:
+            case = connection.execute("SELECT execution_generation FROM cases WHERE id=?", (case_id,)).fetchone()
+            if case is None:
                 return jsonify(error="Caso não encontrado."), 404
+            generation = request.form.get('expected_generation')
+            if generation is not None and generation != case['execution_generation']:
+                return jsonify(error="A execução mudou. Recarregue a página antes de restaurar a imagem."), 409
             count = connection.execute("SELECT COUNT(*) FROM case_evidence WHERE case_id=? AND scope=?",
                                        (case_id, scope)).fetchone()[0]
             if count >= 12:

@@ -21,7 +21,7 @@ jobs:
         run: |
           npm --prefix src/playwright-recorder test
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          node --test tests/capture_sync.test.cjs tests/bugs_status.test.cjs tests/bugs_editor.test.cjs
+          node --test tests/capture_sync.test.cjs tests/bugs_status.test.cjs tests/bugs_editor.test.cjs tests/image_editor.test.cjs
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python -m unittest discover -s tests
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

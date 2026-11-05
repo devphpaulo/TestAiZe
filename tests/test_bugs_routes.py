@@ -71,6 +71,21 @@ class BugsRoutesTests(BugsFixture, unittest.TestCase):
             db.execute("UPDATE bugs SET severity='Legada' WHERE id=?", (bug['id'],))
         self.assertEqual(self.service.get(bug['id'])['severity'], 'Legada')
 
+    def test_image_restore_upload_does_not_cross_execution_generation(self):
+        from testplayer import storage
+        storage.start_case_run(self.directory, 1)
+        routes = [f'/api/sessao/{self.sid}/passo/1/imagem',
+                  f'/api/sessao/{self.sid}/caso/1/evidencia/precondition',
+                  f'/api/sessao/{self.sid}/caso/1/evidencia/comment']
+        for route in routes:
+            response = self.client.post(route, headers=self.headers,
+                                        data={'imagem': (io.BytesIO(self.image), 'restored.png'),
+                                              'expected_generation': 'generation'})
+            self.assertEqual(response.status_code, 409, (route, response.data))
+        record = storage.read_session(self.directory)
+        self.assertEqual(record['cases'][0]['steps'][0]['evidence'], [])
+        self.assertEqual(record['cases'][0]['precondition_evidence'], [])
+
     def test_http_security_status_and_contract(self):
         bug = self.create_bug()
         url = f'/api/bugs/{bug["id"]}/sessao/{self.sid}/vinculos'

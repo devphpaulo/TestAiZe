@@ -10,7 +10,6 @@
   const pending = new Set();
   const readonly = bug?.status === 'finalizado';
   let insertion = null;
-  let selectedImage = null;
   const openingImages = new Set((bug?.evidence || []).filter(item => item.kind === 'abertura').map(item => item.id));
   const feedback = message => { document.getElementById('bug-feedback').textContent = message; };
   async function api(url, options = {}) {
@@ -45,91 +44,15 @@
     const selection = window.getSelection(); selection.removeAllRanges(); selection.addRange(range);
     insertion = range.cloneRange();
   }
-  function selectImage(figure) {
-    selectedImage?.classList.remove('is-selected');
-    selectedImage = figure;
-    if (figure) {
-      figure.classList.add('is-selected');
-      figure.focus({preventScroll: true});
-    }
-  }
-  function removeImage(figure) {
-    const id = figure.dataset.evidenceId;
-    if (localFiles.has(id)) {
-      URL.revokeObjectURL(figure.querySelector('img').src);
-      localFiles.delete(id);
-    } else removed.add(id);
-    figure.remove(); selectedImage = null; insertion = null;
-    editor.focus({preventScroll: true});
-  }
-  function setImageWidth(figure, width) {
-    width = Math.max(20, Math.min(100, Math.round(width)));
-    figure.dataset.width = String(width); figure.style.width = `${width}%`;
-    figure.setAttribute('aria-label', `Imagem selecionada, largura ${width}%. Arraste as bordas ou use as setas. Delete ou Backspace exclui.`);
-  }
-  function resizedWidth(width, height, contentWidth, edge, dx, dy) {
-    const horizontal = edge.includes('w') ? -dx : dx;
-    const vertical = (edge.includes('n') ? -dy : dy) * width / Math.max(height, 1);
-    const delta = edge.length === 1 ? ('ns'.includes(edge) ? vertical : horizontal)
-      : Math.abs(horizontal) > Math.abs(vertical) ? horizontal : vertical;
-    return (width + delta) / Math.max(contentWidth, 1) * 100;
-  }
+  const images = readonly ? null : TestaizeImages.mount(editor, {
+    remove: entry => { if (!localFiles.has(entry.id)) removed.add(entry.id); insertion = null; },
+    restore: entry => { removed.delete(entry.id); },
+    error: error => feedback(error.message)
+  });
   function imageNode(id, src, width = 100) {
-    const figure = document.createElement('figure');
-    figure.className = 'rich-image'; figure.contentEditable = 'false';
-    figure.dataset.evidenceId = id; figure.dataset.width = String(width); figure.style.width = `${width}%`;
-    const image = document.createElement('img'); image.src = src; image.alt = 'Evidência de abertura'; image.draggable = false; figure.append(image);
-    if (!readonly) {
-      figure.tabIndex = 0; figure.setAttribute('role', 'group');
-      figure.setAttribute('aria-label', 'Evidência de abertura. Selecione para redimensionar ou excluir com Delete ou Backspace.');
-      figure.addEventListener('pointerdown', event => {
-        if (event.target.closest('.bug-image-handle')) return;
-        event.preventDefault(); selectImage(figure);
-      });
-      for (const edge of ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w']) {
-        const handle = document.createElement('span'); handle.className = 'bug-image-handle';
-        handle.dataset.edge = edge; handle.setAttribute('aria-hidden', 'true');
-        handle.addEventListener('pointerdown', event => {
-          event.preventDefault(); event.stopPropagation(); selectImage(figure);
-          const rect = figure.getBoundingClientRect();
-          const padding = getComputedStyle(editor);
-          const contentWidth = editor.clientWidth - parseFloat(padding.paddingLeft) - parseFloat(padding.paddingRight);
-          const startX = event.clientX, startY = event.clientY;
-          handle.setPointerCapture(event.pointerId);
-          const move = pointer => setImageWidth(figure, resizedWidth(rect.width, rect.height, contentWidth, edge,
-                                                                   pointer.clientX - startX, pointer.clientY - startY));
-          const finish = () => {
-            handle.removeEventListener('pointermove', move);
-            handle.removeEventListener('pointerup', finish);
-            handle.removeEventListener('pointercancel', finish);
-          };
-          handle.addEventListener('pointermove', move);
-          handle.addEventListener('pointerup', finish);
-          handle.addEventListener('pointercancel', finish);
-        });
-        figure.append(handle);
-      }
-    }
-    return figure;
+    const figure = TestaizeImages.create({id, url: src, width, name: 'Evidência de abertura'});
+    return images ? images.register(figure) : figure;
   }
-  function imageKeydown(event) {
-    if (readonly || !selectedImage) return;
-    if (event.target !== selectedImage && !selectedImage.contains(event.target)) {
-      selectImage(null); return;
-    }
-    if (['Tab', 'ArrowUp', 'ArrowDown'].includes(event.key)) { selectImage(null); return; }
-    if (event.key === 'Backspace' || event.key === 'Delete') {
-      event.preventDefault(); removeImage(selectedImage); return;
-    }
-    if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
-      event.preventDefault(); setImageWidth(selectedImage, Number(selectedImage.dataset.width) + (event.key === 'ArrowRight' ? 5 : -5));
-    }
-    if (event.key === 'Escape') { event.preventDefault(); selectImage(null); editor.focus(); }
-  }
-  editor.addEventListener('keydown', imageKeydown);
-  editor.addEventListener('focusin', event => { if (!event.target.closest('.rich-image')) selectImage(null); });
-  editor.addEventListener('pointerdown', event => { if (!event.target.closest('.rich-image')) selectImage(null); });
-  document.addEventListener('pointerdown', event => { if (!editor.contains(event.target)) selectImage(null); });
   const initial = bug ? JSON.parse(bug.description_doc) : [{type: 'text', text: ''}];
   initial.forEach(block => editor.append(block.type === 'text' ? paragraph(block.text) : imageNode(block.id, imageUrl(block.id), block.width)));
   async function addFile(file) {
@@ -182,6 +105,7 @@
     const button = form.querySelector('button[type="submit"]'); button.disabled = true;
     try {
       await Promise.all([...pending]);
+      if (images) await images.flush();
       const fields = Object.fromEntries(new FormData(form)); fields.blocks = TestaizeDocument.serialize(editor);
       const usedImages = new Set(fields.blocks.filter(block => block.type === 'image').map(block => block.id));
       for (const id of openingImages) { if (!usedImages.has(id)) removed.add(id); else removed.delete(id); }

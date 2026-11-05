@@ -3,66 +3,49 @@ const {readFileSync} = require('node:fs');
 const {resolve} = require('node:path');
 const {test} = require('node:test');
 const vm = require('node:vm');
-const source = readFileSync(resolve(__dirname, '../src/testplayer/static/bugs.js'), 'utf8');
-
-function editorContext(readonly = false) {
-  const revoked = [];
-  const context = {selectedImage: null, insertion: null, readonly, localFiles: new Map(), removed: new Set(),
-    URL: {revokeObjectURL: url => revoked.push(url)},
-    editor: {addEventListener(){}, focus(){}, contains(){return true;}}, document:{addEventListener(){}}};
-  vm.createContext(context);
-  vm.runInContext(source.slice(source.indexOf('  function selectImage('), source.indexOf('  const initial =')), context);
-  function figure(id) {
-    return {dataset:{evidenceId:id,width:'65'},style:{},classList:{add(){},remove(){}},focus(){},setAttribute(){},
-      contains:()=>false, querySelector:()=>({src:`blob:${id}`}), remove(){this.deleted=true;}};
-  }
-  return {context, figure, revoked};
+const context = {}; vm.createContext(context);
+vm.runInContext(readFileSync(resolve(__dirname, '../src/testplayer/static/image-editor.js'), 'utf8'), context);
+function figure(id='image', width='65') {
+  const image={src:`/images/${id}`,alt:'evidence.png'};
+  return {dataset:{evidenceId:id,width,deleteUrl:`/delete/${id}`},querySelector:()=>image};
 }
-
-for (const key of ['Delete', 'Backspace']) test(`${key} removes only the selected image and records ownership cleanup`, () => {
-  const {context, figure, revoked} = editorContext();
-  const saved = figure('saved'); context.selectImage(saved);
-  let prevented = false;
-  context.imageKeydown({key,target:saved,preventDefault(){prevented=true;}});
-  assert.equal(prevented,true); assert.equal(saved.deleted,true);
-  assert.equal(context.removed.has('saved'),true); assert.equal(context.selectedImage,null);
-  const local = figure('local'); context.localFiles.set('local',{}); context.selectImage(local);
-  context.imageKeydown({key,target:local,preventDefault(){}});
-  assert.equal(context.localFiles.has('local'),false); assert.deepEqual(revoked,['blob:local']);
-  assert.equal(context.removed.has('local'),false);
+test('bug undo restores ownership and keeps the original image and width available', async () => {
+  const removed=new Set(), localFiles=new Map([['local','original file']]);
+  const ledger=context.TestaizeImages.createLedger({remove:entry=>removed.add(entry.id),restore:entry=>removed.delete(entry.id)});
+  const node=figure('local'); ledger.register(node);
+  ledger.scan([]); await ledger.flush();
+  assert.equal(removed.has('local'),true); assert.equal(localFiles.get('local'),'original file');
+  ledger.scan([node]); await ledger.flush();
+  assert.equal(removed.has('local'),false); assert.equal(node.dataset.width,'65');
+  ledger.scan([]); await ledger.flush();
+  assert.equal(removed.has('local'),true);
 });
-
-test('image resize preserves proportions from horizontal, vertical and corner handles', () => {
-  const {context,figure} = editorContext();
-  for (const [edge,dx,dy] of [['e',80,0],['w',-80,0],['n',0,-40],['s',0,40],['se',0,40]]) {
-    assert.equal(context.resizedWidth(400,200,800,edge,dx,dy),60);
-  }
-  const image = figure('image');
-  context.setImageWidth(image,130); assert.equal(image.dataset.width,'100');
-  context.setImageWidth(image,10); assert.equal(image.dataset.width,'20');
-  context.selectImage(image); context.imageKeydown({key:'ArrowRight',target:image,preventDefault(){}});
-  assert.equal(image.dataset.width,'25');
+test('Player undo after deletion and autosave reuploads bytes and replaces obsolete IDs', async () => {
+  let uploads=0; const files=new Map([['image','bytes']]);
+  const ledger=context.TestaizeImages.createLedger({
+    remove:entry=>{ entry.blob=files.get(entry.id); files.delete(entry.id); },
+    restore:entry=>{ const id=`restored-${++uploads}`; files.set(id,entry.blob); return {id,url:`/images/${id}`,delete_url:`/delete/${id}`}; }
+  });
+  const node=figure(); ledger.register(node); ledger.scan([]); await ledger.flush();
+  assert.equal(files.size,0);
+  ledger.scan([node]); await ledger.flush();
+  assert.equal(node.dataset.evidenceId,'restored-1'); assert.equal(node.dataset.width,'65');
+  assert.equal(files.get('restored-1'),'bytes'); assert.equal(node.dataset.deleteUrl,'/delete/restored-1');
+  ledger.scan([]); await ledger.flush();
+  const nativeUndoNode=figure('image'); ledger.scan([nativeUndoNode]); await ledger.flush();
+  assert.equal(nativeUndoNode.dataset.evidenceId,'restored-2'); assert.equal(files.size,1);
 });
-
-test('ordinary text deletion and finalized bug evidence remain untouched', () => {
-  const {context,figure} = editorContext();
-  context.imageKeydown({key:'Delete',preventDefault(){throw new Error('must preserve text editing');}});
-  const image=figure('image'); context.selectImage(image);
-  context.imageKeydown({key:'Escape',target:image,preventDefault(){}});
-  context.imageKeydown({key:'Backspace',preventDefault(){throw new Error('not selected');}});
-  assert.equal(image.deleted,undefined);
-  const locked=editorContext(true); const finalImage=locked.figure('final'); locked.context.selectImage(finalImage);
-  locked.context.imageKeydown({key:'Delete',preventDefault(){throw new Error('finalized');}});
-  assert.equal(finalImage.deleted,undefined);
+test('undo racing with an in-flight delete waits and restores once', async () => {
+  let release; const gate=new Promise(resolve=>{release=resolve;}); const actions=[];
+  const ledger=context.TestaizeImages.createLedger({remove:async()=>{actions.push('delete');await gate;},restore:()=>{actions.push('restore');}});
+  const node=figure(); ledger.register(node); ledger.scan([]); ledger.scan([node]);
+  release(); await ledger.flush();
+  assert.deepEqual(actions,['delete','restore']);
 });
-
-
-test('returning to text or tabbing away cannot delete a previously selected image', () => {
-  const {context,figure} = editorContext(); const image=figure('saved');
-  context.selectImage(image);
-  context.imageKeydown({key:'Backspace',target:context.editor,preventDefault(){throw new Error('text deletion must remain native');}});
-  assert.equal(context.selectedImage,null); assert.equal(image.deleted,undefined);
-  context.selectImage(image);
-  context.imageKeydown({key:'Tab',target:image});
-  assert.equal(context.selectedImage,null); assert.equal(image.deleted,undefined);
+test('restore failure blocks saving until the invalid undo is redone', async () => {
+  const ledger=context.TestaizeImages.createLedger({remove:()=>{},restore:()=>{throw new Error('upload failed');}});
+  const node=figure(); ledger.register(node); ledger.scan([]); await ledger.flush();
+  ledger.scan([node]); await assert.rejects(ledger.flush(),/upload failed/);
+  await new Promise(resolve=>setImmediate(resolve));
+  ledger.scan([]); await ledger.flush();
 });

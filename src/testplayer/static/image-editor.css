@@ -1,0 +1,25 @@
+/* Common chrome for evidence in Bugs, Player and execution history. */
+:root .rich-editor .rich-image {
+  position: relative; display: block; max-width: 100%; margin: 16px 0; padding: 0 !important;
+  border: 0 !important; border-radius: 0; background: transparent !important; box-shadow: none !important;
+}
+:root .rich-editor .rich-image img { display: block; width: 100%; height: auto; max-width: 100%; border-radius: 3px; user-select: none; -webkit-user-drag: none; }
+:root .rich-editor .rich-image figcaption { display: none; }
+:root .rich-editor .rich-image.is-selected { outline: 2px solid #3b82f6; outline-offset: 2px; }
+.image-edge-handle { display: none; position: absolute; z-index: 1; width: 10px; height: 10px; border: 1px solid #3b82f6; background: #fff; border-radius: 2px; touch-action: none; }
+.is-selected > .image-edge-handle { display: block; }
+.image-edge-handle[data-edge="nw"] { top: -6px; left: -6px; cursor: nwse-resize; }
+.image-edge-handle[data-edge="ne"] { top: -6px; right: -6px; cursor: nesw-resize; }
+.image-edge-handle[data-edge="sw"] { bottom: -6px; left: -6px; cursor: nesw-resize; }
+.image-edge-handle[data-edge="se"] { bottom: -6px; right: -6px; cursor: nwse-resize; }
+.image-edge-handle[data-edge="n"] { top: -6px; left: calc(50% - 5px); cursor: ns-resize; }
+.image-edge-handle[data-edge="s"] { bottom: -6px; left: calc(50% - 5px); cursor: ns-resize; }
+.image-edge-handle[data-edge="w"] { left: -6px; top: calc(50% - 5px); cursor: ew-resize; }
+.image-edge-handle[data-edge="e"] { right: -6px; top: calc(50% - 5px); cursor: ew-resize; }
+:root[data-theme="dark"] .image-edge-handle { background: #202020; }
+/* A single quiet border replaces the outline + border focus combination. */
+:root[data-theme] .player-shell .rich-editor:is(:focus, :focus-within, :focus-visible),
+:root[data-theme] .bugs-ui .rich-editor:is(:focus, :focus-within, :focus-visible),
+:root .rich-editor:is(:focus, :focus-within, :focus-visible) {
+  border: 1px solid #8c8c8c !important; outline: none !important; box-shadow: none !important;
+}

@@ -45,7 +45,7 @@
   font-weight: 400; line-height: 1.5; box-shadow: 0 1px 2px #00000006;
 }
 .bugs-ui .bug-input::placeholder { color: var(--bug-muted); opacity: .85; }
-.bugs-ui .bug-input:focus { outline: 2px solid var(--bug-ring); outline-offset: 2px; border-color: var(--bug-ring); }
+.bugs-ui .bug-input:focus, .bugs-ui .bug-input:focus-visible { outline: none; box-shadow: none; border-color: #8c8c8c; }
 .bugs-ui .bug-input:disabled { cursor: default; opacity: .7; }
 .bugs-ui textarea.bug-input { min-height: 124px; resize: vertical; }
 .bugs-ui .bug-select { appearance: auto; padding-right: 28px; color-scheme: dark; }
@@ -60,17 +60,7 @@
 .bugs-ui #bug-editor p { min-height: 22px; white-space: pre-wrap; margin: 0; color: inherit; line-height: 1.7; }
 .bugs-ui #bug-editor .rich-image { position: relative; display: block; max-width: 100%; margin: 18px 0; padding: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; outline: 0; }
 .bugs-ui #bug-editor .rich-image img { display: block; width: 100%; height: auto; max-width: 100%; border: 0; border-radius: 3px; cursor: default; user-select: none; -webkit-user-drag: none; }
-.bugs-ui #bug-editor .rich-image.is-selected { outline: 2px solid var(--bug-primary); outline-offset: 2px; }
-.bug-image-handle { display: none; position: absolute; z-index: 1; width: 10px; height: 10px; border: 1px solid var(--bug-primary); background: var(--bug-background); border-radius: 2px; touch-action: none; }
-.is-selected > .bug-image-handle { display: block; }
-.bug-image-handle[data-edge="nw"] { top: -6px; left: -6px; cursor: nwse-resize; }
-.bug-image-handle[data-edge="ne"] { top: -6px; right: -6px; cursor: nesw-resize; }
-.bug-image-handle[data-edge="sw"] { bottom: -6px; left: -6px; cursor: nesw-resize; }
-.bug-image-handle[data-edge="se"] { bottom: -6px; right: -6px; cursor: nwse-resize; }
-.bug-image-handle[data-edge="n"] { top: -6px; left: calc(50% - 5px); cursor: ns-resize; }
-.bug-image-handle[data-edge="s"] { bottom: -6px; left: calc(50% - 5px); cursor: ns-resize; }
-.bug-image-handle[data-edge="w"] { left: -6px; top: calc(50% - 5px); cursor: ew-resize; }
-.bug-image-handle[data-edge="e"] { right: -6px; top: calc(50% - 5px); cursor: ew-resize; }
+.bugs-ui #bug-editor .rich-image.is-selected { outline: 2px solid #3b82f6; outline-offset: 2px; }
 .bug-form-actions { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-top: 18px; }
 .bug-section-heading { display: flex; justify-content: space-between; align-items: flex-start; gap: 24px; }
 .bug-section-heading > div:first-child { min-width: 0; }
