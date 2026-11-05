@@ -463,6 +463,8 @@ class BugsService:
 @root_operation
 def remove_session_recoverably(root, session_id, delete_files):
     from .storage import find_directory, db, get_meta
+    # Use the same canonical root as _safe_session_path, including Windows 8.3 aliases.
+    root = Path(root).resolve()
     store = BugsStore(root)
     directory = find_directory(root, session_id)
     if directory is None:

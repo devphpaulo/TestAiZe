@@ -200,6 +200,16 @@ class BugsFlowTests(BugsFixture, unittest.TestCase):
         self.assertTrue(target.exists())
         self.assertEqual(self.service.get(bug['id'])['links'][0]['active'], 0)
 
+    def test_remove_accepts_equivalent_noncanonical_root(self):
+        bug = self.create_bug()
+        self.service.link(bug['id'], self.sid, [1])
+        alias = self.root / '..' / self.root.name
+        target = storage.remove_session(alias, self.sid, False)
+        self.assertTrue((target / 'sessao.sqlite').is_file())
+        self.assertFalse(self.directory.exists())
+        self.assertEqual(self.service.get(bug['id'])['links'][0]['active'], 0)
+        self.assertEqual(self.service.evidence_bytes(bug['id'], bug['evidence'][0]['id'])[0], self.image)
+
     def test_delete_recovery_finishes_after_database_was_already_deleted(self):
         bug = self.create_bug()
         self.service.link(bug['id'], self.sid, [1])
