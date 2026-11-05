@@ -16,7 +16,7 @@ class BugsRoutesTests(BugsFixture, unittest.TestCase):
         self.headers = {'X-CSRF-Token': 'test-token'}
 
     def test_http_create_player_and_board(self):
-        fields = dict(title='Bug <script>alert(1)</script>', severity='Crítica', actual='Obtido', expected='Esperado',
+        fields = dict(title='Bug <script>alert(1)</script>', severity='Bloqueador', actual='Obtido', expected='Esperado',
                       blocks=[{'type': 'text', 'text': 'Passos'}, {'type': 'image', 'id': 'img', 'width': 50}])
         response = self.client.post(f'/api/sessao/{self.sid}/bugs', headers=self.headers,
                                     data={'document': json.dumps(fields), 'img': (io.BytesIO(self.image), 'image.png')})
@@ -29,6 +29,47 @@ class BugsRoutesTests(BugsFixture, unittest.TestCase):
         detail = self.client.get(f'/bugs/{bug["id"]}').get_data(as_text=True)
         self.assertNotIn('<script>alert(1)</script>', detail)
         self.assertEqual(self.client.get(f'/bugs/{bug["id"]}/evidencias/{bug["evidence"][0]["id"]}').data, self.image)
+
+    def test_severity_select_and_linked_case_current_status(self):
+        from testplayer import storage
+        bug = self.create_bug()
+        self.service.link(bug['id'], self.sid, [1])
+        storage.save_result(self.directory, 1, 'reprovado', 'Falhou')
+        page = self.client.get(f'/bugs/{bug["id"]}?session_id={self.sid}').get_data(as_text=True)
+        self.assertIn('<select name="severity"', page)
+        for code in ('baixa', 'media', 'alta', 'bloqueador'):
+            self.assertIn(f'value="{code}"', page)
+        self.assertIn('Caso 1', page)
+        self.assertIn('data-case-status="reprovado"', page)
+        self.assertNotIn('Nenhuma prova de reteste.', page)
+        self.assertNotIn('Sem vínculos.', page)
+        invalid = self.client.post(f'/api/bugs/{bug["id"]}', headers=self.headers,
+                                   json=dict(bug, severity='arbitrária', blocks=json.loads(bug['description_doc'])))
+        self.assertEqual(invalid.status_code, 422)
+
+    def test_linked_names_and_statuses_are_resolved_per_execution(self):
+        from testplayer import storage
+        bug = self.create_bug()
+        self.service.link(bug['id'], self.sid, [1])
+        completed = storage.finalize(self.root, self.directory)
+        new_id = storage.rerun(self.root, completed)
+        directory = storage.find_directory(self.root, new_id)
+        with storage.db(directory) as db:
+            with db:
+                db.execute("UPDATE cases SET name='Mesmo ID, outra execução',manual_status='reprovado' WHERE id=1")
+        self.service.link(bug['id'], new_id, [1])
+        links = {link['session_id']: link for link in self.service.detail(bug['id'])['links']}
+        self.assertEqual((links[self.sid]['name'], links[self.sid]['status']), ('Caso 1', 'bloqueado'))
+        self.assertEqual((links[new_id]['name'], links[new_id]['status']), ('Mesmo ID, outra execução', 'reprovado'))
+
+    def test_severity_accepts_only_the_four_choices_without_rewriting_old_records(self):
+        bug = self.create_bug()
+        for value, expected in [('Baixa', 'baixa'), ('Média', 'media'), ('Alta', 'alta'), ('Bloqueador', 'bloqueador')]:
+            fields = dict(bug, severity=value, blocks=json.loads(bug['description_doc']))
+            self.assertEqual(self.service.edit(bug['id'], fields)['severity'], expected)
+        with self.service.store.connect() as db:
+            db.execute("UPDATE bugs SET severity='Legada' WHERE id=?", (bug['id'],))
+        self.assertEqual(self.service.get(bug['id'])['severity'], 'Legada')
 
     def test_http_security_status_and_contract(self):
         bug = self.create_bug()

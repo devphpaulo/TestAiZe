@@ -32,7 +32,7 @@ def check(executable: Path) -> None:
                         assert response.status == 200
                     with urllib.request.urlopen(origin + '/bugs', timeout=2) as response:
                         assert 'Bugs por estado' in response.read().decode('utf-8')
-                    for asset in ('bugs.js', 'document-editor.js'):
+                    for asset in ('bugs.js', 'bugs.css', 'document-editor.js'):
                         with urllib.request.urlopen(origin + '/static/' + asset, timeout=2) as response:
                             assert response.status == 200 and response.read()
                     assert (root / 'bugs' / 'bugs.sqlite').is_file()

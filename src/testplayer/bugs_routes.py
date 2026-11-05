@@ -11,6 +11,14 @@ from .bugs_coordinator import coordinated, StateConflict, RecoveryPending
 blueprint = Blueprint('bugs', __name__)
 
 
+@blueprint.context_processor
+def presentation():
+    from .bugs_service import SEVERITIES, severity_key
+    return dict(bug_severities=SEVERITIES, severity_key=severity_key,
+                bug_status_labels={'aberto': 'Aberto', 'em_reteste': 'Em reteste',
+                                   'reaberto': 'Reaberto', 'finalizado': 'Finalizado'})
+
+
 def service():
     return current_app.extensions['bugs']
 
@@ -76,7 +84,7 @@ def new(session_id):
 @blueprint.get('/bugs/<bug_id>')
 @api
 def detail(bug_id):
-    return render_template('bug_detail.html', bug=service().get(bug_id), session_id=request.args.get('session_id', ''),
+    return render_template('bug_detail.html', bug=service().detail(bug_id), session_id=request.args.get('session_id', ''),
                            origin_case_id=None)
 
 

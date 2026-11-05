@@ -338,28 +338,3 @@
 .report-scope{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;flex:none;border:0;border-top:1px solid #414850;margin:0 27px;padding:11px 0 0}.report-scope legend{font-size:10px;font-weight:750;letter-spacing:.1em;color:#aab5bf;padding:0 0 3px}.report-scope label{display:flex;gap:9px;align-items:flex-start;padding:11px;border:1px solid #4e5963;border-radius:10px;background:#23292e;cursor:pointer}.report-scope label:has(input:checked){border-color:var(--accent-border,#91afd0);background:var(--accent-soft,#2b3d4d)}.report-scope input{flex:none;margin:2px 0 0;accent-color:var(--accent,#8dbbea)}.report-scope span{display:grid;gap:3px}.report-scope strong{font-size:11px}.report-scope small{font-size:10px;line-height:1.4;color:#aebbc5}.failure-actions{display:flex;justify-content:space-between;align-items:center;gap:18px;margin:17px 0;padding:16px 18px;border:1px solid #b36268;border-radius:12px;background:#382427}.failure-actions strong,.failure-actions small{display:block}.failure-actions strong{color:#ffd5d7;font-size:13px}.failure-actions small{color:#dfb9bc;font-size:11px;margin-top:4px;line-height:1.4}.failure-action-buttons{display:flex;flex-wrap:wrap;gap:8px}.failure-action-buttons .button{white-space:nowrap;font-size:11px}.failure-actions.is-hidden{display:none}
 [data-theme="light"] .report-scope{border-color:#d6dfe7}[data-theme="light"] .report-scope legend{color:#607080}[data-theme="light"] .report-scope label{background:#f6f8fa;border-color:#ccd6df}[data-theme="light"] .report-scope label:has(input:checked){background:var(--accent-soft,#eaf1f8);border-color:var(--accent-border,#8baac4)}[data-theme="light"] .report-scope small{color:#5c6c79}[data-theme="light"] .failure-actions{background:#fff2f3;border-color:#c77b80}[data-theme="light"] .failure-actions strong{color:#8c3039}[data-theme="light"] .failure-actions small{color:#78565a}
 @media(max-width:680px){.report-scope{grid-template-columns:1fr;margin:0 17px}.failure-actions{align-items:stretch;flex-direction:column}.failure-action-buttons,.failure-action-buttons form,.failure-action-buttons .button{width:100%}}
-
-
-/* Bug surfaces reuse the application's panels, controls and Kanban cards. */
-.bugs-board { grid-template-columns: repeat(4, minmax(220px, 1fr)); }
-.bug-page { max-width: 1150px; margin: auto; }
-.bug-panel { padding: 24px; margin: 20px 0; border: 1px solid var(--border, #6665); border-radius: 8px; background: var(--panel, transparent); }
-.bug-panel fieldset { border: 0; padding: 0; min-width: 0; }
-.bug-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-bottom: 24px; }
-.bug-fields label, .bug-proof label { display: grid; gap: 8px; }
-.bug-fields textarea, .bug-proof textarea { min-height: 100px; width: 100%; }
-#bug-editor { min-height: 240px; padding: 18px; border: 1px solid var(--border, #666); }
-#bug-editor p { white-space: pre-wrap; }
-#bug-editor .rich-image { margin: 16px 0; }
-#bug-editor .rich-image img { max-width: 100%; display: block; }
-.bug-image-controls { display: flex; flex-wrap: wrap; gap: 12px; padding: 8px; }
-.bug-proof { display: grid; gap: 14px; margin: 20px 0; }
-.bug-proofs img { max-width: 100%; max-height: 350px; }
-.bug-proofs article { padding: 16px 0; border-bottom: 1px solid var(--border, #6665); }
-.bug-link-dialog { width: min(720px, 92vw); max-height: 85vh; overflow: auto; padding: 26px; color: inherit; background: var(--bg, #202020); }
-.bug-link-dialog::backdrop { background: #0009; }
-#bug-link-cases label { display: block; padding: 10px; }
-#bug-feedback:not(:empty) { border-left: 3px solid #da1e28; padding: 12px; }
-@media(max-width: 740px) { .bug-fields { grid-template-columns: 1fr; } .bugs-board { grid-template-columns: repeat(4, 260px); } }
-
-.bug-page .observed-actions { display: flex; flex-wrap: wrap; }

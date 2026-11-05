@@ -6,6 +6,7 @@ import logging
 import os
 import shutil
 import uuid
+import unicodedata
 from pathlib import Path
 
 from PIL import Image, UnidentifiedImageError
@@ -16,6 +17,12 @@ from .bugs_store import BugsStore
 log = logging.getLogger(__name__)
 RECOVERY_HANDLERS = {}
 IMAGE_TYPES = {'PNG': ('image/png', '.png'), 'JPEG': ('image/jpeg', '.jpg'), 'WEBP': ('image/webp', '.webp')}
+SEVERITIES = {'baixa': 'Baixa', 'media': 'Média', 'alta': 'Alta', 'bloqueador': 'Bloqueador'}
+
+
+def severity_key(value):
+    return ''.join(char for char in unicodedata.normalize('NFD', str(value).strip().casefold())
+                   if not unicodedata.combining(char))
 
 
 def register_recovery(kind, handler):
@@ -186,6 +193,24 @@ class BugsService:
                     'WHERE l.session_id=? GROUP BY b.id ORDER BY b.created_at DESC', (session_id,))]
             return [dict(row) for row in connection.execute('SELECT * FROM bugs ORDER BY created_at DESC')]
 
+    def detail(self, bug_id):
+        """Resolve names and current status using each link's execution identity."""
+        from .storage import find_directory, read_session
+        with coordinated(self.root):
+            bug = self.get(bug_id)
+            sessions = {}
+            for link in bug['links']:
+                session_id = link['session_id']
+                if session_id not in sessions:
+                    directory = find_directory(self.root, session_id)
+                    sessions[session_id] = ({case['id']: case for case in read_session(directory)['cases']}
+                                            if directory else {})
+                case = sessions[session_id].get(link['case_id'])
+                link.update(name=case['name'] if case else 'Caso indisponível',
+                            status=case['status'] if case else None,
+                            folder=case['folder'] if case else '', available=case is not None)
+            return bug
+
     def _fields(self, fields):
         clean = {}
         for key in ('title', 'severity', 'actual', 'expected'):
@@ -193,6 +218,9 @@ class BugsService:
             if not isinstance(value, str) or not value.strip() or len(value) > 20000:
                 raise ValueError('Preencha nome, severidade, resultado obtido e esperado (até 20.000 caracteres).')
             clean[key] = value.strip()
+        clean['severity'] = severity_key(clean['severity'])
+        if clean['severity'] not in SEVERITIES:
+            raise ValueError('Selecione a severidade: Baixa, Média, Alta ou Bloqueador.')
         return clean
 
     def _image(self, content, original_name):
