@@ -27,7 +27,7 @@ class AutomationRouteTests(unittest.TestCase):
 
     def test_automation_is_separate_and_page_does_not_spawn(self):
         home = self.client.get("/").get_data(as_text=True)
-        self.assertIn('href="/iniciativas/automacao"', home)
+        self.assertIn('<option value="/iniciativas/automacao"', home)
         self.assertNotIn('id="automation-workspace"', home)
         page = self.client.get("/iniciativas/automacao")
         self.assertEqual(page.status_code, 200)

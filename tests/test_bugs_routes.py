@@ -15,6 +15,18 @@ class BugsRoutesTests(BugsFixture, unittest.TestCase):
             session['csrf_token'] = 'test-token'
         self.headers = {'X-CSRF-Token': 'test-token'}
 
+    def test_shared_header_has_board_select_and_one_appearance_control(self):
+        for url in ('/', '/bugs', f'/sessao/{self.sid}'):
+            html = self.client.get(url).get_data(as_text=True)
+            header = html.split('<header class="topbar">')[1].split('</nav>')[0]
+            self.assertIn('id="board-select"', header)
+            self.assertIn('id="appearance-trigger"', header)
+            self.assertNotIn('Nesta máquina', header)
+            self.assertNotIn('id="theme-toggle"', header)
+            self.assertNotIn('id="accent-trigger"', header)
+            if url.startswith('/sessao/'):
+                self.assertIn('<option value="" selected disabled>Quadros</option>', header)
+
     def test_http_create_player_and_board(self):
         fields = dict(title='Bug <script>alert(1)</script>', severity='Bloqueador', actual='Obtido', expected='Esperado',
                       blocks=[{'type': 'text', 'text': 'Passos'}, {'type': 'image', 'id': 'img', 'width': 50}])

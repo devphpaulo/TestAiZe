@@ -295,7 +295,7 @@
 :root:not([data-accent="neutro"]) .dropzone:hover,:root:not([data-accent="neutro"]) .dropzone.dragging,:root:not([data-accent="neutro"]) .rich-editor:focus-within{border-color:var(--accent-border)}
 :root:not([data-accent="neutro"]) .pdf-modal input[type="checkbox"],:root:not([data-accent="neutro"]) .cycle-option input{accent-color:var(--accent)}
 :root:not([data-accent="neutro"]) .cycle-trigger:focus-visible,:root:not([data-accent="neutro"]) .cycle-option:focus-within,:root:not([data-accent="neutro"]) .cycle-search:focus-visible,:root:not([data-accent="neutro"]) .theme-toggle:focus-visible{outline-color:var(--accent)}
-@media(max-width:1050px){.top-links{gap:12px}}@media(max-width:600px){.accent-trigger-label{display:none}.accent-trigger{padding:6px 8px}.top-links>a:first-child{display:none}}
+@media(max-width:1050px){.top-links{gap:12px}}@media(max-width:600px){.accent-trigger-label{display:none}.accent-trigger{padding:6px 8px}}
 
 /* Continuous text editing and a separate, immutable spreadsheet precondition. */
 .rich-editor[contenteditable="true"]{cursor:text;font-size:13px;line-height:1.5;white-space:pre-wrap}

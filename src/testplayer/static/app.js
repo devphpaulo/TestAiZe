@@ -1,48 +1,5 @@
 (() => {
   const csrf = document.querySelector('meta[name="csrf-token"]')?.content || '';
-  const themeButton = document.getElementById('theme-toggle');
-  function updateThemeButton() {
-    const light = document.documentElement.dataset.theme === 'light';
-    themeButton.textContent = light ? '☾ Modo escuro' : '☼ Modo claro';
-    themeButton.setAttribute('aria-label', light ? 'Ativar modo escuro' : 'Ativar modo claro');
-  }
-  if (themeButton) {
-    updateThemeButton();
-    themeButton.addEventListener('click', () => {
-      const next = document.documentElement.dataset.theme === 'light' ? 'dark' : 'light';
-      document.documentElement.dataset.theme = next;
-      try { localStorage.setItem('executor-theme', next); } catch (_) {}
-      updateThemeButton();
-    });
-  }
-  const accentPicker = document.getElementById('accent-picker');
-  if (accentPicker) {
-    const trigger = document.getElementById('accent-trigger');
-    const options = document.getElementById('accent-options');
-    const names = { neutro: 'Neutro', roxo: 'Roxo', verde: 'Verde', vermelho: 'Vermelho', amarelo: 'Amarelo' };
-    function updateAccent() {
-      const selected = names[document.documentElement.dataset.accent] ? document.documentElement.dataset.accent : 'neutro';
-      trigger.setAttribute('aria-label', `Escolher cor do aplicativo. Atual: ${names[selected]}`);
-      accentPicker.querySelectorAll('[data-accent-choice]').forEach(button => {
-        button.setAttribute('aria-pressed', String(button.dataset.accentChoice === selected));
-      });
-    }
-    function closeAccent() { options.hidden = true; trigger.setAttribute('aria-expanded', 'false'); }
-    updateAccent();
-    trigger.addEventListener('click', () => {
-      options.hidden = !options.hidden;
-      trigger.setAttribute('aria-expanded', String(!options.hidden));
-    });
-    accentPicker.querySelectorAll('[data-accent-choice]').forEach(button => button.addEventListener('click', () => {
-      document.documentElement.dataset.accent = button.dataset.accentChoice;
-      try { localStorage.setItem('testaize-accent', button.dataset.accentChoice); } catch (_) {}
-      updateAccent();
-      closeAccent();
-      trigger.focus();
-    }));
-    document.addEventListener('click', event => { if (!accentPicker.contains(event.target)) closeAccent(); });
-    document.addEventListener('keydown', event => { if (event.key === 'Escape') closeAccent(); });
-  }
   const fileInput = document.getElementById('arquivo');
   if (fileInput) {
     const drop = document.querySelector('.dropzone');
