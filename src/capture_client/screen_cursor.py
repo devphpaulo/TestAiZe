@@ -11,8 +11,9 @@ from PySide6.QtGui import QImage, QPainter
 
 
 class _CursorInfo(Structure):
+    # Python 3.12 does not expose HCURSOR. Like HICON, it is a HANDLE.
     _fields_ = [('size', win.DWORD), ('flags', win.DWORD),
-                ('handle', win.HCURSOR), ('position', win.POINT)]
+                ('handle', win.HANDLE), ('position', win.POINT)]
 
 
 class _IconInfo(Structure):

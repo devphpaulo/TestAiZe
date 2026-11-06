@@ -197,8 +197,8 @@ class CaptureUiTests(unittest.TestCase):
         user = WinDLL("user32")
         user.CreateCursor.argtypes = [win.HINSTANCE, win.INT, win.INT, win.INT, win.INT,
                                       win.LPCSTR, win.LPCSTR]
-        user.CreateCursor.restype = win.HCURSOR
-        user.DestroyCursor.argtypes = [win.HCURSOR]
+        user.CreateCursor.restype = win.HANDLE
+        user.DestroyCursor.argtypes = [win.HANDLE]
         # Black pixel followed by an inverted pixel, then transparent pixels.
         handle = user.CreateCursor(None, 5, 7, 32, 32, b"\x7f" + b"\xff" * 127,
                                    b"\x40" + b"\x00" * 127)
