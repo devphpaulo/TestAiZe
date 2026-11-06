@@ -187,6 +187,48 @@ class CaptureUiTests(unittest.TestCase):
         self.open_selection()
         self.assertTrue(self.host.tools.isVisible())
 
+    @unittest.skipUnless(sys.platform == "win32", "Uses a Windows cursor resource")
+    def test_capture_freezes_native_cursor_across_monitor_edge(self):
+        from contextlib import nullcontext
+        from ctypes import WinDLL, wintypes as win
+
+        from capture_client.screen_cursor import _ScreenCursor, _bounds
+
+        user = WinDLL("user32")
+        user.CreateCursor.argtypes = [win.HINSTANCE, win.INT, win.INT, win.INT, win.INT,
+                                      win.LPCSTR, win.LPCSTR]
+        user.CreateCursor.restype = win.HCURSOR
+        user.DestroyCursor.argtypes = [win.HCURSOR]
+        # Black pixel followed by an inverted pixel, then transparent pixels.
+        handle = user.CreateCursor(None, 5, 7, 32, 32, b"\x7f" + b"\xff" * 127,
+                                   b"\x40" + b"\x00" * 127)
+        self.assertTrue(handle)
+        self.addCleanup(user.DestroyCursor, handle)
+        cursor = _ScreenCursor(handle, _bounds(handle, win.POINT(4, 13)))
+
+        screens = []
+        for origin, scale in ((-64, 2), (0, 1)):
+            screen = Mock()
+            screen.geometry.return_value = QRect(origin, 0, 64 // scale, 64 // scale)
+            screen.devicePixelRatio.return_value = scale
+            pixmap = QPixmap(64, 64)
+            pixmap.fill(Qt.GlobalColor.red)
+            pixmap.setDevicePixelRatio(scale)
+            screen.grabWindow.return_value = pixmap
+            screens.append(screen)
+
+        with (patch("capture_client.qt_host.QGuiApplication.screens", return_value=screens),
+              patch("capture_client.qt_host.snapshot_cursor", return_value=nullcontext(cursor))):
+            self.host._open_editor()
+
+        left, right = [layer.pixmap.toImage() for layer in self.host.layers]
+        self.assertEqual(left.devicePixelRatio(), 2)
+        self.assertEqual(left.pixelColor(63, 6).getRgb(), (0, 0, 0, 255))
+        self.assertEqual(right.pixelColor(0, 6).getRgb(), (0, 255, 255, 255))
+        cropped = render_capture(self.host.base, Rect(63, 6, 3, 2), [])
+        self.assertEqual([cropped.getpixel((x, 0)) for x in range(3)],
+                         [(0, 0, 0, 255), (0, 255, 255, 255), (255, 0, 0, 255)])
+
     def test_repeated_capture_after_copy_processes_window_destruction_and_keeps_every_tool_available(self):
         screen = Mock()
         screen.geometry.return_value = QRect(0, 0, 700, 550)
