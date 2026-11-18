@@ -1,0 +1,9 @@
+<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>{{ bug.title }}</title>
+<style>@page{size:A4;margin:18mm}body{font:12px Arial,sans-serif;color:#202020;line-height:1.55}h1{font-size:25px}h2{font-size:17px;margin-top:24px}p,li{white-space:pre-wrap;overflow-wrap:anywhere}img{width:100%;max-width:100%;max-height:225mm;object-fit:contain}figure{margin:14px 0;break-inside:avoid}article{margin:15px 0}small{color:#555}header{border-bottom:2px solid #222;padding-bottom:12px}</style></head><body>
+<header><small>TestAíZé · Report de bug #{{ bug.id }}</small><h1>{{ bug.title }}</h1><p>Severidade: {{ bug.severity }} · Estado: {{ bug.status }}</p><p>Origem: {{ bug.origin_type }} · Sessão {{ bug.origin_session_id }}{% if bug.origin_case_id %} · Pré-condição do caso {{ bug.origin_case_id }}{% endif %}</p></header>
+<h2>Resultado obtido</h2><p>{{ bug.actual }}</p><h2>Resultado esperado</h2><p>{{ bug.expected }}</p>
+<h2>Fluxo e passo a passo</h2>{% for block in blocks %}{% if block.type == 'text' %}<p>{{ block.text }}</p>{% else %}<figure style="width:{{ block.width }}%"><img src="{{ images[block.id] }}" alt="Evidência de abertura"></figure>{% endif %}{% endfor %}
+<h2>Provas de reteste</h2>{% for item in bug.evidence if item.kind == 'reteste' %}<article><small>{{ item.created_at }} · {{ 'Prova do token atual' if item.retest_token == bug.current_retest_token else 'Prova histórica' }}</small><p>{{ item.note }}</p>{% if item.relative_path %}<figure><img src="{{ images[item.id] }}" alt="Prova de reteste"></figure>{% endif %}</article>{% else %}<p>Nenhuma prova de reteste.</p>{% endfor %}
+<h2>Casos vinculados disponíveis</h2><ul>{% for link in bug.links %}<li>{{ link.name }} · Sessão {{ link.session_id }} · Caso {{ link.case_id }} · {{ 'Ativo' if link.active else 'Inativo' }}</li>{% else %}<li>Sem vínculos disponíveis.</li>{% endfor %}</ul>
+<p>Finalizar e desvincular mantêm o status dos casos. O ajuste posterior é manual.</p>
+</body></html>

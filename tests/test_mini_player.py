@@ -38,10 +38,9 @@ class MiniPlayerContractTests(unittest.TestCase):
             "target?.focus()",
         ):
             self.assertIn(fragment, self.javascript)
-        self.assertEqual(
-            self.javascript.count("updateSummary();\n      renderMiniPlayer();\n      queueCase(view);"),
-            2,
-        )
+        self.assertIn("applyCaseState(view, result)", self.javascript)
+        self.assertIn("updateSummary(); renderMiniPlayer();", self.javascript)
+        self.assertIn("expected_revision: Number(view.dataset.statusRevision", self.javascript)
 
         for selector in (
             ".mini-player",

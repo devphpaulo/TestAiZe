@@ -15,7 +15,6 @@ from PIL import Image
 from PySide6.QtCore import QAbstractNativeEventFilter, QEvent, QObject, QPoint, QPointF, QRect, QRectF, QSize, Qt, QTimer
 from PySide6.QtGui import (
     QColor,
-    QCursor,
     QFont,
     QFontDatabase,
     QGuiApplication,
@@ -64,6 +63,7 @@ from .inline_text import InlineTextEdit
 from .overlay import live_screen_during, show_capture_chrome
 from .painting import paint_annotation
 from .render import Annotation, DEFAULT_FONT_SIZE, font_path
+from .screen_cursor import snapshot_cursor
 from .transport import LocalApi
 
 WDA_EXCLUDEFROMCAPTURE = 0x00000011
@@ -583,25 +583,28 @@ class CaptureHost(QObject):
     def _open_editor(self) -> None:
         parts: list[tuple[Image.Image, Monitor]] = []
         pixmaps: list[tuple[Monitor, QPixmap]] = []
-        for index, screen in enumerate(QGuiApplication.screens()):
-            geo = screen.geometry()
-            scale = float(screen.devicePixelRatio() or 1)
-            pixmap = screen.grabWindow(0)
-            image = qimage_to_pil(pixmap.toImage())
-            monitor = Monitor(
-                f"screen-{index}",
-                geo.x() if os.name == "nt" else int(round(geo.x() * scale)),
-                geo.y() if os.name == "nt" else int(round(geo.y() * scale)),
-                image.width,
-                image.height,
-                scale,
-                dip_x=geo.x(),
-                dip_y=geo.y(),
-                dip_w=geo.width(),
-                dip_h=geo.height(),
-            )
-            parts.append((image, monitor))
-            pixmaps.append((monitor, pixmap))
+        with snapshot_cursor() as cursor:
+            for index, screen in enumerate(QGuiApplication.screens()):
+                geo = screen.geometry()
+                scale = float(screen.devicePixelRatio() or 1)
+                pixmap = screen.grabWindow(0)
+                frame = pixmap.toImage()
+                monitor = Monitor(
+                    f"screen-{index}",
+                    geo.x() if os.name == "nt" else int(round(geo.x() * scale)),
+                    geo.y() if os.name == "nt" else int(round(geo.y() * scale)),
+                    frame.width(),
+                    frame.height(),
+                    scale,
+                    dip_x=geo.x(),
+                    dip_y=geo.y(),
+                    dip_w=geo.width(),
+                    dip_h=geo.height(),
+                )
+                if cursor and cursor.paint(frame, monitor.origin_x, monitor.origin_y):
+                    pixmap = QPixmap.fromImage(frame)
+                parts.append((qimage_to_pil(frame), monitor))
+                pixmaps.append((monitor, pixmap))
         if not parts:
             QMessageBox.warning(None, "TestAíZé", "Não foi possível ler a tela.")
             return

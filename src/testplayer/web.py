@@ -33,6 +33,10 @@ from .storage import (create_draft, db, ensure_root, finalize, find_directory,
                        migrate_sessions, now, read_session, save_folder_link,
                        recover_promotions, remove_session, rerun, save_case, save_result,
                        start_case_run, sync_step_evidence, RevisionConflict, StaleExecution)
+from .bugs_service import BugsService
+from .bugs_routes import blueprint as bugs_blueprint
+from .bugs_coordinator import StateConflict, RecoveryPending, coordinated
+from .storage import set_case_status, case_state
 from .capture_context import CaptureBroker
 from .capture_routes import register_capture_routes
 
@@ -88,6 +92,8 @@ def create_app(root: Path) -> Flask:
         SESSION_COOKIE_SAMESITE="Strict",
     )
     app.config["DATA_ROOT"] = str(root)
+    app.extensions["bugs"] = BugsService(root)
+    app.register_blueprint(bugs_blueprint)
     app.extensions["capture_broker"] = CaptureBroker()
     automation_runtime = detect_automation_runtime()
     app.extensions["automation_runtime"] = automation_runtime
@@ -195,6 +201,14 @@ def create_app(root: Path) -> Flask:
             return jsonify(error="Arquivo grande demais para o limite configurado."), 413
         flash("Arquivo grande demais para o limite configurado.", "error")
         return redirect(url_for("home"))
+
+    @app.errorhandler(RecoveryPending)
+    def recovery_pending(error):
+        return jsonify(error=str(error), operation_id=error.operation_id, recovery_pending=True), 503
+
+    @app.errorhandler(StateConflict)
+    def state_conflict(error):
+        return jsonify(error=str(error)), 409
 
     @app.get("/health")
     def health():
@@ -317,7 +331,7 @@ def create_app(root: Path) -> Flask:
         if not set(initial_folders).issubset({group["name"] for group in groups}):
             abort(404)
         return render_template("player.html", record=record, writable=True,
-                               folder_groups=groups, initial_folders=initial_folders)
+                               folder_groups=groups, initial_folders=initial_folders, session_bugs=app.extensions["bugs"].list(session_id))
 
     @app.get("/sessao/<session_id>/abrir")
     def choose_folder(session_id: str):
@@ -401,7 +415,8 @@ def create_app(root: Path) -> Flask:
                 expected_generation=raw_generation or None,
             )
             record = read_session(directory)
-            return jsonify(ok=True, counts=record["counts"], status_changed_at=changed_at, revision=revision)
+            return jsonify(ok=True, counts=record["counts"], status_changed_at=changed_at, revision=revision,
+                           case_states={c["id"]: case_state(directory, c["id"]) for c in record["cases"]})
         except RevisionConflict as exc:
             document = None
             if exc.actual_doc:
@@ -456,17 +471,36 @@ def create_app(root: Path) -> Flask:
         if not isinstance(body, dict):
             return jsonify(error="Envie um objeto JSON válido."), 400
         try:
-            save_case(directory, case_id, str(body.get("status", "")), str(body.get("comment", "")),
+            save_case(directory, case_id, body.get("status"), str(body.get("comment", "")),
                       comment_doc=body.get("comment_doc"), precondition_doc=body.get("precondition_doc"))
             record = read_session(directory)
             case = next(item for item in record["cases"] if item["id"] == case_id)
-            return jsonify(ok=True, status=case["status"], counts=record["counts"])
+            return jsonify(ok=True, **case_state(directory, case_id))
         except StopIteration:
             return jsonify(error="Caso não encontrado."), 404
         except LookupError as exc:
             return jsonify(error=str(exc)), 404
+        except StateConflict as exc:
+            return jsonify(error=str(exc), **case_state(directory, case_id)), 409
         except ValueError as exc:
             return jsonify(error=str(exc)), 422
+
+    @app.post("/api/sessao/<session_id>/caso/<int:case_id>/status")
+    def explicit_case_status(session_id, case_id):
+        body = request.get_json(silent=True)
+        if not isinstance(body, dict):
+            return jsonify(error="Envie um objeto JSON válido."), 400
+        with coordinated(root):
+            directory = session_dir(session_id)
+            try:
+                state = set_case_status(directory, case_id, body.get('status'), body.get('expected_revision'), body.get('expected_generation'))
+                return jsonify(ok=True, **state)
+            except StateConflict as error:
+                return jsonify(error=str(error), **case_state(directory, case_id)), 409
+            except LookupError as error:
+                return jsonify(error=str(error)), 404
+            except ValueError as error:
+                return jsonify(error=str(error)), 422
 
     @app.post("/api/sessao/<session_id>/passo/<int:step_id>/imagem")
     def upload_image(session_id: str, step_id: int):
@@ -491,10 +525,15 @@ def create_app(root: Path) -> Flask:
         with db(directory) as connection:
             connection.execute("BEGIN IMMEDIATE")
             try:
-                step = connection.execute("SELECT s.position,s.case_id FROM steps s WHERE s.id=?", (step_id,)).fetchone()
+                step = connection.execute("SELECT s.position,s.case_id,c.execution_generation FROM steps s "
+                                          "JOIN cases c ON c.id=s.case_id WHERE s.id=?", (step_id,)).fetchone()
                 if step is None:
                     connection.rollback()
                     return jsonify(error="Passo não encontrado."), 404
+                generation = request.form.get('expected_generation')
+                if generation is not None and generation != step['execution_generation']:
+                    connection.rollback()
+                    return jsonify(error="A execução mudou. Recarregue a página antes de restaurar a imagem."), 409
                 count = connection.execute("SELECT COUNT(*) FROM evidence WHERE step_id=?", (step_id,)).fetchone()[0]
                 if count >= 12:
                     connection.rollback()
@@ -634,8 +673,12 @@ def create_app(root: Path) -> Flask:
             return jsonify(error=str(exc) or "Imagem inválida."), 415
         mime, extension = IMAGE_TYPES[kind]
         with db(directory) as connection:
-            if connection.execute("SELECT 1 FROM cases WHERE id=?", (case_id,)).fetchone() is None:
+            case = connection.execute("SELECT execution_generation FROM cases WHERE id=?", (case_id,)).fetchone()
+            if case is None:
                 return jsonify(error="Caso não encontrado."), 404
+            generation = request.form.get('expected_generation')
+            if generation is not None and generation != case['execution_generation']:
+                return jsonify(error="A execução mudou. Recarregue a página antes de restaurar a imagem."), 409
             count = connection.execute("SELECT COUNT(*) FROM case_evidence WHERE case_id=? AND scope=?",
                                        (case_id, scope)).fetchone()[0]
             if count >= 12:
