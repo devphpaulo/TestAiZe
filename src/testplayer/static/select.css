@@ -1,0 +1,128 @@
+:root {
+  --phase-backlog: #656565;
+  --phase-active: #255cba;
+  --phase-blocked: #8a5900;
+  --phase-review: #683eb0;
+  --phase-done: #216d42;
+  --select-surface: #fff;
+  --select-hover: #f2f2f3;
+  --select-border: #d6d6d8;
+}
+:root[data-theme="dark"] {
+  --phase-backlog: #a8a8a8;
+  --phase-active: #78a9ff;
+  --phase-blocked: #f7ce73;
+  --phase-review: #c7a5fa;
+  --phase-done: #78d591;
+  --select-surface: #242424;
+  --select-hover: #333;
+  --select-border: #484848;
+}
+
+select.app-select:not([multiple]) {
+  min-height: 36px;
+  max-width: 100%;
+  padding: 8px 12px;
+  border: 1px solid var(--select-border);
+  border-radius: 8px;
+  background: var(--select-surface);
+  color: var(--ink);
+  font-size: .875rem;
+  line-height: 1.25;
+  cursor: pointer;
+}
+.header-nav select.app-select#board-select { width: 144px; padding-inline: 10px; }
+select.app-select:not([multiple]):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+select.app-select:not([multiple]):disabled { opacity: .55; cursor: not-allowed; }
+
+@supports (appearance: base-select) {
+  select.app-select:not([multiple]), .app-select::picker(select) { appearance: base-select; }
+  select.app-select { align-items: center; gap: 8px; }
+  .app-select::picker-icon {
+    box-sizing: border-box;
+    width: 7px;
+    height: 7px;
+    margin: -3px 2px 0 auto;
+    border-right: 1.5px solid currentColor;
+    border-bottom: 1.5px solid currentColor;
+    opacity: .65;
+    transform: rotate(45deg);
+    content: "";
+  }
+  .app-select:open::picker-icon { margin-top: 3px; transform: rotate(225deg); }
+  .app-select::picker(select) {
+    inset: auto;
+    margin-block: 4px;
+    padding: 4px;
+    min-inline-size: anchor-size(width);
+    max-inline-size: calc(100vw - 16px);
+    max-block-size: min(320px, 65dvh);
+    overflow: auto;
+    border: 1px solid var(--select-border);
+    border-radius: 8px;
+    background: var(--select-surface);
+    color: var(--ink);
+    box-shadow: 0 8px 24px #0003;
+  }
+  .app-select selectedcontent {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    overflow: hidden;
+  }
+  .app-select option {
+    display: flex;
+    position: relative;
+    align-items: center;
+    gap: 8px;
+    min-height: 32px;
+    padding: 6px 28px 6px 8px;
+    border-radius: 4px;
+    background: transparent;
+    color: inherit;
+    font-size: .875rem;
+    overflow-wrap: anywhere;
+  }
+  .app-select option:not(:disabled):is(:hover, :focus, :checked) { background: var(--select-hover); }
+  .app-select option:disabled { opacity: .5; }
+  .app-select option::checkmark {
+    position: absolute;
+    right: 10px;
+    color: var(--muted);
+    content: "✓";
+  }
+  .app-select-marker {
+    display: inline-block;
+    flex: 0 0 auto;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--marker-color, currentColor);
+  }
+  .app-select-marker[data-tone="backlog"] { --marker-color: var(--phase-backlog); }
+  .app-select-marker:is([data-tone="todo"], [data-tone="doing"]) { --marker-color: var(--phase-active); }
+  .app-select-marker:is([data-tone="blocked"], [data-tone="media"]) { --marker-color: var(--phase-blocked); }
+  .app-select-marker[data-tone="review"] { --marker-color: var(--phase-review); }
+  .app-select-marker:is([data-tone="done"], [data-tone="baixa"]) { --marker-color: var(--phase-done); }
+  .app-select-marker[data-tone="alta"] { --marker-color: #e96949; }
+  .app-select-marker[data-tone="bloqueador"] { --marker-color: var(--danger); }
+  .app-select-marker[data-icon] {
+    width: 16px;
+    height: 16px;
+    border-radius: 0;
+    mask: var(--select-icon) center / contain no-repeat;
+  }
+  .app-select-marker[data-icon="sessions"] {
+    --select-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round'%3E%3Crect x='3' y='4' width='18' height='16' rx='2'/%3E%3Cpath d='M9 8v7m6-7v4'/%3E%3C/svg%3E");
+  }
+  .app-select-marker[data-icon="bugs"] {
+    --select-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round'%3E%3Crect x='7' y='7' width='10' height='13' rx='5'/%3E%3Cpath d='M9 7 7 4m8 3 2-3m-5 7v9M3 10l4 2m-4 3h4m-3 5 4-2m13-8-4 2m4 3h-4m3 5-4-2'/%3E%3C/svg%3E");
+  }
+  .app-select-marker[data-icon="automation"] {
+    --select-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m13 2-9 12h7l-1 8 10-12h-7z'/%3E%3C/svg%3E");
+  }
+}

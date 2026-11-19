@@ -9,7 +9,7 @@
   </div>
   <div class="session-board-filters" role="search">
     <label>Buscar execução <input type="search" data-board-search placeholder="Nome ou ID da execução"></label>
-    <label>Fase <select data-board-filter><option value="">Todas as fases</option>{% for phase, label in board_labels.items() %}<option value="{{ phase }}">{{ label }}</option>{% endfor %}</select></label>
+    <label>Fase <select data-board-filter><option value="">Todas as fases</option>{% for phase, label in board_labels.items() %}<option value="{{ phase }}" data-tone="{{ phase }}">{{ label }}</option>{% endfor %}</select></label>
   </div>
   <p class="session-board-feedback" data-board-feedback role="status"></p>
   <div class="session-board-grid" data-session-board data-labels='{{ board_labels|tojson }}'>
@@ -26,13 +26,15 @@
                draggable="{{ 'false' if phase == 'done' else 'true' }}">
         <span class="session-card-id">#{{ item.id[:8] }}</span>
         <a class="session-card-name" href="{{ url_for('choose_folder', session_id=item.id) }}">{{ item.source_name }}</a>
+        <span class="session-card-details">{{ item.steps }} {{ 'passo' if item.steps == 1 else 'passos' }}</span>
         <div class="session-card-progress">
+          <div class="session-card-progress-label"><span>Aprovados</span><strong>{{ item.counts.aprovado }} / {{ item.cases }}</strong></div>
           <progress max="{{ item.cases or 1 }}" value="{{ item.counts.aprovado }}" aria-label="Casos aprovados"></progress>
-          <span>{{ item.counts.aprovado }} de {{ item.cases }} aprovados · {{ item.steps }} passos</span>
         </div>
-        {% if item.reason %}<p class="session-card-reason">{{ item.reason }}</p>{% endif %}
+        {% if item.reason %}<p class="session-card-reason"><strong aria-hidden="true">!</strong><span>{{ item.reason }}</span></p>{% endif %}
         <div class="session-card-footer">
-          <small>{% if phase == 'done' %}Somente leitura{% else %}{{ item.created_at[:10]|replace('-', '/') }}{% endif %}</small>
+          {% set card_date = item.finalized_at or item.created_at %}
+          <small>{% if card_date %}<time datetime="{{ card_date[:10] }}" title="{{ card_date[:10] }}">{{ card_date[8:10] }}/{{ card_date[5:7] }}</time>{% endif %}{% if phase == 'done' %} · somente leitura{% endif %}</small>
           <div class="session-card-actions">
             {% if phase == 'done' %}
             <button class="session-icon" type="button" data-board-action="clone" disabled title="Nova execução" aria-label="Nova execução de {{ item.source_name }}">＋</button>

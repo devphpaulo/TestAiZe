@@ -17,9 +17,10 @@
     return result;
   }
   function options(select, entries, newLabel) {
-    select.replaceChildren();
-    for (const entry of entries) select.add(new Option(entry.name, entry.id));
-    select.add(new Option(newLabel, '__new'));
+    window.TestAizeSelect.replaceOptions(select, [
+      ...entries.map(entry => new Option(entry.name, entry.id)),
+      new Option(newLabel, '__new'),
+    ]);
   }
   function folderChanged() {
     const folder = catalog.find((item) => item.id === folderSelect.value);

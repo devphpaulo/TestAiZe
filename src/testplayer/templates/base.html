@@ -17,6 +17,8 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='header.css') }}">
   <script defer src="{{ url_for('static', filename='header.js') }}"></script>
   <script defer src="{{ url_for('static', filename='app.js') }}"></script>
+  <link rel="stylesheet" href="{{ url_for('static', filename='select.css') }}">
+  <script defer src="{{ url_for('static', filename='select.js') }}"></script>
   {% block head %}{% endblock %}
 </head>
 <body>
@@ -29,9 +31,9 @@
       {% block header_actions %}{% endblock %}
       <label class="board-picker"><span>Quadros</span><select id="board-select" aria-label="Quadros">
         {% if request.endpoint not in ['home', 'bugs.board', 'automation'] %}<option value="" selected disabled>Quadros</option>{% endif %}
-        <option value="{{ url_for('home') }}" {% if request.endpoint == 'home' %}selected{% endif %}>Sessões</option>
-        <option value="{{ url_for('bugs.board') }}" {% if request.endpoint == 'bugs.board' %}selected{% endif %}>Bugs</option>
-        <option value="{{ url_for('automation') }}" {% if request.endpoint == 'automation' %}selected{% endif %} {% if not automation_available %}disabled{% endif %}>Automação</option>
+        <option value="{{ url_for('home') }}" data-icon="sessions" {% if request.endpoint == 'home' %}selected{% endif %}>Sessões</option>
+        <option value="{{ url_for('bugs.board') }}" data-icon="bugs" {% if request.endpoint == 'bugs.board' %}selected{% endif %}>Bugs</option>
+        <option value="{{ url_for('automation') }}" data-icon="automation" {% if request.endpoint == 'automation' %}selected{% endif %} {% if not automation_available %}disabled{% endif %}>Automação</option>
       </select></label>
       <div class="appearance-picker" id="appearance-picker">
         <button type="button" class="appearance-trigger" id="appearance-trigger" aria-label="Personalizar aparência" title="Personalizar aparência" aria-expanded="false" aria-controls="appearance-panel">

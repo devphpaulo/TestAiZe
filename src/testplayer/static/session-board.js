@@ -17,7 +17,11 @@
   function describe(title, description, button, {options, needsReason = false, dangerous = false} = {}, action) {
     dialog.querySelector('h2').textContent = title;
     dialog.querySelector('#session-dialog-copy').textContent = description;
-    destination.replaceChildren(...(options || []).map(value => new Option(labels[value], value)));
+    window.TestAizeSelect.replaceOptions(destination, (options || []).map(value => {
+      const option = new Option(labels[value], value);
+      option.dataset.tone = value;
+      return option;
+    }));
     destination.parentElement.hidden = !options;
     reason.parentElement.hidden = !needsReason;
     reason.required = needsReason;
