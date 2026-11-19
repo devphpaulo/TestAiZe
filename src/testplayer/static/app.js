@@ -314,7 +314,7 @@
   const sidebarToggle = document.getElementById('toggle-left');
   const sidebar = document.getElementById('player-cases');
   const resizeHandle = player.querySelector('[data-resize="left"]');
-  const mobileSidebar = window.matchMedia('(max-width: 850px)');
+  const mobileSidebar = window.matchMedia('(max-width: 760px)');
   function setSidebar(collapsed) {
     player.dataset.leftCollapsed = String(collapsed);
     sidebarToggle.setAttribute('aria-expanded', String(!collapsed));
@@ -326,9 +326,8 @@
     desktopCollapsed = localStorage.getItem('executor-left-collapsed') === 'true';
     storedWidth = Number(localStorage.getItem('executor-left-width'));
   } catch (_) {}
-  setSidebar(mobileSidebar.matches || desktopCollapsed);
-  if (storedWidth && Number.isFinite(storedWidth)) player.style.setProperty('--left-width', `${Math.max(220, Math.min(500, storedWidth))}px`);
-  mobileSidebar.addEventListener('change', event => setSidebar(event.matches || desktopCollapsed));
+  setSidebar(!mobileSidebar.matches && desktopCollapsed);
+  mobileSidebar.addEventListener('change', event => setSidebar(!event.matches && desktopCollapsed));
   function closeMobileSidebar() {
     if (!mobileSidebar.matches || player.dataset.leftCollapsed === 'true') return;
     setSidebar(true);
@@ -343,29 +342,60 @@
     const collapsed = player.dataset.leftCollapsed !== 'true';
     setSidebar(collapsed);
     if (mobileSidebar.matches) {
-      if (!collapsed) cycleTrigger.focus();
+      if (!collapsed) {
+        sidebar.scrollIntoView({ block: 'start' });
+        cycleTrigger.focus({ preventScroll: true });
+      }
       return;
     }
     desktopCollapsed = collapsed;
     try { localStorage.setItem('executor-left-collapsed', String(collapsed)); } catch (_) {}
   });
-  function applySidebarWidth(value) {
-    const width = Math.max(220, Math.min(500, value, window.innerWidth - 350));
+  const minSidebarWidth = 240;
+  let preferredSidebarWidth = storedWidth > 0 && Number.isFinite(storedWidth) ? storedWidth : 320;
+  function maxSidebarWidth() {
+    return Math.max(minSidebarWidth, Math.min(720, player.clientWidth - 496));
+  }
+  function applySidebarWidth() {
+    const max = maxSidebarWidth();
+    const width = Math.round(Math.max(minSidebarWidth, Math.min(max, preferredSidebarWidth)));
     player.style.setProperty('--left-width', `${width}px`);
+    resizeHandle.setAttribute('aria-valuemin', minSidebarWidth);
+    resizeHandle.setAttribute('aria-valuemax', max);
+    resizeHandle.setAttribute('aria-valuenow', width);
+    resizeHandle.setAttribute('aria-valuetext', `${width} pixels`);
+    return width;
+  }
+  function resizeSidebar(value) {
+    preferredSidebarWidth = value;
+    const width = preferredSidebarWidth = applySidebarWidth();
     try { localStorage.setItem('executor-left-width', String(width)); } catch (_) {}
   }
+  applySidebarWidth();
+  window.addEventListener('resize', applySidebarWidth);
   resizeHandle.addEventListener('pointerdown', event => {
+    if (!event.isPrimary || event.button !== 0) return;
+    resizeHandle.focus({ preventScroll: true });
     resizeHandle.setPointerCapture(event.pointerId);
     const initialWidth = sidebar.getBoundingClientRect().width;
     const startX = event.clientX;
-    const move = pointer => applySidebarWidth(initialWidth + pointer.clientX - startX);
+    const move = pointer => {
+      if (pointer.pointerId === event.pointerId) resizeSidebar(initialWidth + pointer.clientX - startX);
+    };
+    resizeHandle.dataset.dragging = '';
     resizeHandle.addEventListener('pointermove', move);
-    resizeHandle.addEventListener('lostpointercapture', () => resizeHandle.removeEventListener('pointermove', move), { once: true });
+    resizeHandle.addEventListener('lostpointercapture', () => {
+      delete resizeHandle.dataset.dragging;
+      resizeHandle.removeEventListener('pointermove', move);
+    }, { once: true });
+    event.preventDefault();
   });
   resizeHandle.addEventListener('keydown', event => {
-    if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+    const current = Number(resizeHandle.getAttribute('aria-valuenow'));
+    const widths = { ArrowLeft: current - 16, ArrowRight: current + 16, Home: minSidebarWidth, End: maxSidebarWidth() };
+    if (!Object.hasOwn(widths, event.key)) return;
     event.preventDefault();
-    applySidebarWidth(sidebar.getBoundingClientRect().width + (event.key === 'ArrowRight' ? 20 : -20));
+    resizeSidebar(widths[event.key]);
   });
 
   function aggregate(statuses) {
@@ -376,6 +406,9 @@
     return 'em_andamento';
   }
   function updateSummary() {
+    for (const card of cards) {
+      card.querySelector('[data-step-status-label]').textContent = labels[card.dataset.status];
+    }
     views.forEach(view => {
       const caseId = view.dataset.caseView;
       const status = view.dataset.manualStatus || aggregate([...view.querySelectorAll('.step-card')].map(card => card.dataset.status));
@@ -1000,7 +1033,7 @@
       if (Number.isInteger(result.revision)) card.dataset.resultRevision = String(result.revision);
       card.dataset.revisionConflict = 'false';
       if (result.status_changed_at) {
-        card.querySelector('[data-status-time]').textContent = `Status registrado em ${new Date(result.status_changed_at).toLocaleString('pt-BR')}`;
+        card.querySelector('[data-step-status-label]').title = `Status registrado em ${new Date(result.status_changed_at).toLocaleString('pt-BR')}`;
         card.dataset.statusSaved = 'true';
         updateSyncActions();
       }
@@ -1462,10 +1495,13 @@
                   editor && (selectedParagraph(editor) || editor.querySelector('.rich-paragraph:last-of-type'))).catch(() => {});
     });
   });
-  document.querySelectorAll('.step-attachments').forEach(area => {
+  const attachmentRowTemplate = document.getElementById('step-attachment-template');
+  const attachmentSize = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 1 });
+  document.querySelectorAll('[data-attachment-upload-url]').forEach(area => {
     const button = area.querySelector('.choose-step-attachment');
     const picker = area.querySelector('.step-attachment-input');
     const feedback = area.querySelector('.attachment-feedback');
+    const list = area.querySelector('.attachment-list');
     const showAttachmentError = message => { feedback.textContent = message; feedback.hidden = false; setSaveState(message, true); };
     if (!button || !picker) return;
     button.addEventListener('click', () => picker.click());
@@ -1486,6 +1522,7 @@
         return;
       }
       feedback.hidden = true;
+      button.disabled = true;
       for (const file of files) {
         const task = (async () => {
           const data = new FormData();
@@ -1496,29 +1533,33 @@
           });
           const result = await response.json().catch(() => ({}));
           if (!response.ok) throw new Error(result.error || 'Falha ao anexar arquivo.');
-          const row = document.createElement('div');
-          row.className = 'step-attachment-item';
+          const row = attachmentRowTemplate.content.firstElementChild.cloneNode(true);
           row.dataset.attachmentId = result.id;
-          const link = document.createElement('a');
+          const extension = result.extension.replace(/^\./, '');
+          const format = row.querySelector('.attachment-format');
+          format.dataset.format = extension;
+          format.textContent = extension.toUpperCase() || 'Arquivo';
+          const filename = row.querySelector('.attachment-filename');
+          filename.title = filename.textContent = result.name;
+          const [amount, unit] = result.size < 1024 ? [result.size, 'B']
+            : result.size < 1048576 ? [result.size / 1024, 'KB'] : [result.size / 1048576, 'MB'];
+          row.querySelector('.attachment-size').textContent = `${attachmentSize.format(amount)} ${unit}`;
+          const link = row.querySelector('.download-step-attachment');
           link.href = result.url;
-          link.textContent = result.name;
-          const size = document.createElement('small');
-          size.textContent = `${(result.size / 1024).toFixed(1)} KB`;
-          const remove = document.createElement('button');
-          remove.type = 'button';
-          remove.className = 'remove-step-attachment';
+          link.download = result.name;
+          link.setAttribute('aria-label', `Baixar ${result.name}`);
+          const remove = row.querySelector('.remove-step-attachment');
           remove.dataset.deleteUrl = result.delete_url;
-          remove.textContent = 'Remover';
-          remove.setAttribute('aria-label', `Remover ${result.name}`);
-          row.append(link, size, remove);
-          area.querySelector('.step-attachment-list').append(row);
-          area.querySelector('[data-attachment-count]').textContent = `${area.querySelectorAll('.step-attachment-item').length} arquivo(s)`;
+          remove.setAttribute('aria-label', `Excluir ${result.name}`);
+          list.append(row);
+          list.hidden = false;
           setSaveState('Arquivo anexado');
         })();
         pendingUploads.add(task);
         try { await task; } catch (error) { showAttachmentError(error.message); break; }
         finally { pendingUploads.delete(task); }
       }
+      button.disabled = false;
     });
     area.addEventListener('click', async event => {
       const remove = event.target.closest('.remove-step-attachment');
@@ -1530,8 +1571,12 @@
         });
         const result = await response.json().catch(() => ({}));
         if (!response.ok) throw new Error(result.error || 'Falha ao remover arquivo.');
-        remove.closest('.step-attachment-item').remove();
-        area.querySelector('[data-attachment-count]').textContent = `${area.querySelectorAll('.step-attachment-item').length} arquivo(s)`;
+        const row = remove.closest('.step-attachment-item');
+        const next = row.nextElementSibling || row.previousElementSibling;
+        const restoreFocus = document.activeElement === remove || document.activeElement === document.body;
+        row.remove();
+        list.hidden = !list.childElementCount;
+        if (restoreFocus) (next?.querySelector('.remove-step-attachment') || button).focus();
         feedback.hidden = true;
         setSaveState('Arquivo removido');
       } catch (error) { remove.disabled = false; showAttachmentError(error.message); }
