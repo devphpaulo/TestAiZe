@@ -32,9 +32,9 @@
     <div class="folder-card-cell">
       {% if group.card %}
       <a class="folder-card-link" href="{{ group.card.url }}" target="_blank" rel="noopener noreferrer" title="{{ group.card.url }}" aria-label="Abrir {{ group.card.label }} no {{ group.card.provider }} em nova aba"><span class="folder-card-provider" aria-hidden="true">{{ group.card.provider[0] }}</span><span><small>{{ group.card.provider }}</small><strong>{{ group.card.label }} ↗</strong></span></a>
-      <button class="folder-card-edit" type="button" data-folder-card-edit aria-label="Editar vínculo da pasta {{ group.label }}" title="Editar vínculo">✎</button>
+      {% if meta.state == 'rascunho' %}<button class="folder-card-edit" type="button" data-folder-card-edit aria-label="Editar vínculo da pasta {{ group.label }}" title="Editar vínculo">✎</button>{% endif %}
       {% else %}
-      <button class="folder-card-add" type="button" data-folder-card-edit><span aria-hidden="true">＋</span> Vincular card</button>
+      {% if meta.state == 'rascunho' %}<button class="folder-card-add" type="button" data-folder-card-edit><span aria-hidden="true">＋</span> Vincular card</button>{% endif %}
       {% endif %}
     </div>
   </article>

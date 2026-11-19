@@ -1,5 +1,7 @@
 (() => {
   const csrf = document.querySelector('meta[name="csrf-token"]')?.content || '';
+  const grant = document.querySelector('[data-player]')?.dataset.editGrant;
+  const writeHeaders = {'X-CSRF-Token': csrf, ...(grant && {'X-Session-Edit': grant})};
   const fileInput = document.getElementById('arquivo');
   if (fileInput) {
     const drop = document.querySelector('.dropzone');
@@ -122,7 +124,7 @@
       setFolderCardBusy(true);
       error.textContent = '';
       try {
-        const response = await fetch(folderCardModal.dataset.endpoint, {method: 'POST', headers: {'Content-Type': 'application/json', 'X-CSRF-Token': csrf}, body: JSON.stringify({folder_path: selectedRow.dataset.folderPath, card_url: value})});
+        const response = await fetch(folderCardModal.dataset.endpoint, {method: 'POST', headers: {'Content-Type': 'application/json', ...writeHeaders}, body: JSON.stringify({folder_path: selectedRow.dataset.folderPath, card_url: value})});
         const result = await response.json();
         if (!response.ok) throw new Error(result.error || 'Não foi possível salvar o vínculo.');
         selectedRow.dataset.cardUrl = result.card.url;
@@ -141,7 +143,7 @@
       setFolderCardBusy(true);
       error.textContent = '';
       try {
-        const response = await fetch(folderCardModal.dataset.endpoint, {method: 'DELETE', headers: {'Content-Type': 'application/json', 'X-CSRF-Token': csrf}, body: JSON.stringify({folder_path: selectedRow.dataset.folderPath})});
+        const response = await fetch(folderCardModal.dataset.endpoint, {method: 'DELETE', headers: {'Content-Type': 'application/json', ...writeHeaders}, body: JSON.stringify({folder_path: selectedRow.dataset.folderPath})});
         const result = await response.json();
         if (!response.ok) throw new Error(result.error || 'Não foi possível remover o vínculo.');
         selectedRow.dataset.cardUrl = '';
@@ -153,29 +155,6 @@
       } catch (failure) { error.textContent = failure.message; }
       finally { setFolderCardBusy(false); }
     });
-  }
-
-  const deleteModal = document.getElementById('delete-session-modal');
-  if (deleteModal) {
-    const form = document.getElementById('delete-session-form');
-    const confirm = document.getElementById('confirm-session-delete');
-    const updateDeleteChoice = () => {
-      const permanent = form.querySelector('input[name="action"]:checked')?.value === 'delete';
-      confirm.textContent = permanent ? 'Excluir sessão e arquivos' : 'Mover para Excluídas';
-      confirm.classList.toggle('button-danger', permanent);
-      confirm.classList.toggle('button-primary', !permanent);
-    };
-    document.querySelectorAll('[data-delete-session]').forEach(button => button.addEventListener('click', () => {
-      form.action = button.dataset.deleteUrl;
-      document.getElementById('delete-session-name').textContent = button.dataset.sessionName;
-      form.querySelector('input[name="action"][value="move"]').checked = true;
-      updateDeleteChoice();
-      deleteModal.showModal();
-    }));
-    form.querySelectorAll('input[name="action"]').forEach(input => input.addEventListener('change', updateDeleteChoice));
-    ['cancel-session-delete', 'cancel-session-delete-top'].forEach(id =>
-      document.getElementById(id).addEventListener('click', () => deleteModal.close()));
-    deleteModal.addEventListener('click', event => { if (event.target === deleteModal) deleteModal.close(); });
   }
 
   const player = document.querySelector('[data-player]');
@@ -529,7 +508,7 @@
         });
 
         const area = card.querySelector('.observed-area');
-        const editor = area.querySelector('[data-rich-editor]');
+        const editor = area.querySelector('.rich-editor');
         const observed = miniElement('div', 'mini-player-observed');
         const observedHead = miniElement('div', 'mini-player-observed-head');
         const paste = miniElement('textarea', 'mini-player-paste');
@@ -922,7 +901,7 @@
     document.getElementById('sync-feedback').textContent = 'Copiando evidências…';
     try {
       const response = await fetch(syncSource.dataset.syncUrl, {
-        method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
+        method: 'POST', headers: { 'Content-Type': 'application/json', ...writeHeaders },
         body: JSON.stringify({ target_step_ids: selected,
                                replicate_status: document.getElementById('sync-replicate-status').checked })
       });
@@ -933,7 +912,11 @@
       document.getElementById('sync-feedback').className = 'sync-feedback success';
       confirm.textContent = 'Sincronizado';
       setSaveState('Evidência sincronizada');
-      setTimeout(() => location.reload(), 900);
+      setTimeout(() => {
+        const refreshPlayer = window.TestAizeSessionBoard.refreshPlayer;
+        if (refreshPlayer) refreshPlayer();
+        else location.reload();
+      }, 900);
     } catch (error) {
       syncBusy = false;
       cancel.disabled = false; confirm.textContent = 'Sincronizar evidência';
@@ -967,7 +950,7 @@
     const version = versions.get(id) || 0;
     const promise = (async () => {
       const response = await fetch(card.dataset.saveUrl, {
-        method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
+        method: 'POST', headers: { 'Content-Type': 'application/json', ...writeHeaders },
         body: JSON.stringify(collect(card))
       });
       const result = await response.json().catch(() => ({}));
@@ -1039,7 +1022,7 @@
     const version = caseVersions.get(id) || 0;
     const promise = (async () => {
       const response = await fetch(view.dataset.caseSaveUrl, {
-        method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
+        method: 'POST', headers: { 'Content-Type': 'application/json', ...writeHeaders },
         body: JSON.stringify({ comment: plainText(serializeEditor(view.querySelector('.case-comment [data-rich-editor]'))),
                                comment_doc: serializeEditor(view.querySelector('.case-comment [data-rich-editor]')),
                                precondition_doc: serializeEditor(view.querySelector('.precondition [data-rich-editor]')) })
@@ -1094,7 +1077,7 @@
     buttons.forEach(button => { button.disabled = true; });
     const task = (async () => {
       const response = await fetch(view.dataset.caseSaveUrl + '/status', {
-        method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
+        method: 'POST', headers: { 'Content-Type': 'application/json', ...writeHeaders },
         body: JSON.stringify({status, expected_revision: Number(view.dataset.statusRevision || 0), expected_generation: view.dataset.executionGeneration})
       });
       const result = await response.json();
@@ -1146,29 +1129,35 @@
     } catch (error) { setSaveState(error.message, true); button.textContent = original; }
     finally { button.disabled = false; }
   }));
-  document.getElementById('finish-form')?.addEventListener('submit', async event => {
-    event.preventDefault();
-    const form = event.currentTarget;
-    const button = form.querySelector('button');
-    button.disabled = true;
-    setSaveState('Concluindo salvamentos…');
-    try {
-      await flushPendingMedia();
-      for (const card of cards) {
-        const id = card.dataset.stepId;
-        if (timers.has(id) || inFlight.has(id)) await persist(card);
-      }
-      for (const view of views) {
-        const id = view.dataset.caseView;
-        if (statusInFlight.has(id)) await statusInFlight.get(id);
-        if (caseTimers.has(id) || caseInFlight.has(id)) await persistCase(view);
-      }
-      form.submit();
-    } catch (error) {
-      setSaveState(error.message, true);
-      button.disabled = false;
+  async function flushExecution() {
+    await flushPendingMedia();
+    for (const card of cards) {
+      const id = card.dataset.stepId;
+      if (timers.has(id) || inFlight.has(id)) await persist(card);
     }
-  });
+    for (const view of views) {
+      const id = view.dataset.caseView;
+      if (statusInFlight.has(id)) await statusInFlight.get(id);
+      if (caseTimers.has(id) || caseInFlight.has(id)) await persistCase(view);
+    }
+  }
+  function afterSaving(button, action) {
+    button?.addEventListener('click', async () => {
+      button.disabled = true;
+      setSaveState('Concluindo salvamentos…');
+      try {
+        await flushExecution();
+        setSaveState('Tudo salvo');
+        await action();
+      } catch (error) {
+        setSaveState(error.message, true);
+      } finally {
+        button.disabled = false;
+      }
+    });
+  }
+  afterSaving(document.getElementById('player-board-move'), () => window.TestAizeSessionBoard.move(player));
+  afterSaving(player.querySelector('[data-board-player-end-edit]'), () => window.TestAizeSessionBoard.endEdit());
   document.querySelectorAll('.retest-form').forEach(form => form.addEventListener('submit', async event => {
     event.preventDefault();
     const button = form.querySelector('button[type="submit"]');
@@ -1283,7 +1272,7 @@
           if (!source.ok) throw new Error('Não foi possível preservar a imagem para desfazer.');
           entry.blob = await source.blob();
         }
-        const response = await fetch(entry.delete_url, {method:'POST', headers:{'X-CSRF-Token':csrf}});
+        const response = await fetch(entry.delete_url, {method:'POST', headers:writeHeaders});
         const result = await response.json().catch(() => ({}));
         if (!response.ok && response.status !== 404) throw new Error(result.error || 'Falha ao excluir imagem.');
         editor._imageUrls.delete(entry.id);
@@ -1292,7 +1281,7 @@
         const data = new FormData(); data.append('imagem', entry.blob, entry.name);
         data.append('expected_generation', editor.closest('.case-view').dataset.executionGeneration);
         const response = await fetch(editor.closest('.evidence-area').dataset.uploadUrl,
-          {method:'POST', headers:{'X-CSRF-Token':csrf}, body:data});
+          {method:'POST', headers:writeHeaders, body:data});
         const result = await response.json().catch(() => ({}));
         if (!response.ok) throw new Error(result.error || 'Falha ao restaurar a imagem.');
         editor._imageUrls.delete(entry.id); editor._imageUrls.set(result.id, result.delete_url);
@@ -1384,7 +1373,7 @@
     data.append('imagem', file, file.name || 'Imagem colada.png');
     setSaveState('Enviando imagem…');
     try {
-      const response = await fetch(area.dataset.uploadUrl, { method: 'POST', headers: { 'X-CSRF-Token': csrf }, body: data });
+      const response = await fetch(area.dataset.uploadUrl, { method: 'POST', headers: writeHeaders, body: data });
       const result = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(result.error || 'Falha ao enviar imagem.');
       const editor = area.querySelector('[data-rich-editor]');
@@ -1465,7 +1454,7 @@
           data.append('arquivo', file, file.name);
           setSaveState(`Enviando ${file.name}…`);
           const response = await fetch(area.dataset.attachmentUploadUrl, {
-            method: 'POST', headers: { 'X-CSRF-Token': csrf }, body: data
+            method: 'POST', headers: writeHeaders, body: data
           });
           const result = await response.json().catch(() => ({}));
           if (!response.ok) throw new Error(result.error || 'Falha ao anexar arquivo.');
@@ -1499,7 +1488,7 @@
       remove.disabled = true;
       try {
         const response = await fetch(remove.dataset.deleteUrl, {
-          method: 'POST', headers: { 'X-CSRF-Token': csrf }
+          method: 'POST', headers: writeHeaders
         });
         const result = await response.json().catch(() => ({}));
         if (!response.ok) throw new Error(result.error || 'Falha ao remover arquivo.');
@@ -1541,7 +1530,7 @@
     const button = event.target.closest('.remove-evidence');
     if (!button) return;
     try {
-      const response = await fetch(button.dataset.deleteUrl, { method: 'POST', headers: { 'X-CSRF-Token': csrf } });
+      const response = await fetch(button.dataset.deleteUrl, { method: 'POST', headers: writeHeaders });
       const result = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(result.error || 'Falha ao excluir imagem.');
       const area = button.closest('.evidence-area');
@@ -1579,7 +1568,7 @@
     try {
       await fetch('/api/captura/web/contexto', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
+        headers: { 'Content-Type': 'application/json', ...writeHeaders },
         body: JSON.stringify(snap)
       });
     } catch (_) { /* The player keeps working when the capture host is absent. */ }
@@ -1649,7 +1638,7 @@
   async function pollCapture() {
     try {
       const response = await fetch(`/api/captura/web/eventos?after=${captureCursor}&client_id=${encodeURIComponent(captureClientId)}`, {
-        headers: { 'X-CSRF-Token': csrf }
+        headers: writeHeaders
       });
       if (!response.ok) return;
       const payload = await response.json();
@@ -1662,7 +1651,7 @@
           if (pipWindow && !pipWindow.closed) pipWindow.close();
           await fetch('/api/captura/web/preparado', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
+            headers: { 'Content-Type': 'application/json', ...writeHeaders },
             body: JSON.stringify({ request_id: event.request_id, client_id: captureClientId })
           });
         } else if (event.type === 'selection') applyCaptureSelection(event);

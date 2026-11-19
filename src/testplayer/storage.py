@@ -240,6 +240,9 @@ def migrate_sessions(root: Path) -> None:
                                      item.get("content_type") or attachment_content_type(name),
                                      item.get("size", 0), item.get("sha256", ""), item["id"]),
                                 )
+                    meta = get_meta(connection)
+                    if "board_phase" not in meta:
+                        set_meta(connection, "board_phase", board_phase(connection, meta))
         except (OSError, sqlite3.DatabaseError):
             continue
 
@@ -370,6 +373,7 @@ def create_draft(root: Path, parsed: dict, source_path: Path, selected: set[str]
                     "source_sha256": parsed["sha256"],
                     "sheets": json.dumps(sorted(selected), ensure_ascii=False),
                     "parent_id": "",
+                    "board_phase": "backlog",
                 }.items():
                     set_meta(connection, key, value)
                 case_position = 0
@@ -719,9 +723,10 @@ def sync_step_evidence(directory: Path, source_step_id: int, target_step_ids: li
                          item["size"], item["sha256"], created_at),
                     )
                     copies[target_step_id].append((item, image_id, relative.as_posix()))
+            changed_status = False
             for target_step_id in target_step_ids:
                 row = connection.execute(
-                    "SELECT actual,actual_doc FROM results WHERE step_id=?", (target_step_id,)
+                    "SELECT actual,actual_doc,status FROM results WHERE step_id=?", (target_step_id,)
                 ).fetchone()
                 existing = [dict(item) for item in connection.execute(
                     "SELECT * FROM evidence WHERE step_id=? AND id NOT IN ({}) ORDER BY created_at,id".format(
@@ -737,6 +742,7 @@ def sync_step_evidence(directory: Path, source_step_id: int, target_step_ids: li
                 )}
                 document, _ = normalize_document(blocks, all_ids)
                 if replicate_status:
+                    changed_status |= row["status"] != source["status"]
                     connection.execute(
                         "UPDATE results SET status=?,actual_doc=?,updated_at=?,status_changed_at=?,revision=revision+1 WHERE step_id=?",
                         (source["status"], document, now(), now(), target_step_id),
@@ -746,7 +752,8 @@ def sync_step_evidence(directory: Path, source_step_id: int, target_step_ids: li
                         "UPDATE results SET actual_doc=?,revision=revision+1 WHERE step_id=?",
                         (document, target_step_id),
                     )
-            reconcile_bug_status(connection, active, target_case_ids)
+            changed_status |= reconcile_bug_status(connection, active, target_case_ids)
+            record_status_change(connection, changed_status)
             connection.commit()
         except Exception:
             connection.rollback()
@@ -776,6 +783,116 @@ def list_sessions(root: Path) -> list[dict]:
     return sorted(found, key=lambda item: item.get("finalized_at") or item.get("created_at", ""), reverse=True)
 
 
+BOARD_LABELS = {
+    "backlog": "Backlog", "todo": "A fazer", "doing": "Em andamento",
+    "blocked": "Impedimento", "review": "Revisão", "done": "Concluído",
+}
+BOARD_MOVES = {
+    "backlog": ("todo",), "todo": ("doing",), "doing": ("blocked", "review"),
+    "review": ("doing", "blocked", "done"), "blocked": (), "done": (),
+}
+
+
+def board_phase(connection: sqlite3.Connection, meta: dict[str, str]) -> str:
+    if meta.get("state") == "concluida":
+        return "done"
+    if meta.get("board_phase") in BOARD_MOVES:
+        return meta["board_phase"]
+    started = connection.execute(
+        "SELECT EXISTS(SELECT 1 FROM results WHERE status!='nao_executado' OR status_changed_at IS NOT NULL "
+        "OR trim(actual)!='' OR trim(comment)!='') "
+        "OR EXISTS(SELECT 1 FROM cases WHERE manual_status!='' OR status_revision>0) "
+        "OR EXISTS(SELECT 1 FROM evidence) OR EXISTS(SELECT 1 FROM step_attachments) "
+        "OR EXISTS(SELECT 1 FROM case_runs)"
+    ).fetchone()[0]
+    return "todo" if started else "backlog"
+
+
+def set_board_phase(connection, meta, phase, reason="", previous=""):
+    set_meta(connection, "board_phase", phase)
+    set_meta(connection, "board_reason", reason)
+    set_meta(connection, "board_previous", previous)
+    set_meta(connection, "board_revision", str(int(meta.get("board_revision", "0")) + 1))
+
+
+def record_status_change(connection, changed):
+    if changed:
+        meta = get_meta(connection)
+        if meta.get("board_phase") == "backlog" and meta.get("state") == "rascunho":
+            set_board_phase(connection, meta, "todo")
+
+
+def _board_snapshot(connection):
+    meta = get_meta(connection)
+    phase = board_phase(connection, meta)
+    rows = list(connection.execute(
+        "SELECT c.id,c.manual_status,c.status_revision,c.execution_generation,s.id,r.status,r.revision "
+        "FROM cases c LEFT JOIN steps s ON s.case_id=c.id LEFT JOIN results r ON r.step_id=s.id "
+        "ORDER BY c.id,s.id"
+    ))
+    statuses = {}
+    for case_id, manual, _, _, step_id, status, _ in rows:
+        case = statuses.setdefault(case_id, (manual, []))
+        if step_id is not None:
+            case[1].append(status or "nao_executado")
+    counts = dict.fromkeys(STATUSES, 0)
+    for manual, steps in statuses.values():
+        counts[manual or aggregate(steps)] += 1
+    previous = meta.get("board_previous", "")
+    allowed = (previous,) if phase == "blocked" and previous in ("doing", "review") else BOARD_MOVES[phase]
+    version = hashlib.sha256(repr((phase, meta.get("board_revision"), [tuple(row) for row in rows])).encode()).hexdigest()
+    return {
+        "id": meta["id"], "source_name": meta["source_name"], "parent_id": meta.get("parent_id", ""),
+        "phase": phase, "reason": meta.get("board_reason", ""), "allowed": allowed,
+        "counts": counts, "cases": len(statuses), "steps": sum(len(steps) for _, steps in statuses.values()),
+        "created_at": meta.get("created_at", ""), "finalized_at": meta.get("finalized_at", ""),
+        "version": version,
+    }
+
+
+@session_operation
+def read_board_card(directory: Path) -> dict:
+    with db(directory) as connection:
+        return _board_snapshot(connection)
+
+
+@root_operation
+def board_sessions(root: Path) -> list[dict]:
+    paths = list((root / "rascunhos").glob("*/sessao.sqlite"))
+    paths += list((root / "sessoes").glob("*/*/sessao.sqlite"))
+    cards = []
+    for path in paths:
+        try:
+            cards.append(read_board_card(path.parent))
+        except (OSError, sqlite3.DatabaseError, KeyError):
+            continue
+    return sorted(cards, key=lambda card: card["created_at"], reverse=True)
+
+
+@root_operation
+def move_session(root: Path, directory: Path, destination: str, version: str, *,
+                 reason: str = "", confirmed: bool = False) -> dict:
+    with db(directory) as connection:
+        with connection:
+            card = _board_snapshot(connection)
+            if version != card["version"]:
+                raise StateConflict("A execução mudou. Confira os dados atualizados antes de continuar.")
+            if destination not in card["allowed"]:
+                raise ValueError("Esta movimentação não é permitida.")
+            if destination == "blocked" and (not isinstance(reason, str) or not 1 <= len(reason.strip()) <= 300):
+                raise ValueError("Informe o motivo do impedimento em até 300 caracteres.")
+            if destination == "done":
+                if confirmed is not True:
+                    raise ValueError("Confirme a conclusão da execução.")
+            else:
+                set_board_phase(connection, get_meta(connection), destination,
+                                reason.strip() if destination == "blocked" else "",
+                                card["phase"] if destination == "blocked" else "")
+    if destination == "done":
+        directory = finalize(root, directory)
+    return read_board_card(directory)
+
+
 @session_operation
 def save_result(directory: Path, step_id: int, status: str, actual: str, comment: str | None = None,
                 status_action: bool = False, actual_doc: object | None = None,
@@ -803,6 +920,7 @@ def save_result(directory: Path, step_id: int, status: str, actual: str, comment
             if actual_doc is not None:
                 ids = {row[0] for row in connection.execute("SELECT id FROM evidence WHERE step_id=?", (step_id,))}
                 normalized_doc, actual = normalize_document(actual_doc, ids)
+            prior = connection.execute("SELECT status FROM results WHERE step_id=?", (step_id,)).fetchone()
             revision_sql = " AND revision=?" if expected_revision is not None else ""
             revision_param = (expected_revision,) if expected_revision is not None else ()
             if comment is None:
@@ -830,7 +948,8 @@ def save_result(directory: Path, step_id: int, status: str, actual: str, comment
                 "SELECT status_changed_at,revision FROM results WHERE step_id=?", (step_id,)
             ).fetchone()
             case_row = connection.execute("SELECT case_id FROM steps WHERE id=?", (step_id,)).fetchone()
-            reconcile_bug_status(connection, active, {case_row[0]})
+            case_changed = reconcile_bug_status(connection, active, {case_row[0]})
+            record_status_change(connection, case_changed or (prior is not None and prior["status"] != status))
             connection.commit()
             return saved["status_changed_at"], int(saved["revision"])
         except Exception:
@@ -919,15 +1038,18 @@ def start_case_run(directory: Path, case_id: int) -> int:
                 "WHERE step_id IN (SELECT id FROM steps WHERE case_id=?)",
                 (case_id,),
             )
+            reset_status = "bloqueado" if case_id in active else ""
             connection.execute(
                 "UPDATE cases SET manual_status=?,status_revision=status_revision+1,comment='',comment_doc=NULL,precondition_doc=NULL,"
                 "precondition_note_mode=1,execution_generation=? WHERE id=?",
-                ("bloqueado" if case_id in active else "", uuid.uuid4().hex, case_id),
+                (reset_status, uuid.uuid4().hex, case_id),
             )
             connection.execute(
                 "DELETE FROM capture_commands WHERE step_id IN (SELECT id FROM steps WHERE case_id=?)",
                 (case_id,),
             )
+            record_status_change(connection, snapshot["manual_status"] != reset_status
+                                 or any(step["status"] != "nao_executado" for step in snapshot["steps"]))
             connection.commit()
             return run_no
         except Exception:
@@ -947,6 +1069,7 @@ def finalize(root: Path, directory: Path) -> Path:
                 raise ValueError("A sessão não possui passos.")
             set_meta(connection, "state", "concluida")
             set_meta(connection, "finalized_at", now())
+            set_board_phase(connection, meta, "done")
     return promote(root, directory)
 
 
@@ -1006,6 +1129,7 @@ def rerun(root: Path, source_dir: Path) -> str:
                     "source_sha256": source_meta.get("source_sha256", ""),
                     "sheets": source_meta.get("sheets", "[]"),
                     "parent_id": source_meta["id"],
+                    "board_phase": "backlog",
                 }.items():
                     set_meta(connection, key, value)
                 ids = {}
@@ -1042,13 +1166,18 @@ def active_bug_cases(directory: Path) -> set[int]:
 
 
 def reconcile_bug_status(connection, active, case_ids):
+    changed = False
     for case_id in active.intersection(case_ids):
         failed = connection.execute("SELECT 1 FROM results r JOIN steps s ON s.id=r.step_id "
                                     "WHERE s.case_id=? AND r.status='reprovado'", (case_id,)).fetchone()
         current = connection.execute('SELECT manual_status FROM cases WHERE id=?', (case_id,)).fetchone()[0]
         status = 'reprovado' if failed or current == 'reprovado' else 'bloqueado'
-        connection.execute('UPDATE cases SET manual_status=?,status_revision=status_revision+1 WHERE id=? AND manual_status<>?',
-                           (status, case_id, status))
+        result = connection.execute(
+            'UPDATE cases SET manual_status=?,status_revision=status_revision+1 WHERE id=? AND manual_status<>?',
+            (status, case_id, status),
+        )
+        changed |= result.rowcount > 0
+    return changed
 
 
 @session_operation
@@ -1066,7 +1195,8 @@ def set_case_status(directory, case_id, status, expected_revision, expected_gene
         if case_id in active and status not in ('reprovado', 'bloqueado'):
             raise StateConflict('Há bug ativo vinculado. Mantenha bloqueado ou reprovado.')
         connection.execute('UPDATE cases SET manual_status=?,status_revision=status_revision+1 WHERE id=?', (status, case_id))
-        reconcile_bug_status(connection, active, {case_id})
+        reconciled = reconcile_bug_status(connection, active, {case_id})
+        record_status_change(connection, reconciled or row["manual_status"] != status)
         connection.commit()
     return case_state(directory, case_id)
 

@@ -72,7 +72,7 @@ def _execute(root, store, operation_id):
 
 
 def _recover_link(root, store, operation):
-    from .storage import db, find_directory, get_meta, now, reconcile_bug_status
+    from .storage import db, find_directory, get_meta, now, reconcile_bug_status, record_status_change
     payload = json.loads(operation['payload'])
     directory = find_directory(root, payload['session_id'])
     if directory is None:
@@ -97,11 +97,15 @@ def _recover_link(root, store, operation):
     _phase(store, operation['operation_id'], 'links')
     with db(directory) as connection:
         connection.execute('BEGIN IMMEDIATE')
+        changed_status = False
         for item in payload['cases']:
-            connection.execute("UPDATE cases SET manual_status=?,status_revision=status_revision+1 "
-                               "WHERE id=? AND manual_status<>?",
-                               (item['status'], item['id'], item['status']))
-        reconcile_bug_status(connection, {item['id'] for item in payload['cases']}, {item['id'] for item in payload['cases']})
+            updated = connection.execute("UPDATE cases SET manual_status=?,status_revision=status_revision+1 "
+                                         "WHERE id=? AND manual_status<>?",
+                                         (item['status'], item['id'], item['status']))
+            changed_status |= updated.rowcount > 0
+        case_ids = {item['id'] for item in payload['cases']}
+        changed_status |= reconcile_bug_status(connection, case_ids, case_ids)
+        record_status_change(connection, changed_status)
         connection.commit()
     _phase(store, operation['operation_id'], 'done')
 

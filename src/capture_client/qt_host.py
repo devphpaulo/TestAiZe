@@ -792,6 +792,7 @@ class CaptureHost(QObject):
                 ("session_id", "case_id", "step_id", "execution_generation")
             }
             self.pending_observed["expected_revision"] = self.context["result_revision"]
+            self.pending_observed["context_revision"] = self.context.get("context_revision")
         self.pending_observed["text"] = self.dock.observed.toPlainText()
         self.text_timer.start(650)
 
@@ -916,6 +917,7 @@ class CaptureHost(QObject):
             "step_id": frozen["step_id"],
             "execution_generation": frozen["execution_generation"],
             "expected_revision": frozen["expected_revision"],
+            "context_revision": frozen["context_revision"],
             "image_base64": base64.b64encode(frozen["png"]).decode("ascii"),
         }
         payload, status = self.api.post("/api/captura/host/anexar", body)

@@ -56,6 +56,7 @@ class Draft:
             and self.pending["case_id"] == context["case_id"]
             and self.pending["step_id"] == context["step_id"]
             and self.pending["execution_generation"] == context["execution_generation"]
+            and self.pending["context_revision"] == context.get("context_revision")
             and self.pending["command_id"] == self.command_id
         )
         if same:
@@ -71,6 +72,7 @@ class Draft:
             "step_id": context["step_id"],
             "execution_generation": context["execution_generation"],
             "expected_revision": context["result_revision"],
+            "context_revision": context.get("context_revision"),
         }
         return self.pending
 

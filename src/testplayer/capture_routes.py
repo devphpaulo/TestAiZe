@@ -6,11 +6,13 @@ import base64
 import hmac
 import json
 from pathlib import Path
+from functools import wraps
 
 from flask import current_app, jsonify, request, session, url_for
 
 from .capture_context import CaptureBroker, PublishedContext
 from .capture_service import CaptureError, commit_capture, load_case_context, save_observed_text
+from .bugs_coordinator import coordinated
 from .storage import RevisionConflict, StaleExecution, db as open_db, find_directory
 
 
@@ -55,6 +57,21 @@ def _directory(root: Path, session_id: object) -> Path | None:
     return find_directory(root, session_id)
 
 
+def _can_edit(directory: Path, grant: str = "", owner=None) -> bool:
+    return current_app.extensions["session_writable"](directory, grant, owner)
+
+
+def _check_host_write(directory: Path, body: dict) -> None:
+    if _can_edit(directory):
+        return
+    context = _broker().context
+    if (context and context.valid and context.session_id == body["session_id"]
+            and context.step_id == body.get("step_id") and context.context_revision == body.get("context_revision")
+            and _can_edit(directory, context.edit_grant)):
+        return
+    raise CaptureError("SESSION_READ_ONLY", "Execução concluída. Abra o modo de edição no Test Player.", 409)
+
+
 def _context_payload(root: Path, broker: CaptureBroker) -> dict:
     current = broker.context
     base = {"instance_id": broker.instance_id, "hotkey_ok": broker.hotkey_ok}
@@ -65,6 +82,9 @@ def _context_payload(root: Path, broker: CaptureBroker) -> dict:
     if directory is None:
         return {**base, "valid": False, "code": "INVALID_TARGET",
                 "message": "A sessão aberta não está mais disponível."}
+    if not _can_edit(directory, current.edit_grant):
+        return {**base, "valid": False, "code": "SESSION_READ_ONLY",
+                "message": "Execução concluída. Abra o modo de edição no Test Player."}
     try:
         loaded = load_case_context(directory, current.case_id, current.step_id)
     except CaptureError as exc:
@@ -104,6 +124,15 @@ def _publish(root: Path, broker: CaptureBroker, body: dict, source_client_id: st
     directory = _directory(root, session_id)
     if directory is None:
         raise CaptureError("INVALID_TARGET", "Sessão não encontrada.", 404)
+    current = broker.context
+    if source_client_id == "capture-host":
+        grant = current.edit_grant if current and current.valid and current.session_id == session_id else ""
+        owner = None
+    else:
+        grant = request.headers.get("X-Session-Edit", "")
+        owner = session.get("csrf_token", "")
+    if not _can_edit(directory, grant, owner):
+        raise CaptureError("SESSION_READ_ONLY", "Execução concluída. Abra o modo de edição no Test Player.", 409)
     loaded = load_case_context(directory, case_id, step_id)
     if broker.remember(event_id) and broker.context is not None:
         return _context_payload(root, broker)
@@ -118,6 +147,7 @@ def _publish(root: Path, broker: CaptureBroker, body: dict, source_client_id: st
         context_revision=(broker.context.context_revision + 1) if broker.context else 1,
         valid=explicit,
         code="" if explicit else "STALE_EXECUTION",
+        edit_grant=grant,
     )
     broker.publish(published, {
         "type": "selection",
@@ -139,6 +169,13 @@ def _emit(broker: CaptureBroker, payload: dict) -> None:
 
 
 def register_capture_routes(app, root: Path) -> None:
+    def serialize(view):
+        @wraps(view)
+        def guarded(*args, **kwargs):
+            with coordinated(root):
+                return view(*args, **kwargs)
+        return guarded
+
     @app.post("/api/captura/host/ping")
     def capture_ping():
         if not _host_ok():
@@ -190,6 +227,7 @@ def register_capture_routes(app, root: Path) -> None:
         return jsonify(_context_payload(root, _broker()))
 
     @app.post("/api/captura/host/selecao")
+    @serialize
     def capture_host_select():
         if not _host_ok():
             return jsonify(error="Cliente não autorizado.", code="UNAUTHORIZED_CLIENT"), 403
@@ -205,6 +243,7 @@ def register_capture_routes(app, root: Path) -> None:
         return jsonify(payload)
 
     @app.post("/api/captura/host/resultado")
+    @serialize
     def capture_host_result():
         if not _host_ok():
             return jsonify(error="Cliente não autorizado.", code="UNAUTHORIZED_CLIENT"), 403
@@ -215,6 +254,7 @@ def register_capture_routes(app, root: Path) -> None:
         if directory is None:
             return jsonify(error="Sessão não encontrada.", code="INVALID_TARGET"), 404
         try:
+            _check_host_write(directory, body)
             saved = save_observed_text(
                 directory, body.get("step_id"), body.get("text", ""),
                 body.get("expected_revision"), body.get("execution_generation", ""),
@@ -246,6 +286,7 @@ def register_capture_routes(app, root: Path) -> None:
         return jsonify(ok=True, revision=saved["revision"], status=saved["status"], actual=saved["actual"])
 
     @app.post("/api/captura/host/anexar")
+    @serialize
     def capture_attach():
         if not _host_ok():
             return jsonify(error="Cliente não autorizado.", code="UNAUTHORIZED_CLIENT"), 403
@@ -264,6 +305,7 @@ def register_capture_routes(app, root: Path) -> None:
             return jsonify(error="Sessão não encontrada.", code="INVALID_TARGET"), 404
         command_id = body.get("command_id")
         try:
+            _check_host_write(directory, body)
             saved = commit_capture(
                 directory,
                 command_id=command_id,
@@ -327,6 +369,7 @@ def register_capture_routes(app, root: Path) -> None:
         return jsonify(ok=True, evidence_id=row["evidence_id"], step_id=row["step_id"], command_id=command_id)
 
     @app.post("/api/captura/web/contexto")
+    @serialize
     def capture_web_context():
         if not _web_ok():
             return jsonify(error="Token de segurança inválido. Recarregue a página."), 400

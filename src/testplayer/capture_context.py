@@ -20,6 +20,7 @@ class PublishedContext:
     context_revision: int
     valid: bool
     code: str = ""
+    edit_grant: str = ""
 
 
 class CaptureBroker:

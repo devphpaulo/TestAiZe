@@ -10,6 +10,7 @@ import shutil
 import sqlite3
 import uuid
 from collections.abc import Mapping
+from functools import wraps
 from pathlib import Path, PureWindowsPath
 
 from flask import Flask, abort, flash, jsonify, redirect, render_template, request, send_file, session, url_for
@@ -28,8 +29,8 @@ from .attachments import (MAX_ATTACHMENT_BYTES, MAX_STEP_ATTACHMENTS, attachment
 from .pdf_export import generate_pdf
 from .html_export import generate_html
 from .bug_prompt import build_prompt, failed_case
-from .storage import (create_draft, db, ensure_root, finalize, find_directory,
-                       delete_folder_link, find_sync_targets, folder_card_details, list_sessions,
+from .storage import (BOARD_LABELS, board_sessions, create_draft, db, ensure_root, find_directory,
+                       delete_folder_link, find_sync_targets, folder_card_details, get_meta, move_session, read_board_card,
                        migrate_sessions, now, read_session, save_folder_link,
                        recover_promotions, remove_session, rerun, save_case, save_result,
                        start_case_run, sync_step_evidence, RevisionConflict, StaleExecution)
@@ -95,6 +96,21 @@ def create_app(root: Path) -> Flask:
     app.extensions["bugs"] = BugsService(root)
     app.register_blueprint(bugs_blueprint)
     app.extensions["capture_broker"] = CaptureBroker()
+    edit_grants = {}
+
+    def valid_edit(session_id, token, owner=None):
+        target, issued_to = edit_grants.get(token, ("", ""))
+        return target == session_id and (owner is None or owner == issued_to)
+
+    def session_writable(directory, token="", owner=None):
+        with db(directory) as connection:
+            meta = get_meta(connection)
+        return meta["state"] != "concluida" or valid_edit(meta["id"], token, owner)
+
+    def supplied_edit():
+        return request.headers.get("X-Session-Edit") or request.form.get("edit_grant", "")
+
+    app.extensions["session_writable"] = session_writable
     automation_runtime = detect_automation_runtime()
     app.extensions["automation_runtime"] = automation_runtime
     app.extensions["automation_recorder"] = RecorderManager(runtime=automation_runtime)
@@ -216,10 +232,7 @@ def create_app(root: Path) -> Flask:
 
     @app.get("/")
     def home():
-        items = list_sessions(root)
-        drafts = [item for item in items if item["state"] == "rascunho"]
-        completed = [item for item in items if item["state"] == "concluida"]
-        return render_template("home.html", drafts=drafts, completed=completed)
+        return render_template("home.html", cards=board_sessions(root), board_labels=BOARD_LABELS)
 
     @app.post("/sessao/<session_id>/excluir")
     def delete_session(session_id: str):
@@ -227,7 +240,11 @@ def create_app(root: Path) -> Flask:
         if action not in ("move", "delete"):
             abort(400, "Escolha o destino da sessão.")
         try:
-            remove_session(root, session_id, delete_files=action == "delete")
+            with coordinated(root):
+                remove_session(root, session_id, delete_files=action == "delete")
+                for token, (target, _) in list(edit_grants.items()):
+                    if target == session_id:
+                        del edit_grants[token]
             flash("Sessão e arquivos excluídos." if action == "delete"
                   else "Sessão movida para a pasta Excluídas.", "success")
         except LookupError:
@@ -322,16 +339,70 @@ def create_app(root: Path) -> Flask:
             abort(404)
         return directory
 
-    @app.get("/sessao/<session_id>")
+    @app.route("/sessao/<session_id>", methods=["GET", "POST"])
     def player(session_id: str):
-        directory = session_dir(session_id)
-        record = read_session(directory)
+        with coordinated(root):
+            directory = session_dir(session_id)
+            record = read_session(directory)
+            card = read_board_card(directory)
+            grant = supplied_edit() if request.method == "POST" else ""
+            writable = card["phase"] != "done" or valid_edit(session_id, grant, session.get("csrf_token", ""))
+            session_bugs = app.extensions["bugs"].list(session_id)
         groups = folder_groups(record["cases"])
         initial_folders = request.args.getlist("pasta")
         if not set(initial_folders).issubset({group["name"] for group in groups}):
             abort(404)
-        return render_template("player.html", record=record, writable=True,
-                               folder_groups=groups, initial_folders=initial_folders, session_bugs=app.extensions["bugs"].list(session_id))
+        response = app.make_response(render_template(
+            "player.html", record=record, writable=writable, edit_grant=grant if writable else "",
+            board_labels=BOARD_LABELS, board_card=card,
+            folder_groups=groups, initial_folders=initial_folders, session_bugs=session_bugs,
+        ))
+        response.headers["Cache-Control"] = "no-store"
+        return response
+
+    @app.post("/sessao/<session_id>/editar")
+    def begin_session_edit(session_id: str):
+        body = request.get_json(silent=True)
+        if not isinstance(body, dict) or body.get("confirmed") is not True:
+            return jsonify(error="Confirme a edição da execução concluída."), 422
+        with coordinated(root):
+            if read_board_card(session_dir(session_id))["phase"] != "done":
+                return jsonify(error="Esta execução ainda está em andamento."), 409
+            grant = secrets.token_urlsafe(32)
+            edit_grants[grant] = (session_id, session["csrf_token"])
+            return jsonify(grant=grant)
+
+    @app.post("/sessao/<session_id>/encerrar-edicao")
+    def end_session_edit(session_id: str):
+        with coordinated(root):
+            token = supplied_edit()
+            if valid_edit(session_id, token, session.get("csrf_token", "")):
+                del edit_grants[token]
+        if request.form.get("return_to_player"):
+            return redirect(url_for("player", session_id=session_id), code=303)
+        return jsonify(ok=True)
+
+    @app.route("/api/sessao/<session_id>/quadro", methods=["GET", "POST"])
+    def session_board(session_id: str):
+        with coordinated(root):
+            directory = session_dir(session_id)
+            if request.method == "GET":
+                return jsonify(read_board_card(directory))
+            body = request.get_json(silent=True)
+            if not isinstance(body, dict):
+                return jsonify(error="Informe o destino e a versão da execução."), 422
+            try:
+                card = move_session(root, directory, body.get("destination"), body.get("version"),
+                                    reason=body.get("reason", ""), confirmed=body.get("confirmed"))
+            except StateConflict as exc:
+                return jsonify(error=str(exc), card=read_board_card(directory)), 409
+            except ValueError as exc:
+                return jsonify(error=str(exc)), 422
+            if card["phase"] == "done":
+                broker = app.extensions["capture_broker"]
+                if broker.context and broker.context.session_id == session_id:
+                    broker.invalidate("SESSION_READ_ONLY")
+            return jsonify(card)
 
     @app.get("/sessao/<session_id>/abrir")
     def choose_folder(session_id: str):
@@ -747,12 +818,8 @@ def create_app(root: Path) -> Flask:
 
     @app.post("/sessao/<session_id>/finalizar")
     def finish(session_id: str):
-        directory = session_dir(session_id)
-        try:
-            finalize(root, directory)
-            flash("Execução finalizada e salva na pasta de sessões.", "success")
-        except ValueError as exc:
-            flash(str(exc), "error")
+        session_dir(session_id)
+        flash("Use Mover execução e confirme a conclusão no quadro.", "error")
         return redirect(url_for("player", session_id=session_id))
 
     @app.post("/sessao/<session_id>/caso/<int:case_id>/nova-execucao")
@@ -769,7 +836,7 @@ def create_app(root: Path) -> Flask:
         directory = session_dir(session_id)
         try:
             new_id = rerun(root, directory)
-            return redirect(url_for("player", session_id=new_id))
+            return redirect(url_for("home") + f"#sessao-{new_id}")
         except ValueError as exc:
             flash(str(exc), "error")
             return redirect(url_for("player", session_id=session_id))
@@ -844,5 +911,20 @@ def create_app(root: Path) -> Flask:
             abort(409)
         return jsonify(prompt=build_prompt(root, case))
 
+    def require_session_write(view):
+        @wraps(view)
+        def guarded(session_id, **kwargs):
+            with coordinated(root):
+                if not session_writable(session_dir(session_id), supplied_edit(), session.get("csrf_token", "")):
+                    return jsonify(error="Execução concluída. Use Editar execução para alterar os dados."), 409
+                return view(session_id, **kwargs)
+        return guarded
+
+    for endpoint in (
+        "save_folder_card", "remove_folder_card", "result", "sync_confirm", "case_result", "explicit_case_status",
+        "upload_image", "upload_step_attachment", "delete_step_attachment", "upload_case_image", "delete_image",
+        "new_case_run", "bugs.create",
+    ):
+        app.view_functions[endpoint] = require_session_write(app.view_functions[endpoint])
     register_capture_routes(app, root)
     return app
