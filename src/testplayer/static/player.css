@@ -119,8 +119,8 @@
 
 :root[data-theme] .player-shell :is(.step-card, .case-nav-item)[data-status] {
   --step-color: var(--phase-backlog);
-  border: 1px solid color-mix(in srgb, var(--step-color) 27%, var(--ui-border)) !important;
-  background: color-mix(in srgb, var(--step-color) 7%, var(--canvas)) !important;
+  border: 1px solid color-mix(in srgb, var(--step-color) 48%, var(--ui-border)) !important;
+  background: color-mix(in srgb, var(--step-color) 14%, var(--canvas)) !important;
 }
 :root[data-theme] .player-shell .step-card[data-status] {
   border-top: 2px solid color-mix(in srgb, var(--step-color) 53%, var(--ui-border)) !important;
@@ -140,6 +140,11 @@
 .player-shell .case-nav-content strong { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .player-shell .case-nav-content small { margin-top: 0; }
 .player-shell .case-nav-tag { position: static; justify-self: start; margin-top: 0; }
+:root[data-theme] .player-shell .case-nav-item[data-status]:not([data-status="nao_executado"]) .case-nav-tag {
+  border-color: color-mix(in srgb, var(--step-color) 66%, var(--player-line)) !important;
+  background: color-mix(in srgb, var(--step-color) 22%, var(--player-surface)) !important;
+  color: var(--step-color) !important;
+}
 .player-shell :is(.status-icon-button, .case-navigation .button) { border-radius: 8px; }
 .player-shell .status-icon-button { width: 32px; height: 32px; }
 .player-shell :is(.progress-strip, .steps-title) { margin-bottom: 16px; }
@@ -169,9 +174,9 @@ body:has(> .player-shell[data-player]) > .topbar { height: 64px; min-height: 64p
   --player-line: #3a3a3a;
 }
 :root[data-theme] .player-shell .step-card[data-status] {
-  border-color: color-mix(in srgb, var(--step-color) 27%, var(--player-line)) !important;
-  border-top-color: color-mix(in srgb, var(--step-color) 53%, var(--player-line)) !important;
-  background: color-mix(in srgb, var(--step-color) 7%, var(--player-surface)) !important;
+  border-color: color-mix(in srgb, var(--step-color) 48%, var(--player-line)) !important;
+  border-top-color: color-mix(in srgb, var(--step-color) 72%, var(--player-line)) !important;
+  background: color-mix(in srgb, var(--step-color) 14%, var(--player-surface)) !important;
 }
 :root[data-theme] .player-shell .step-card[data-status="nao_executado"] {
   border-color: var(--player-line) !important;
@@ -179,7 +184,7 @@ body:has(> .player-shell[data-player]) > .topbar { height: 64px; min-height: 64p
 }
 .player-shell[data-player] .player-main { min-width: 0; }
 .player-shell[data-player] .player-toolbar { top: var(--player-header-height); }
-.player-shell[data-player] .case-nav { display: grid; align-content: start; padding: 16px 8px 16px 16px; }
+.player-shell[data-player] .case-nav { display: grid; grid-auto-rows: max-content; align-content: start; padding: 16px 8px 16px 16px; }
 .player-shell[data-player] .case-folder-group { margin: 8px 0 0; }
 .player-shell[data-player] .case-folder-group:first-child { margin-top: 0; }
 .player-shell[data-player] .player-content { width: 100%; max-width: none; margin: 0; padding: 24px 24px 48px 16px; }
@@ -230,6 +235,9 @@ body:has(> .player-shell[data-player]) > .topbar { height: 64px; min-height: 64p
   white-space: nowrap;
 }
 .step-status-badge::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.player-shell .step-card[data-status]:not([data-status="nao_executado"]) .step-status-badge {
+  background: color-mix(in srgb, var(--step-color) 22%, var(--player-surface));
+}
 .player-shell .step-card[data-status="nao_executado"] .step-status-badge { color: var(--muted) !important; }
 .player-shell .step-status-buttons { gap: 2px; padding: 3px; border: 1px solid var(--player-line); border-radius: 10px; background: var(--player-field); }
 :root[data-theme] .player-shell .step-status-buttons .status-icon-button {
@@ -367,7 +375,8 @@ body:has(> .player-shell[data-player]) > .topbar { height: 64px; min-height: 64p
     transform: none;
   }
   .player-shell[data-player] .sidebar-resizer:is(:hover,:focus-visible,[data-dragging])::after { background: var(--accent); }
-  .player-shell[data-player] .sidebar-resizer:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+  .player-shell[data-player] .sidebar-resizer:focus-visible { outline: none; }
+  .player-shell[data-player] .sidebar-resizer:focus-visible::after { outline: 2px solid var(--accent); outline-offset: 2px; }
 }
 @media (max-width: 760px) {
   .player-shell[data-player] .case-sidebar { position: static; width: auto; height: auto; min-height: 0; box-shadow: none; scroll-margin-top: 64px; }
