@@ -1,0 +1,164 @@
+.player-dialog {
+  width: min(720px, calc(100% - 32px));
+  max-width: none;
+  max-height: none;
+  margin: auto;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--ui-border);
+  border-radius: 16px;
+  background: var(--canvas);
+  color: var(--ink);
+  box-shadow: var(--ui-shadow);
+}
+.player-dialog::backdrop { background: #0009; }
+.player-dialog-layout { display: flex; flex-direction: column; max-height: calc(100dvh - 32px); }
+.player-dialog-head, .player-dialog-foot {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 24px;
+}
+.player-dialog-head { border-bottom: 1px solid var(--ui-border); }
+.player-dialog-head h2 { margin: 0; font-size: 1.375rem; font-weight: 650; line-height: 1.25; }
+.player-dialog-head p { margin: 8px 0 0; color: var(--muted); overflow-wrap: anywhere; }
+.player-dialog-close, .dialog-quiet {
+  min-height: 32px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-weight: 550;
+}
+.player-dialog-close { display: grid; flex: none; place-items: center; width: 32px; }
+.player-dialog-close:hover, .dialog-quiet:hover:not(:disabled) { background: var(--ui-subtle); color: var(--ink); }
+.dialog-quiet:disabled { opacity: .55; cursor: default; }
+.player-dialog-body {
+  display: grid;
+  gap: 16px;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: 16px 24px 24px;
+  scrollbar-width: thin;
+}
+.player-dialog-foot { justify-content: flex-end; align-items: center; flex-wrap: wrap; border-top: 1px solid var(--ui-border); }
+.player-dialog-foot:has(.dialog-check) { justify-content: space-between; }
+.dialog-actions { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 8px; }
+.dialog-actions .button { min-height: 40px; padding: 8px 16px; }
+.dialog-radio-group { min-width: 0; margin: 0; padding: 0; border: 0; }
+.dialog-radio-group legend { margin-bottom: 8px; padding: 0; font-weight: 600; }
+.dialog-radio-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.dialog-radio-card, .dialog-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  cursor: pointer;
+}
+.dialog-radio-card {
+  align-items: flex-start;
+  min-height: 64px;
+  border: 1px solid var(--ui-border);
+  border-radius: 8px;
+  background: var(--ui-surface);
+}
+.dialog-radio-card:hover, .dialog-row:hover { background: var(--ui-subtle); }
+.dialog-radio-card:has(:checked) {
+  border-color: color-mix(in srgb, var(--accent) 65%, var(--ui-border));
+  background: color-mix(in srgb, var(--accent) 9%, var(--ui-surface));
+}
+.dialog-radio-card :is(strong,small), .dialog-row :is(strong,small) { display: block; }
+.dialog-radio-card small, .dialog-row small { color: var(--muted); }
+.dialog-check { display: inline-flex; gap: 8px; align-items: center; min-height: 32px; cursor: pointer; }
+.player-dialog input:is([type="checkbox"], [type="radio"]) { flex: none; width: 16px; height: 16px; margin: 0; accent-color: var(--accent); }
+.dialog-selection {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  color: var(--muted);
+}
+.dialog-selection .dialog-check { font-weight: 600; color: var(--ink); }
+.dialog-groups { display: grid; gap: 8px; }
+.dialog-groups:empty { display: none; }
+.dialog-group { min-width: 0; border: 1px solid var(--ui-border); border-radius: 8px; background: var(--ui-surface); }
+.dialog-row { min-height: 40px; overflow-wrap: anywhere; }
+.dialog-row + .dialog-row { border-top: 1px solid var(--ui-border); }
+.dialog-row:first-child { border-radius: 7px 7px 0 0; }
+.dialog-row:last-child { border-radius: 0 0 7px 7px; }
+.dialog-group-heading { min-height: 48px; background: var(--ui-subtle); }
+.dialog-row .status-tag { margin-inline-start: auto; }
+.dialog-source {
+  display: grid;
+  gap: 8px;
+  padding: 16px;
+  border: 1px solid var(--ui-border);
+  border-radius: 8px;
+  background: var(--ui-surface);
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.dialog-source[hidden] { display: none; }
+.dialog-source strong { color: var(--ink); }
+.dialog-source ul { margin: 0; padding-inline-start: 16px; }
+.dialog-source ul:empty { display: none; }
+.dialog-note { font-size: .8125rem; color: var(--muted); }
+.sync-folder-heading { margin: 8px 0 0; font-size: .875rem; font-weight: 600; overflow-wrap: anywhere; }
+.sync-folder-heading:first-child { margin-top: 0; }
+.sync-target-row { padding-inline-start: 32px; }
+.sync-target-copy strong { font-weight: 500; }
+.player-dialog :is(.dialog-feedback, .sync-feedback) { margin: 0; padding: 8px 24px; color: var(--muted); }
+.player-dialog :is(.dialog-feedback, .sync-feedback):empty { display: none; }
+.player-dialog :is(.dialog-feedback, .sync-feedback).error { color: var(--ui-red); }
+.player-dialog .sync-feedback.success { color: var(--phase-done); }
+
+:root[data-theme] .player-shell :is(.step-card, .case-nav-item)[data-status] {
+  --step-color: var(--phase-backlog);
+  border: 1px solid color-mix(in srgb, var(--step-color) 27%, var(--ui-border)) !important;
+  background: color-mix(in srgb, var(--step-color) 7%, var(--canvas)) !important;
+}
+:root[data-theme] .player-shell .step-card[data-status] {
+  border-top: 2px solid color-mix(in srgb, var(--step-color) 53%, var(--ui-border)) !important;
+  border-radius: 16px;
+}
+:root[data-theme] .player-shell :is(.step-card, .case-nav-item)[data-status="aprovado"] { --step-color: var(--phase-done); }
+:root[data-theme] .player-shell :is(.step-card, .case-nav-item)[data-status="reprovado"] { --step-color: var(--ui-red); }
+:root[data-theme] .player-shell :is(.step-card, .case-nav-item)[data-status="em_andamento"] { --step-color: var(--phase-blocked); }
+:root[data-theme] .player-shell :is(.step-card, .case-nav-item)[data-status="bloqueado"] { --step-color: var(--phase-active); }
+:root[data-theme] .player-shell :is(.step-card, .case-nav-item)[data-status="nao_executado"] { background: var(--canvas) !important; }
+:root[data-theme] .player-shell .case-nav-item.active[data-status] {
+  border-inline-start: 3px solid color-mix(in srgb, var(--step-color) 68%, var(--ui-border)) !important;
+}
+.player-shell :is(.case-heading, .case-navigation, .case-run-bar) { gap: 16px; }
+.player-shell :is(.case-meta span, .case-status-actions, .case-nav, .case-nav-item, .step-attachment-item) { gap: 8px; }
+.player-shell .case-nav-item[data-status] { margin-block: 0; padding-bottom: 40px; }
+.player-shell :is(.status-icon-button, .step-sync-action, .case-navigation .button, .step-attachment-actions .button) { border-radius: 8px; }
+.player-shell .status-icon-button { width: 32px; height: 32px; }
+.player-shell :is(.progress-strip, .steps-title) { margin-bottom: 16px; }
+.player-shell :is(.precondition-source, .case-evidence-area .rich-editor, .observed-area .rich-editor) { border-radius: 8px; }
+.player-shell :is(.step-card-head, .step-execution, .precondition, .case-comment) { padding: 24px; }
+.player-shell :is(.step-card-head, .step-status-wrap, .status-button-row, .observed-heading, .step-attachments-heading) { gap: 8px; }
+.player-shell :is(.step-inputs > div, .step-inputs .reference-source, .step-attachment-item) { padding: 8px 16px; }
+.player-shell .precondition-source { margin-block: 16px; }
+.player-shell :is(.rich-editor, .step-attachment-list) { margin-top: 16px; }
+.player-shell .rich-editor { padding: 16px; }
+.player-shell .case-run-bar { padding-block: 16px; }
+.player-shell .step-card { margin-bottom: 16px; }
+.player-shell .step-card .step-attachments { margin-top: 16px; padding: 16px; }
+
+@media (max-width: 600px) {
+  .player-dialog { width: calc(100% - 16px); }
+  .player-dialog-layout { max-height: calc(100dvh - 16px); }
+  .player-dialog :is(.player-dialog-head, .player-dialog-body, .player-dialog-foot, .dialog-feedback, .sync-feedback) { padding-inline: 16px; }
+  .player-dialog-foot { gap: 8px; }
+  .player-dialog-foot .dialog-actions { width: 100%; }
+  .dialog-radio-options { grid-template-columns: 1fr; }
+  .dialog-row:has(.status-tag) { display: grid; grid-template-columns: 16px minmax(0, 1fr); }
+  .dialog-row .status-tag { grid-column: 2; justify-self: start; margin: 0; }
+  .player-shell :is(.step-card-head, .step-execution, .precondition, .case-comment) { padding: 16px; }
+}

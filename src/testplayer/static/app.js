@@ -689,7 +689,7 @@
       document.getElementById('pdf-selection-error').textContent = selected ? '' : 'Selecione ao menos um caso.';
       allCheck.checked = selected === caseChecks.length;
       allCheck.indeterminate = selected > 0 && selected < caseChecks.length;
-      pdfModal.querySelectorAll('.pdf-folder').forEach(folder => {
+      pdfModal.querySelectorAll('[data-pdf-folder]').forEach(folder => {
         const checks = [...folder.querySelectorAll('.pdf-case-check')];
         const checked = checks.filter(check => check.checked).length;
         const control = folder.querySelector('.pdf-folder-check');
@@ -717,7 +717,7 @@
     });
     allCheck.addEventListener('change', () => { caseChecks.forEach(check => { check.checked = allCheck.checked; }); updatePdfSelection(); });
     pdfModal.querySelectorAll('.pdf-folder-check').forEach(check => check.addEventListener('change', () => {
-      check.closest('.pdf-folder').querySelectorAll('.pdf-case-check').forEach(item => { item.checked = check.checked; });
+      check.closest('[data-pdf-folder]').querySelectorAll('.pdf-case-check').forEach(item => { item.checked = check.checked; });
       updatePdfSelection();
     }));
     caseChecks.forEach(check => check.addEventListener('change', updatePdfSelection));
@@ -741,7 +741,10 @@
           }
           pdfModal.close();
           form.submit();
-        } catch (error) { setSaveState(error.message, true); }
+        } catch (error) {
+          document.getElementById('pdf-selection-error').textContent = error.message;
+          setSaveState(error.message, true);
+        }
         finally { button.disabled = false; }
       }
     });
@@ -814,6 +817,7 @@
   }
   function renderSyncPreview(preview) {
     const origin = preview.origin;
+    document.getElementById('sync-source-summary').hidden = false;
     document.getElementById('sync-source-label').textContent =
       `Origem: ${origin.case_name} · Passo ${String(origin.step_position).padStart(2, '0')} · “${origin.description}”`;
     document.getElementById('sync-evidence-summary').textContent =
@@ -840,9 +844,9 @@
       let group = cases.get(target.case_id);
       if (!group) {
         group = document.createElement('section');
-        group.className = 'sync-case-group';
+        group.className = 'dialog-group sync-case-group';
         const heading = document.createElement('label');
-        heading.className = 'sync-case-heading';
+        heading.className = 'dialog-row dialog-group-heading';
         const caseCheck = document.createElement('input');
         caseCheck.type = 'checkbox'; caseCheck.className = 'sync-case-check'; caseCheck.checked = true;
         const name = document.createElement('strong'); name.textContent = target.case_name;
@@ -854,7 +858,7 @@
         cases.set(target.case_id, group);
       }
       const row = document.createElement('label');
-      row.className = 'sync-target-row';
+      row.className = 'dialog-row sync-target-row';
       const check = document.createElement('input');
       check.type = 'checkbox'; check.className = 'sync-target-check'; check.value = target.step_id; check.checked = true;
       const copy = document.createElement('span'); copy.className = 'sync-target-copy';
@@ -870,12 +874,21 @@
     document.getElementById('sync-feedback').textContent = '';
     updateSyncSelection();
   }
+  let syncPreviewRequest;
   async function openSyncModal(card) {
     if (syncBusy || !syncCardIsCurrent(card) || !syncCardEligible(card)) return;
     selectSyncSource(card);
+    syncPreviewRequest?.abort();
+    const request = new AbortController();
+    syncPreviewRequest = request;
     document.getElementById('sync-target-list').replaceChildren();
     document.getElementById('sync-evidence-list').replaceChildren();
+    document.getElementById('sync-source-label').textContent = 'Carregando passo de origem…';
+    document.getElementById('sync-source-summary').hidden = true;
     document.getElementById('sync-empty').hidden = true;
+    document.getElementById('sync-selected-count').textContent = '0 destinos selecionados';
+    document.getElementById('sync-select-all').disabled = true;
+    document.getElementById('sync-clear-all').disabled = true;
     document.getElementById('sync-replicate-status').checked = false;
     document.getElementById('sync-feedback').className = 'sync-feedback';
     document.getElementById('sync-feedback').textContent = 'Carregando passos equivalentes…';
@@ -883,11 +896,13 @@
     syncModal.showModal();
     try {
       await flushView(card.closest('.case-view'));
-      const response = await fetch(card.dataset.syncUrl);
+      const response = await fetch(card.dataset.syncUrl, { signal: request.signal });
       const result = await response.json().catch(() => ({}));
+      if (request.signal.aborted || !syncModal.open) return;
       if (!response.ok) throw new Error(result.error || 'Não foi possível preparar a sincronização.');
       renderSyncPreview(result);
     } catch (error) {
+      if (request.signal.aborted || !syncModal.open) return;
       document.getElementById('sync-feedback').classList.add('error');
       document.getElementById('sync-feedback').textContent = error.message;
       setSaveState(error.message, true);
@@ -896,6 +911,7 @@
   function closeSyncModal() { if (!syncBusy) syncModal.close(); }
   ['close-sync-modal', 'cancel-sync-modal'].forEach(id => document.getElementById(id).addEventListener('click', closeSyncModal));
   syncModal.addEventListener('cancel', event => { if (syncBusy) event.preventDefault(); });
+  syncModal.addEventListener('close', () => { if (!syncModal.open) syncPreviewRequest?.abort(); });
   syncModal.addEventListener('click', event => {
     if (event.target !== syncModal || syncBusy) return;
     const bounds = syncModal.getBoundingClientRect();

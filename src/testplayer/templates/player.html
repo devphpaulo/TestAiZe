@@ -1,6 +1,9 @@
 {% extends 'base.html' %}
 {% from 'ui_icons.html' import icon %}
-{% block head %}{% include 'session_board_assets.html' %}{% endblock %}
+{% block head %}
+{% include 'session_board_assets.html' %}
+<link rel="stylesheet" href="{{ url_for('static', filename='player.css') }}">
+{% endblock %}
 {% block title %}Execução · TestAíZé{% endblock %}
 {% block header_actions %}<a class="view-switch" href="{{ url_for('kanban', session_id=record.meta.id) }}">Modo Kanban</a><button type="button" class="mini-player-open" id="mini-player-open" aria-haspopup="dialog" aria-controls="mini-player"><span aria-hidden="true">▣</span> Mini Player</button>{% endblock %}
 {% block content %}
@@ -139,37 +142,71 @@
     <footer class="mini-player-foot"><span id="mini-player-sync-state"><i aria-hidden="true"></i> Sessão sincronizada</span><span class="mini-player-head-spacer"></span><button type="button" class="mini-player-nav" id="mini-player-prev">← Caso</button><button type="button" class="mini-player-nav mini-player-nav-primary" id="mini-player-next">Próximo caso →</button></footer>
   </section>
 </div>
-<dialog id="pdf-modal" class="pdf-modal" aria-labelledby="pdf-modal-title">
-  <form action="{{ url_for('make_pdf', session_id=meta.id) }}" data-pdf-url="{{ url_for('make_pdf', session_id=meta.id) }}" data-html-url="{{ url_for('make_html', session_id=meta.id) }}" method="post" id="pdf-form">
+<dialog id="pdf-modal" class="player-dialog" aria-labelledby="pdf-modal-title" aria-describedby="pdf-intro">
+  <form class="player-dialog-layout" action="{{ url_for('make_pdf', session_id=meta.id) }}" data-pdf-url="{{ url_for('make_pdf', session_id=meta.id) }}" data-html-url="{{ url_for('make_html', session_id=meta.id) }}" method="post" id="pdf-form">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-    <div class="pdf-modal-head"><div><span class="modal-eyebrow">EXPORTAÇÃO</span><h2 id="pdf-modal-title">Exportar relatório</h2><p>Escolha o formato, as execuções e os casos.</p></div><button type="button" class="modal-close" id="close-pdf-modal" aria-label="Fechar">×</button></div>
-    <fieldset class="report-scope report-format"><legend>FORMATO DO ARQUIVO</legend><label><input type="radio" name="report_format" value="pdf" checked><span><strong>PDF</strong><small>Documento para compartilhar ou imprimir.</small></span></label><label><input type="radio" name="report_format" value="html"><span><strong>HTML</strong><small>Navegação interativa entre casos e evidências.</small></span></label></fieldset>
-    <fieldset class="report-scope"><legend>EXECUÇÕES DE CADA CASO</legend><label><input type="radio" name="run_scope" value="latest" checked><span><strong>Somente a última</strong><small>Relatório com a execução atual de cada caso.</small></span></label><label><input type="radio" name="run_scope" value="all"><span><strong>Todas as execuções</strong><small>Inclui os retestes anteriores, seus passos e evidências.</small></span></label></fieldset>
-    <div class="pdf-selection-actions"><label><input type="checkbox" id="pdf-all" checked> Todos os casos</label><span id="pdf-selected-count">{{ record.cases|length }} de {{ record.cases|length }} selecionados</span></div>
-    <div class="pdf-folder-list">
-      {% for group in folder_groups %}
-      <section class="pdf-folder" data-pdf-folder="{{ loop.index }}">
-        <label class="pdf-folder-heading"><input type="checkbox" class="pdf-folder-check" checked><span><strong title="{{ group.name or group.label }}">{{ group.label }}</strong><small>{{ group.total }} {{ 'caso' if group.total == 1 else 'casos' }}</small></span></label>
-        <div class="pdf-cases">{% for case in group.cases %}<label class="pdf-case"><input type="checkbox" class="pdf-case-check" name="case_id" value="{{ case.id }}" checked><span>{{ case.name }}</span><span class="status-tag status-{{ case.status }}" data-report-case-tag="{{ case.id }}">{{ status_labels[case.status] }}</span></label>{% endfor %}</div>
-      </section>
+    <header class="player-dialog-head">
+      <div><h2 id="pdf-modal-title">Exportar relatório</h2><p id="pdf-intro">Escolha o formato, as execuções e os casos.</p></div>
+      <button type="button" class="player-dialog-close" id="close-pdf-modal" aria-label="Fechar" autofocus>{{ icon('close') }}</button>
+    </header>
+    <div class="player-dialog-body">
+      {% for legend, field, options in [
+        ('Formato do arquivo', 'report_format', [('pdf', 'PDF', 'Documento para compartilhar ou imprimir.'), ('html', 'HTML', 'Navegação entre casos e evidências.')]),
+        ('Execuções de cada caso', 'run_scope', [('latest', 'Somente a última', 'Inclui a execução mais recente.'), ('all', 'Todas as execuções', 'Inclui os retestes, passos e evidências.')])
+      ] %}
+      <fieldset class="dialog-radio-group">
+        <legend>{{ legend }}</legend>
+        <div class="dialog-radio-options">
+          {% for value, title, description in options %}
+          <label class="dialog-radio-card">
+            <input type="radio" name="{{ field }}" value="{{ value }}" aria-labelledby="{{ field }}-{{ value }}-label" aria-describedby="{{ field }}-{{ value }}-help" {% if loop.first %}checked{% endif %}>
+            <span><strong id="{{ field }}-{{ value }}-label">{{ title }}</strong><small id="{{ field }}-{{ value }}-help">{{ description }}</small></span>
+          </label>
+          {% endfor %}
+        </div>
+      </fieldset>
       {% endfor %}
+      <div class="dialog-selection">
+        <label class="dialog-check"><input type="checkbox" id="pdf-all" checked> Todos os casos</label>
+        <span id="pdf-selected-count" role="status">{{ record.cases|length }} de {{ record.cases|length }} selecionados</span>
+      </div>
+      <div class="dialog-groups">
+        {% for group in folder_groups %}
+        <section class="dialog-group" data-pdf-folder="{{ loop.index }}">
+          <label class="dialog-row dialog-group-heading"><input type="checkbox" class="pdf-folder-check" checked><span><strong title="{{ group.name or group.label }}">{{ group.label }}</strong><small>{{ group.total }} {{ 'caso' if group.total == 1 else 'casos' }}</small></span></label>
+          {% for case in group.cases %}<label class="dialog-row"><input type="checkbox" class="pdf-case-check" name="case_id" value="{{ case.id }}" checked><span>{{ case.name }}</span><span class="status-tag status-{{ case.status }}" data-report-case-tag="{{ case.id }}">{{ status_labels[case.status] }}</span></label>{% endfor %}
+        </section>
+        {% endfor %}
+      </div>
     </div>
-    <div class="pdf-modal-foot"><span id="pdf-selection-error" role="alert"></span><button type="button" class="button button-secondary" id="cancel-pdf-modal">Cancelar</button><button type="submit" class="button button-primary" id="submit-pdf">Gerar PDF</button></div>
+    <p id="pdf-selection-error" class="dialog-feedback error" role="alert"></p>
+    <footer class="player-dialog-foot"><div class="dialog-actions"><button type="button" class="button button-secondary" id="cancel-pdf-modal">Cancelar</button><button type="submit" class="button button-primary" id="submit-pdf">Gerar PDF</button></div></footer>
   </form>
 </dialog>
 {% if writable %}
-<dialog id="sync-modal" class="pdf-modal sync-modal" aria-labelledby="sync-modal-title" aria-describedby="sync-source-label sync-match-note">
-  <div class="sync-modal-layout">
-    <div class="pdf-modal-head"><div><span class="modal-eyebrow">Sincronização</span><h2 id="sync-modal-title">Sincronizar evidência</h2><p id="sync-source-label">Carregando passo de origem…</p></div><button type="button" class="modal-close" id="close-sync-modal" aria-label="Fechar">×</button></div>
-    <div class="sync-modal-scroll">
-      <section class="sync-source-summary" aria-labelledby="sync-source-title"><strong id="sync-source-title">Evidência de origem</strong><span id="sync-evidence-summary"></span><ul id="sync-evidence-list"></ul></section>
-      <p class="sync-match-note" id="sync-match-note">O matching ignora maiúsculas, acentos e espaços repetidos, preservando a pontuação.</p>
-      <div class="pdf-selection-actions sync-selection-actions"><span id="sync-selected-count">0 destinos selecionados</span><span><button type="button" class="sync-text-action" id="sync-select-all">Selecionar todos</button><button type="button" class="sync-text-action" id="sync-clear-all">Limpar seleção</button></span></div>
-      <div id="sync-target-list" class="sync-target-list"></div>
-      <p id="sync-empty" class="sync-empty" hidden>Nenhum passo equivalente foi encontrado nesta sessão.</p>
+<dialog id="sync-modal" class="player-dialog" aria-labelledby="sync-modal-title" aria-describedby="sync-source-label">
+  <div class="player-dialog-layout">
+    <header class="player-dialog-head">
+      <div><h2 id="sync-modal-title">Sincronizar evidência</h2><p id="sync-source-label">Carregando passo de origem…</p></div>
+      <button type="button" class="player-dialog-close" id="close-sync-modal" aria-label="Fechar" autofocus>{{ icon('close') }}</button>
+    </header>
+    <div class="player-dialog-body">
+      <section class="dialog-source" id="sync-source-summary" aria-labelledby="sync-source-title" hidden>
+        <strong id="sync-source-title">Evidência de origem</strong><span id="sync-evidence-summary"></span><ul id="sync-evidence-list"></ul>
+      </section>
+      <div class="dialog-selection">
+        <span id="sync-selected-count" role="status">0 destinos selecionados</span>
+        <div class="dialog-actions"><button type="button" class="dialog-quiet" id="sync-select-all" disabled>Selecionar todos</button><button type="button" class="dialog-quiet" id="sync-clear-all" disabled>Limpar seleção</button></div>
+      </div>
+      <div id="sync-target-list" class="dialog-groups"></div>
+      <p id="sync-empty" class="dialog-source" hidden>Nenhum passo equivalente foi encontrado nesta sessão.</p>
+      <p class="dialog-note">Os passos são comparados pelo texto, ignorando maiúsculas, acentos e espaços repetidos. A pontuação conta.</p>
     </div>
     <p id="sync-feedback" class="sync-feedback" role="status" aria-live="polite"></p>
-    <div class="pdf-modal-foot sync-modal-foot"><label class="sync-status-toggle"><input type="checkbox" id="sync-replicate-status"><span>Replicar status do passo de origem</span></label><button type="button" class="button button-ghost" id="cancel-sync-modal">Cancelar</button><button type="button" class="button button-primary" id="confirm-sync" disabled>Sincronizar evidência</button></div>
+    <footer class="player-dialog-foot">
+      <label class="dialog-check"><input type="checkbox" id="sync-replicate-status"><span>Replicar status do passo de origem</span></label>
+      <div class="dialog-actions"><button type="button" class="button button-secondary" id="cancel-sync-modal">Cancelar</button><button type="button" class="button button-primary" id="confirm-sync" disabled>Sincronizar evidência</button></div>
+    </footer>
   </div>
 </dialog>
 {% endif %}
