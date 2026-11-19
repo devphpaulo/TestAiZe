@@ -80,7 +80,7 @@
   white-space: nowrap;
 }
 .session-phase-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--phase-color); }
-.session-lane h2 [data-board-count] {
+.session-lane h2 :is([data-board-count], .session-lane-count) {
   min-width: 24px;
   margin-left: auto;
   padding: 2px 4px;
@@ -138,6 +138,34 @@
   overflow-wrap: anywhere;
 }
 .session-card-footer { margin-top: 4px; }
+.case-board-page > .back-link { margin-bottom: 16px; }
+.case-board-filters { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 16px; }
+.case-board-filters a {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 100%;
+  min-height: 36px;
+  padding: 6px 12px;
+  border: 1px solid transparent;
+  border-radius: var(--ui-radius);
+  color: var(--muted);
+  font-size: .85rem;
+  overflow-wrap: anywhere;
+}
+.case-board-filters a:hover { background: var(--lane-surface); color: var(--ink); text-decoration: none; }
+.case-board-filters a[aria-current] { border-color: var(--line); background: var(--card-surface); color: var(--ink); font-weight: 600; }
+.case-board-filters a span { color: var(--muted); font-size: .75rem; }
+.session-lane[data-case-status-lane="em_andamento"] { --phase-color: var(--phase-blocked); }
+.session-lane[data-case-status-lane="aprovado"] { --phase-color: var(--phase-done); }
+.session-lane[data-case-status-lane="reprovado"] { --phase-color: var(--ui-red); }
+.session-lane[data-case-status-lane="bloqueado"] { --phase-color: var(--phase-active); }
+.case-board-card { position: relative; }
+.case-board-card h3 { margin: 0; font-size: .95rem; line-height: 1.4; }
+.case-board-card .session-card-name::after { content: ""; position: absolute; inset: 0; border-radius: 8px; }
+.case-board-card .session-card-details { overflow-wrap: anywhere; }
+.case-board-card .session-card-footer { color: var(--muted); }
+.case-board-card:is(:hover, :focus-within) .session-card-footer { color: var(--ink); }
 .session-card-actions { gap: 4px; }
 .session-icon {
   display: grid;

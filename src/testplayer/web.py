@@ -347,7 +347,6 @@ def create_app(root: Path) -> Flask:
             card = read_board_card(directory)
             grant = supplied_edit() if request.method == "POST" else ""
             writable = card["phase"] != "done" or valid_edit(session_id, grant, session.get("csrf_token", ""))
-            session_bugs = app.extensions["bugs"].list(session_id)
         groups = folder_groups(record["cases"])
         initial_folders = request.args.getlist("pasta")
         if not set(initial_folders).issubset({group["name"] for group in groups}):
@@ -355,7 +354,7 @@ def create_app(root: Path) -> Flask:
         response = app.make_response(render_template(
             "player.html", record=record, writable=writable, edit_grant=grant if writable else "",
             board_labels=BOARD_LABELS, board_card=card,
-            folder_groups=groups, initial_folders=initial_folders, session_bugs=session_bugs,
+            folder_groups=groups, initial_folders=initial_folders,
         ))
         response.headers["Cache-Control"] = "no-store"
         return response

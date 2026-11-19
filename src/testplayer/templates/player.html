@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% from 'ui_icons.html' import icon %}
 {% block head %}{% include 'session_board_assets.html' %}{% endblock %}
 {% block title %}Execução · TestAíZé{% endblock %}
 {% block header_actions %}<a class="view-switch" href="{{ url_for('kanban', session_id=record.meta.id) }}">Modo Kanban</a><button type="button" class="mini-player-open" id="mini-player-open" aria-haspopup="dialog" aria-controls="mini-player"><span aria-hidden="true">▣</span> Mini Player</button>{% endblock %}
@@ -11,27 +12,31 @@
      data-labels='{{ board_labels|tojson }}' data-session-name="{{ meta.source_name }}" data-edit-grant="{{ edit_grant }}"
      data-board-url="{{ url_for('session_board', session_id=meta.id) }}" data-edit-url="{{ url_for('begin_session_edit', session_id=meta.id) }}"
      data-end-edit-url="{{ url_for('end_session_edit', session_id=meta.id) }}" data-clone-url="{{ url_for('new_execution', session_id=meta.id) }}">
-  <aside class="case-sidebar" aria-label="Casos da execução">
+  <aside class="case-sidebar" id="player-cases" aria-label="Casos da execução">
     <div class="sidebar-head">
-      <a href="{{ url_for('home') }}" class="back-link">← Todas as sessões</a>
-      <div class="sidebar-label">{{ 'EXECUÇÃO CONCLUÍDA · EDITÁVEL' if meta.state == 'concluida' else 'EXECUÇÃO EM ANDAMENTO' }}</div>
+      <div class="case-sidebar-links">
+        <a href="{{ url_for('home') }}" class="back-link">← Todas as sessões</a>
+        <button type="button" class="sidebar-toggle" id="close-case-sidebar" aria-label="Fechar lista de casos">{{ icon('close') }}</button>
+      </div>
+      {% if meta.state == 'concluida' %}<div class="sidebar-label">{{ 'Edição liberada' if edit_grant else 'Somente leitura' }}</div>{% endif %}
       <h2>Casos de teste</h2>
       <p>{{ record.cases|length }} casos · {{ record.steps_total }} passos</p>
-      <span class="folder-filter-label">FILTRAR POR CICLO</span>
+      <span class="folder-filter-label" id="cycle-filter-label">Filtrar por ciclo</span>
       <div class="cycle-picker" data-cycle-picker>
-        <button type="button" class="cycle-trigger" id="cycle-trigger" aria-expanded="false" aria-controls="cycle-popover"><span id="cycle-trigger-label">{{ 'Todas as pastas' if not initial_folders else initial_folders|length ~ ' selecionada(s)' }}</span><span aria-hidden="true">⌄</span></button>
-        <div class="cycle-popover" id="cycle-popover" hidden>
-          <input type="search" id="cycle-search" class="cycle-search" placeholder="Buscar ciclo ou pasta" aria-label="Buscar ciclo ou pasta">
+        <button type="button" class="cycle-trigger" id="cycle-trigger" aria-expanded="false" aria-controls="cycle-popover" aria-labelledby="cycle-filter-label cycle-trigger-label">{{ icon('folder') }}<span id="cycle-trigger-label">{{ 'Todas as pastas' if not initial_folders else initial_folders|length ~ ' selecionada(s)' }}</span>{{ icon('chevron') }}</button>
+        <div class="cycle-popover" id="cycle-popover" role="group" aria-label="Selecionar pastas" hidden>
+          <label class="cycle-search-wrap">{{ icon('search') }}<input type="search" id="cycle-search" class="cycle-search" placeholder="Buscar pasta" aria-label="Buscar pasta"></label>
           <label class="cycle-option cycle-option-all"><input type="checkbox" id="cycle-all" {% if not initial_folders %}checked{% endif %}> Todas as pastas</label>
           <div class="cycle-options">{% for group in folder_groups %}<label class="cycle-option" data-cycle-option data-search="{{ (group.label ~ ' ' ~ group.name)|lower }}"><input type="checkbox" class="cycle-check" value="{{ group.name }}" data-label="{{ group.label }}" {% if not initial_folders or group.name in initial_folders %}checked{% endif %}><span>{{ group.label }}</span><small>{{ group.total }}</small></label>{% endfor %}</div>
+          <p class="cycle-search-empty" id="cycle-search-empty" role="status" hidden>Nenhuma pasta encontrada.</p>
           <div class="cycle-picker-foot"><span id="cycle-count"></span><button type="button" id="cycle-done">Concluir</button></div>
         </div>
       </div>
-      <label class="search-wrap"><span aria-hidden="true">⌕</span><input id="case-search" type="search" placeholder="Buscar caso ou pasta" aria-label="Buscar caso ou pasta"></label>
+      <label class="search-wrap">{{ icon('search') }}<input id="case-search" type="search" placeholder="Buscar caso ou pasta" aria-label="Buscar caso ou pasta"></label>
     </div>
     <nav class="case-nav" aria-label="Selecionar caso">
       {% for group in folder_groups %}
-      <div class="case-folder-group" data-folder-group="{{ group.name }}" data-folder-label="{{ group.label }}"><span class="case-folder-title" title="{{ group.name or group.label }}">▤ {{ group.label }}</span><span class="case-folder-count">{{ group.total }}</span></div>
+      <div class="case-folder-group" data-folder-group="{{ group.name }}" data-folder-label="{{ group.label }}">{{ icon('folder') }}<span class="case-folder-title" title="{{ group.name or group.label }}">{{ group.label }}</span><span class="case-folder-count">{{ group.total }}</span></div>
       {% for case in group.cases %}
         <button type="button" class="case-nav-item" data-case-button="{{ case.id }}" data-folder="{{ group.name }}" data-status="{{ case.status }}" data-search="{{ (case.name ~ ' ' ~ case.folder)|lower }}">
           <span class="case-nav-number">{{ '%02d'|format(case.position) }}</span>
@@ -40,7 +45,7 @@
         </button>
       {% endfor %}
       {% endfor %}
-      <p class="case-filter-empty is-hidden" id="case-filter-empty">Nenhum caso encontrado nesta pasta.</p>
+      <p class="case-filter-empty is-hidden" id="case-filter-empty">Nenhum caso encontrado.</p>
     </nav>
     <div class="sidebar-foot"><span class="local-indicator"><span></span> Salvo nesta máquina</span></div>
   </aside>
@@ -48,15 +53,28 @@
 
   <main class="player-main">
     <div class="player-toolbar">
-      <div class="toolbar-left"><button type="button" class="sidebar-toggle" id="toggle-left" aria-label="Recolher lista de casos" aria-expanded="true" title="Recolher ou abrir lista de casos">☰</button><div class="breadcrumb">Sessões <span>/</span> {{ 'Concluída' if meta.state == 'concluida' else 'Em andamento' }} <span>/</span> <b id="breadcrumb-case">Caso 01</b></div></div>
-      <div class="toolbar-right"><a href="{{ url_for('bugs.session_bugs', session_id=meta.id) }}">Bugs ({{ session_bugs|length }})</a>{% if meta.state == 'rascunho' %}<a class="button button-secondary" href="{{ url_for('bugs.new', session_id=meta.id) }}">Reportar bug</a>{% elif edit_grant %}<button class="button button-secondary" type="button" data-board-player-end-edit>Encerrar edição</button>{% else %}<button class="button button-secondary" type="button" data-board-player-edit><span aria-hidden="true">✎</span> Editar execução</button>{% endif %}<span id="save-state" class="save-state">{{ 'Edição liberada' if edit_grant else ('Tudo salvo' if writable else 'Somente leitura') }}</span><span class="toolbar-divider"></span><span id="capture-state" class="session-id" title="Atalho global da captura. Altere com o botão direito no ícone da bandeja.">PrintScreen</span><span class="toolbar-divider"></span><span class="session-id">#{{ meta.id[:8] }}</span><button type="button" class="sidebar-toggle" id="toggle-right" aria-label="Recolher resumo" aria-expanded="true" title="Recolher ou abrir resumo">▤</button></div>
+      <button type="button" class="sidebar-toggle" id="toggle-left" aria-label="Recolher lista de casos" aria-expanded="true" aria-controls="player-cases" title="Recolher ou abrir lista de casos">{{ icon('sidebar') }}</button>
+      <div class="player-actions" role="group" aria-label="Ações da execução">
+        {% if meta.state == 'rascunho' %}
+          <a class="button button-secondary" href="{{ url_for('bugs.new', session_id=meta.id) }}">Reportar bug</a>
+          <button type="button" id="player-board-move" class="button button-secondary" aria-haspopup="dialog">{{ icon('move') }}{{ 'Remover impedimento' if board_card.phase == 'blocked' else 'Mover execução' }}</button>
+        {% elif edit_grant %}
+          <button class="button button-secondary" type="button" data-board-player-end-edit>Encerrar edição</button>
+        {% else %}
+          <button class="button button-secondary" type="button" data-board-player-edit>Editar execução</button>
+        {% endif %}
+        {% if meta.state == 'concluida' %}<button type="button" class="button button-secondary" data-board-player-clone>Nova execução</button>{% endif %}
+        {% if meta.parent_id %}<a class="button button-secondary" href="{{ url_for('player', session_id=meta.parent_id) }}">Execução anterior</a>{% endif %}
+        <button type="button" class="button button-primary" id="open-report-modal" aria-haspopup="dialog" aria-controls="pdf-modal">{{ icon('export') }}Exportar relatório</button>
+      </div>
     </div>
+    <p id="save-state" class="player-save-error" role="alert" hidden></p>
 
     <div class="player-content">
       <div class="progress-strip"><div><strong id="progress-count">{{ record.counts.aprovado + record.counts.reprovado + record.counts.bloqueado }}</strong><span id="progress-total">de {{ record.cases|length }} casos com resultado</span></div><div class="progress-track" id="progress-track" aria-label="Distribuição de casos por status">{% for status in ['aprovado','reprovado','bloqueado','em_andamento','nao_executado'] %}<i class="progress-segment segment-{{ status }}" data-progress-status="{{ status }}"></i>{% endfor %}</div><span id="progress-percent">{{ ((record.counts.aprovado + record.counts.reprovado + record.counts.bloqueado) / (record.cases|length or 1) * 100)|round|int }}%</span></div>
 
       {% for case in record.cases %}
-      <section class="case-view {% if not loop.first %}is-hidden{% endif %}" data-case-view="{{ case.id }}" data-case-index="{{ loop.index }}" data-execution-generation="{{ case.execution_generation }}" data-manual-status="{{ case.manual_status }}" data-status-revision="{{ case.status_revision }}" data-case-save-url="{{ url_for('case_result', session_id=meta.id, case_id=case.id) }}">
+      <section class="case-view {% if not loop.first %}is-hidden{% endif %}" data-case-view="{{ case.id }}" data-execution-generation="{{ case.execution_generation }}" data-manual-status="{{ case.manual_status }}" data-status-revision="{{ case.status_revision }}" data-case-save-url="{{ url_for('case_result', session_id=meta.id, case_id=case.id) }}">
         <div class="case-heading"><div><div class="case-kicker">CASO {{ '%02d'|format(loop.index) }} <span>·</span> {{ case.sheet }}</div><h2>{{ case.name }}</h2><p>{{ case.folder or 'Sem pasta' }}</p>{% if case.folder_card_url %}<div class="readonly-card-row"><a href="{{ case.folder_card_url }}" target="_blank" rel="noopener noreferrer" title="{{ case.folder_card_url }}" aria-label="Abrir {{ case.folder_card_label }} no {{ case.folder_card_provider }} em nova aba">{{ case.folder_card_provider }} · {{ case.folder_card_label }} ↗</a><span>somente consulta</span></div>{% endif %}</div><div class="case-status-actions"><span class="status-tag status-{{ case.status }}" data-case-status="{{ case.id }}">{{ status_labels[case.status] }}</span><span class="case-status-label">STATUS DO CASO</span><div class="status-button-row case-status-buttons" role="group" aria-label="Status do caso {{ loop.index }}">{% for code, label, icon in [('nao_executado','Não executado','○'),('em_andamento','Em andamento','◐'),('bloqueado','Bloqueado','⊘'),('reprovado','Reprovado','×'),('aprovado','Aprovado','✓')] %}<button type="button" class="status-icon-button status-choice-{{ code }} {% if case.manual_status == code %}selected{% endif %}" data-value="{{ code }}" aria-label="{{ label }}" title="{{ label }}" aria-pressed="{{ 'true' if case.manual_status == code else 'false' }}" {% if not writable %}disabled{% endif %}><span aria-hidden="true">{{ icon }}</span></button>{% endfor %}</div><button type="button" class="auto-status-button {% if not case.manual_status %}selected{% endif %}" aria-pressed="{{ 'false' if case.manual_status else 'true' }}" {% if not writable %}disabled{% endif %}>Automático pelos passos</button></div></div>
         <div class="case-meta"><span><b>Prioridade</b>{{ case.priority or 'Não informada' }}</span><span><b>Status</b>{{ case.source_status or 'Não informado' }}</span><span><b>Passos</b>{{ case.steps|length }}</span></div>
         <section class="precondition evidence-area case-evidence-area" data-upload-url="{{ url_for('upload_case_image', session_id=meta.id, case_id=case.id, scope='precondition') }}"><span>PRÉ-CONDIÇÕES</span>{% if meta.state == 'rascunho' %}<a href="{{ url_for('bugs.new', session_id=meta.id, precondition_case=case.id) }}">Reportar bug nesta pré-condição</a>{% endif %}<div class="precondition-source"><p>{{ case.precondition or 'Sem pré-condições na planilha.' }}</p><label class="precondition-notes-label">Anotações e evidências</label>{{ rich_editor(case.precondition_notes_blocks, 'Anotações e evidências nas pré-condições') }}{% if writable %}<div class="observed-actions"><span>Escreva ou cole imagens nesta área.</span></div>{% endif %}</div></section>
@@ -101,26 +119,6 @@
       {% endfor %}
     </div>
   </main>
-  <div class="sidebar-resizer" data-resize="right" role="separator" aria-label="Redimensionar resumo" aria-orientation="vertical" tabindex="0"></div>
-
-  <aside class="execution-sidebar" aria-label="Resumo da sessão">
-    <div class="right-panel-top"><span>VISÃO GERAL</span><span class="right-icon">↗</span></div>
-    <h2>Resumo dos casos</h2>
-    <span id="summary-scope" class="summary-scope">Todas as pastas</span>
-    <p>O status do caso pode ser definido diretamente ou calculado pelos passos. Nada altera a planilha original.</p>
-    <div class="summary-list">
-      {% for status, label in [('aprovado','Aprovados'),('reprovado','Reprovados'),('bloqueado','Bloqueados'),('em_andamento','Em andamento'),('nao_executado','Não executados')] %}<div><span class="summary-dot state-{{ status }}"></span><span>{{ label }}</span><strong data-count="{{ status }}">{{ record.counts[status] }}</strong></div>{% endfor %}
-    </div>
-    <div class="side-rule"></div>
-    <div class="source-info"><span>ARQUIVO DE ORIGEM</span><strong>{{ meta.source_name }}</strong><small>Importado em {{ meta.created_at[:16].replace('T', ' ') }}</small></div>
-    {% if meta.parent_id %}<div class="source-info"><span>EXECUÇÃO ANTERIOR</span><a href="{{ url_for('player', session_id=meta.parent_id) }}">#{{ meta.parent_id[:8] }} →</a></div>{% endif %}
-    <div class="side-spacer"></div>
-    <div class="source-info"><span>FASE DA EXECUÇÃO</span><strong>{{ board_labels[board_card.phase] }}</strong>{% if board_card.reason %}<small>{{ board_card.reason }}</small>{% endif %}</div>
-    {% if meta.state == 'rascunho' %}<button type="button" id="player-board-move" class="button button-secondary side-action">{{ 'Remover impedimento' if board_card.phase == 'blocked' else 'Mover execução' }}</button>{% endif %}
-    <small class="side-note">Exportar um relatório não finaliza esta execução.</small>
-    <button type="button" class="button button-primary side-action" id="open-report-modal">Exportar Relatório</button>
-    {% if meta.state == 'concluida' %}<button type="button" class="button button-ghost side-action" data-board-player-clone>Nova execução a partir desta</button>{% endif %}
-  </aside>
 </div>
 <div id="mini-player-home">
   <section class="mini-player" id="mini-player" data-surface="fallback" role="dialog" aria-modal="false" aria-label="Mini Player da execução" hidden>

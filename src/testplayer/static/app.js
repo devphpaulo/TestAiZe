@@ -193,8 +193,8 @@
   function caseViewChanged() { caseViewChangeHandlers.forEach(handler => handler()); }
 
   function setSaveState(message, error = false) {
-    saveState.textContent = message;
-    saveState.classList.toggle('error', error);
+    saveState.hidden = !error;
+    saveState.textContent = error ? message : '';
     const pipDocument = window.documentPictureInPicture?.window?.document;
     const miniState = document.getElementById('mini-player-sync-state') || pipDocument?.getElementById('mini-player-sync-state');
     if (miniState) {
@@ -206,8 +206,12 @@
     if (index < 0 || index >= views.length) return;
     selectedIndex = index;
     views.forEach((view, i) => view.classList.toggle('is-hidden', i !== index));
-    caseButtons.forEach(button => button.classList.toggle('active', button.dataset.caseButton === views[index].dataset.caseView));
-    document.getElementById('breadcrumb-case').textContent = `Caso ${String(views[index].dataset.caseIndex).padStart(2, '0')}`;
+    caseButtons.forEach(button => {
+      const active = button.dataset.caseButton === views[index].dataset.caseView;
+      button.classList.toggle('active', active);
+      if (active) button.setAttribute('aria-current', 'true');
+      else button.removeAttribute('aria-current');
+    });
     const visible = caseButtons.filter(button => !button.classList.contains('is-hidden')).map(button => viewIndexById.get(button.dataset.caseButton));
     const position = visible.indexOf(index);
     views[index].querySelector('[data-prev-case]').disabled = position <= 0;
@@ -231,10 +235,6 @@
     const visible = caseButtons.filter(button => !button.classList.contains('is-hidden'));
     const counts = { nao_executado: 0, em_andamento: 0, aprovado: 0, reprovado: 0, bloqueado: 0 };
     visible.forEach(button => { counts[button.dataset.status]++; });
-    Object.entries(counts).forEach(([key, value]) => {
-      const target = document.querySelector(`[data-count="${key}"]`);
-      if (target) target.textContent = value;
-    });
     const done = counts.aprovado + counts.reprovado + counts.bloqueado;
     const percent = visible.length ? Math.round(done / visible.length * 100) : 0;
     document.getElementById('progress-count').textContent = done;
@@ -245,8 +245,6 @@
       segment.title = `${labels[status]}: ${count}/${visible.length} (${visible.length ? Math.round(count / visible.length * 100) : 0}%)`;
     }
     document.getElementById('progress-percent').textContent = `${percent}%`;
-    const chosen = cycleChecks.filter(check => check.checked);
-    document.getElementById('summary-scope').textContent = chosen.length === cycleChecks.length ? 'Todas as pastas' : chosen.length === 1 ? chosen[0].dataset.label : `${chosen.length} ciclos selecionados`;
   }
   function filterCases(updateUrl = false) {
     const selectedFolders = new Set(cycleChecks.filter(check => check.checked).map(check => check.value));
@@ -275,24 +273,34 @@
     const chosen = cycleChecks.filter(check => check.checked);
     cycleAll.checked = chosen.length === cycleChecks.length;
     cycleAll.indeterminate = chosen.length > 0 && chosen.length < cycleChecks.length;
-    cycleTrigger.querySelector('span').textContent = chosen.length === cycleChecks.length ? 'Todas as pastas' : chosen.length === 1 ? chosen[0].dataset.label : chosen.length ? `${chosen.length} ciclos selecionados` : 'Nenhum ciclo selecionado';
+    document.getElementById('cycle-trigger-label').textContent = chosen.length === cycleChecks.length ? 'Todas as pastas' : chosen.length === 1 ? chosen[0].dataset.label : chosen.length ? `${chosen.length} ciclos selecionados` : 'Nenhum ciclo selecionado';
     document.getElementById('cycle-count').textContent = `${chosen.length} de ${cycleChecks.length} selecionados`;
     filterCases(true);
   }
-  cycleTrigger.addEventListener('click', () => {
-    cyclePopover.hidden = !cyclePopover.hidden;
-    cycleTrigger.setAttribute('aria-expanded', String(!cyclePopover.hidden));
-    if (!cyclePopover.hidden) document.getElementById('cycle-search').focus();
-  });
+  const cycleSearch = document.getElementById('cycle-search');
+  const cycleOptions = [...document.querySelectorAll('[data-cycle-option]')];
+  function setCyclePopover(open, restoreFocus = false) {
+    cyclePopover.hidden = !open;
+    cycleTrigger.setAttribute('aria-expanded', String(open));
+    if (open) cycleSearch.focus();
+    else if (restoreFocus) cycleTrigger.focus();
+  }
+  cycleTrigger.addEventListener('click', () => setCyclePopover(cyclePopover.hidden));
   cycleChecks.forEach(check => check.addEventListener('change', updateCyclePicker));
   cycleAll.addEventListener('change', () => { cycleChecks.forEach(check => { check.checked = cycleAll.checked; }); updateCyclePicker(); });
-  document.getElementById('cycle-search').addEventListener('input', event => {
+  cycleSearch.addEventListener('input', event => {
     const term = event.target.value.trim().toLocaleLowerCase('pt-BR');
-    document.querySelectorAll('[data-cycle-option]').forEach(option => option.classList.toggle('is-hidden', Boolean(term) && !option.dataset.search.includes(term)));
+    cycleOptions.forEach(option => option.classList.toggle('is-hidden', Boolean(term) && !option.dataset.search.includes(term)));
+    document.getElementById('cycle-search-empty').hidden = cycleOptions.some(option => !option.classList.contains('is-hidden'));
   });
-  document.getElementById('cycle-done').addEventListener('click', () => { cyclePopover.hidden = true; cycleTrigger.setAttribute('aria-expanded', 'false'); cycleTrigger.focus(); });
-  document.addEventListener('click', event => { if (!cyclePicker.contains(event.target)) { cyclePopover.hidden = true; cycleTrigger.setAttribute('aria-expanded', 'false'); } });
-  cyclePicker.addEventListener('keydown', event => { if (event.key === 'Escape') { cyclePopover.hidden = true; cycleTrigger.setAttribute('aria-expanded', 'false'); cycleTrigger.focus(); } });
+  document.getElementById('cycle-done').addEventListener('click', () => setCyclePopover(false, true));
+  document.addEventListener('click', event => { if (!cyclePopover.hidden && !cyclePicker.contains(event.target)) setCyclePopover(false); });
+  cyclePicker.addEventListener('focusout', event => { if (event.relatedTarget && !cyclePicker.contains(event.relatedTarget)) setCyclePopover(false); });
+  cyclePicker.addEventListener('keydown', event => {
+    if (event.key !== 'Escape' || cyclePopover.hidden) return;
+    event.preventDefault();
+    setCyclePopover(false, true);
+  });
   search?.addEventListener('input', () => filterCases());
   filterCases();
   updateCyclePicker();
@@ -303,47 +311,61 @@
   }
   if (!initialHash && caseButtons.some(button => !button.classList.contains('is-hidden'))) showCase(viewIndexById.get(caseButtons.find(button => !button.classList.contains('is-hidden')).dataset.caseButton));
 
-  function setSidebar(side, collapsed) {
-    player.dataset[side === 'left' ? 'leftCollapsed' : 'rightCollapsed'] = String(collapsed);
-    const toggle = document.getElementById(`toggle-${side}`);
-    toggle.setAttribute('aria-expanded', String(!collapsed));
-    toggle.setAttribute('aria-label', `${collapsed ? 'Abrir' : 'Recolher'} ${side === 'left' ? 'lista de casos' : 'resumo'}`);
-    try { localStorage.setItem(`executor-${side}-collapsed`, String(collapsed)); } catch (_) {}
+  const sidebarToggle = document.getElementById('toggle-left');
+  const sidebar = document.getElementById('player-cases');
+  const resizeHandle = player.querySelector('[data-resize="left"]');
+  const mobileSidebar = window.matchMedia('(max-width: 850px)');
+  function setSidebar(collapsed) {
+    player.dataset.leftCollapsed = String(collapsed);
+    sidebarToggle.setAttribute('aria-expanded', String(!collapsed));
+    sidebarToggle.setAttribute('aria-label', `${collapsed ? 'Abrir' : 'Recolher'} lista de casos`);
   }
-  for (const side of ['left', 'right']) {
-    let collapsed = false;
-    try { collapsed = localStorage.getItem(`executor-${side}-collapsed`) === 'true'; } catch (_) {}
-    setSidebar(side, collapsed);
-    document.getElementById(`toggle-${side}`).addEventListener('click', () => setSidebar(side, player.dataset[side === 'left' ? 'leftCollapsed' : 'rightCollapsed'] !== 'true'));
-    let storedWidth = null;
-    try { storedWidth = Number(localStorage.getItem(`executor-${side}-width`)); } catch (_) {}
-    if (storedWidth && Number.isFinite(storedWidth)) player.style.setProperty(`--${side}-width`, `${Math.max(220, Math.min(side === 'left' ? 500 : 440, storedWidth))}px`);
+  let desktopCollapsed = false;
+  let storedWidth = 0;
+  try {
+    desktopCollapsed = localStorage.getItem('executor-left-collapsed') === 'true';
+    storedWidth = Number(localStorage.getItem('executor-left-width'));
+  } catch (_) {}
+  setSidebar(mobileSidebar.matches || desktopCollapsed);
+  if (storedWidth && Number.isFinite(storedWidth)) player.style.setProperty('--left-width', `${Math.max(220, Math.min(500, storedWidth))}px`);
+  mobileSidebar.addEventListener('change', event => setSidebar(event.matches || desktopCollapsed));
+  function closeMobileSidebar() {
+    if (!mobileSidebar.matches || player.dataset.leftCollapsed === 'true') return;
+    setSidebar(true);
+    sidebarToggle.focus();
   }
-  if (window.innerWidth <= 850) { setSidebar('left', true); setSidebar('right', true); }
-  document.querySelectorAll('[data-resize]').forEach(handle => {
-    const side = handle.dataset.resize;
-    const maximum = side === 'left' ? 500 : 440;
-    function applyWidth(value) {
-      const width = Math.max(220, Math.min(maximum, value, window.innerWidth - 350));
-      player.style.setProperty(`--${side}-width`, `${width}px`);
-      try { localStorage.setItem(`executor-${side}-width`, String(width)); } catch (_) {}
+  document.getElementById('close-case-sidebar').addEventListener('click', closeMobileSidebar);
+  caseButtons.forEach(button => button.addEventListener('click', closeMobileSidebar));
+  sidebar.addEventListener('keydown', event => {
+    if (!event.defaultPrevented && event.key === 'Escape') closeMobileSidebar();
+  });
+  sidebarToggle.addEventListener('click', () => {
+    const collapsed = player.dataset.leftCollapsed !== 'true';
+    setSidebar(collapsed);
+    if (mobileSidebar.matches) {
+      if (!collapsed) cycleTrigger.focus();
+      return;
     }
-    handle.addEventListener('pointerdown', event => {
-      if (window.innerWidth < 900) return;
-      handle.setPointerCapture(event.pointerId);
-      const startX = event.clientX;
-      const initial = (side === 'left' ? player.querySelector('.case-sidebar') : player.querySelector('.execution-sidebar')).getBoundingClientRect().width;
-      function move(pointer) { applyWidth(initial + (pointer.clientX - startX) * (side === 'left' ? 1 : -1)); }
-      handle.addEventListener('pointermove', move);
-      handle.addEventListener('pointerup', () => handle.removeEventListener('pointermove', move), { once: true });
-      handle.addEventListener('pointercancel', () => handle.removeEventListener('pointermove', move), { once: true });
-    });
-    handle.addEventListener('keydown', event => {
-      if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
-      event.preventDefault();
-      const current = (side === 'left' ? player.querySelector('.case-sidebar') : player.querySelector('.execution-sidebar')).getBoundingClientRect().width;
-      applyWidth(current + (event.key === 'ArrowRight' ? 20 : -20) * (side === 'left' ? 1 : -1));
-    });
+    desktopCollapsed = collapsed;
+    try { localStorage.setItem('executor-left-collapsed', String(collapsed)); } catch (_) {}
+  });
+  function applySidebarWidth(value) {
+    const width = Math.max(220, Math.min(500, value, window.innerWidth - 350));
+    player.style.setProperty('--left-width', `${width}px`);
+    try { localStorage.setItem('executor-left-width', String(width)); } catch (_) {}
+  }
+  resizeHandle.addEventListener('pointerdown', event => {
+    resizeHandle.setPointerCapture(event.pointerId);
+    const initialWidth = sidebar.getBoundingClientRect().width;
+    const startX = event.clientX;
+    const move = pointer => applySidebarWidth(initialWidth + pointer.clientX - startX);
+    resizeHandle.addEventListener('pointermove', move);
+    resizeHandle.addEventListener('lostpointercapture', () => resizeHandle.removeEventListener('pointermove', move), { once: true });
+  });
+  resizeHandle.addEventListener('keydown', event => {
+    if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+    event.preventDefault();
+    applySidebarWidth(sidebar.getBoundingClientRect().width + (event.key === 'ArrowRight' ? 20 : -20));
   });
 
   function aggregate(statuses) {
@@ -1643,9 +1665,6 @@
       if (!response.ok) return;
       const payload = await response.json();
       captureCursor = payload.cursor || captureCursor;
-      const state = document.getElementById('capture-state');
-      if (state && payload.hotkey === false) state.textContent = 'Atalho de captura indisponível';
-      else if (state && payload.hotkey_label) state.textContent = payload.hotkey_label;
       for (const event of payload.events || []) {
         if (event.type === 'prepare') {
           if (pipWindow && !pipWindow.closed) pipWindow.close();
