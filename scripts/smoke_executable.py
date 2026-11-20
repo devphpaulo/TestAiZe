@@ -1,5 +1,6 @@
 """Check release startup and the capture host without installing a browser runtime."""
 
+from contextlib import contextmanager
 import json
 import subprocess
 import sys
@@ -10,9 +11,26 @@ import urllib.request
 from pathlib import Path
 
 
+@contextmanager
+def smoke_data_directory():
+    temporary = tempfile.TemporaryDirectory(prefix="testaize-smoke-")
+    try:
+        yield Path(temporary.name)
+    finally:
+        # The onefile child can still be releasing its log handle after taskkill.
+        deadline = time.monotonic() + 10
+        while True:
+            try:
+                temporary.cleanup()
+                break
+            except PermissionError as exc:
+                if getattr(exc, "winerror", None) not in (32, 33) or time.monotonic() >= deadline:
+                    raise
+                time.sleep(.2)
+
+
 def check(executable: Path) -> None:
-    with tempfile.TemporaryDirectory(prefix="testaize-smoke-") as temporary:
-        root = Path(temporary)
+    with smoke_data_directory() as root:
         process = subprocess.Popen(
             [str(executable.resolve()), "--data-dir", str(root), "--no-browser", "--no-tray"],
             stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
@@ -32,7 +50,10 @@ def check(executable: Path) -> None:
                         assert response.status == 200
                     with urllib.request.urlopen(origin + '/bugs', timeout=2) as response:
                         assert 'Bugs por estado' in response.read().decode('utf-8')
-                    for asset in ('bugs.js', 'bugs.css', 'document-editor.js', 'image-editor.js', 'image-editor.css', 'header.js', 'header.css'):
+                    for asset in (
+                        'bugs.js', 'bugs.css', 'document-editor.js', 'image-editor.js', 'image-editor.css',
+                        'header.js', 'header.css', 'theme.js', 'theme.css', 'frontend/progress.js', 'frontend/progress.css',
+                    ):
                         with urllib.request.urlopen(origin + '/static/' + asset, timeout=2) as response:
                             assert response.status == 200 and response.read()
                     assert (root / 'bugs' / 'bugs.sqlite').is_file()
