@@ -135,7 +135,7 @@
   border-inline-start: 3px solid color-mix(in srgb, var(--step-color) 68%, var(--ui-border)) !important;
 }
 .player-shell :is(.case-heading, .case-navigation, .case-run-bar) { gap: 16px; }
-.player-shell :is(.case-meta span, .case-status-actions, .case-nav, .case-nav-item) { gap: 8px; }
+.player-shell :is(.case-meta > span, .case-status-actions, .case-nav, .case-nav-item) { gap: 8px; }
 .player-shell .case-nav-item[data-status] { margin-block: 0; min-height: 48px; padding: 8px; grid-template-columns: 24px minmax(0, 1fr); }
 .player-shell .case-nav-content strong { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .player-shell .case-nav-content small { margin-top: 0; }
@@ -383,7 +383,7 @@ body:has(> .player-shell[data-player]) > .topbar { height: 64px; min-height: 64p
   .player-shell[data-player] .case-nav { max-height: 160px; }
   .player-shell[data-player] .player-content { padding-inline: 16px; }
   .player-shell .case-meta { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-  .player-shell .case-meta span { padding: 8px; overflow-wrap: anywhere; }
+  .player-shell .case-meta > span { padding: 8px; overflow-wrap: anywhere; }
 }
 
 @media (max-width: 600px) {

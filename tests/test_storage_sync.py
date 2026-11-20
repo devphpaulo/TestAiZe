@@ -264,6 +264,29 @@ class SyncStorageTests(unittest.TestCase):
         self.assertEqual(synced.json["case_statuses"], {"2": "em_andamento", "3": "bloqueado"})
         self.assertEqual(synced.json["case_states"]["3"]["counts"], read_session(self.directory)["counts"])
 
+    @unittest.skipUnless(create_app, f"Dependências web indisponíveis: {WEB_IMPORT_ERROR}")
+    def test_sync_displays_current_status_for_previously_unexecuted_case(self):
+        with db(self.directory) as connection:
+            with connection:
+                connection.execute("UPDATE cases SET manual_status='',source_status='Não Executado' WHERE id=3")
+                connection.execute("UPDATE results SET actual='' WHERE step_id=31")
+        self.assertEqual(self.evidence(31), [])
+        client = create_app(self.root).test_client()
+        with client.session_transaction() as browser_session:
+            browser_session["csrf_token"] = "sync-test"
+        url = f"/sessao/{self.session_id}"
+        self.assertRegex(client.get(url).get_data(as_text=True), r'data-case-button="3"[^>]+data-status="nao_executado"')
+
+        response = client.post(f"/api{url}/passo/11/sincronizacao", headers={"X-CSRF-Token": "sync-test"},
+                               json={"target_step_ids": [31], "replicate_status": True})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json["case_statuses"], {"3": "aprovado"})
+        player = client.get(url).get_data(as_text=True)
+        self.assertRegex(player, r'data-case-button="3"[^>]+data-status="aprovado"')
+        self.assertIn('data-case-status="3">Aprovado</span>', player)
+        self.assertIn('<b>Status</b><span data-case-meta-status>Aprovado</span>', player)
+        self.assertNotIn("<b>Status</b>Não Executado", player)
+
 
 if __name__ == "__main__":
     unittest.main()

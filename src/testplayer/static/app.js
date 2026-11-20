@@ -417,6 +417,7 @@
         const tag = view.querySelector('[data-case-status]');
         tag.textContent = labels[status];
         tag.className = `status-tag status-${status}`;
+        view.querySelector('[data-case-meta-status]').textContent = labels[status];
         const navTag = button.querySelector('[data-case-tag]');
         navTag.textContent = labels[status];
         navTag.className = `status-tag case-nav-tag status-${status}`;
