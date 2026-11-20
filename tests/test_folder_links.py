@@ -388,13 +388,13 @@ class FolderLinkTests(unittest.TestCase):
 
         for fragment in (
             '<dialog id="folder-card-modal"', 'aria-labelledby="folder-card-modal-title"',
-            'id="folder-card-url"', 'id="folder-card-error" role="alert"',
+            'id="folder-card-url"', 'aria-describedby="folder-card-helper"',
             "Cancelar", "Salvar vínculo", "Remover vínculo desta pasta",
         ):
             self.assertIn(fragment, template)
         for fragment in (
             "folderCardModal.addEventListener('cancel'", "folderCardModal.addEventListener('close'",
-            "returnFocus?.focus()", "urlInput.focus()",
+            "returnFocus?.focus()", "urlInput.focus()", "TestaizeAlerts.show(",
         ):
             self.assertIn(fragment, javascript)
         for selector in (".folder-card-add", ".folder-card-edit", ".folder-card-modal", ".folder-card-field input"):

@@ -96,7 +96,6 @@
         <button type="button" class="button button-primary" id="open-report-modal" aria-haspopup="dialog" aria-controls="pdf-modal">{{ icon('export') }}Exportar relatório</button>
       </div>
     </div>
-    <p id="save-state" class="player-save-error" role="alert" hidden></p>
 
     <div class="player-content">
       <div id="player-progress" data-counts="{{ record.counts|tojson|forceescape }}" data-total="{{ record.cases|length }}"></div>
@@ -106,7 +105,7 @@
         <div class="case-kicker">CASO {{ '%02d'|format(case.position) }} <span>·</span> {{ case.sheet }}</div>
         <div class="case-heading"><div><h2>{{ case.name }}</h2><p>{{ case.folder or 'Sem pasta' }}</p>{% if case.folder_card_url %}<div class="readonly-card-row"><a href="{{ case.folder_card_url }}" target="_blank" rel="noopener noreferrer" title="{{ case.folder_card_url }}" aria-label="Abrir {{ case.folder_card_label }} no {{ case.folder_card_provider }} em nova aba">{{ case.folder_card_provider }} · {{ case.folder_card_label }} ↗</a><span>somente consulta</span></div>{% endif %}</div><div class="case-status-actions"><span class="case-status-label">STATUS DO CASO</span><div class="status-button-row case-status-buttons" role="group" aria-label="Status do caso {{ loop.index }}">{% for code, label, icon in [('nao_executado','Não executado','○'),('em_andamento','Em andamento','◐'),('bloqueado','Bloqueado','⊘'),('reprovado','Reprovado','×'),('aprovado','Aprovado','✓')] %}<button type="button" class="status-icon-button status-choice-{{ code }} {% if case.manual_status == code %}selected{% endif %}" data-value="{{ code }}" aria-label="{{ label }}" title="{{ label }}" aria-pressed="{{ 'true' if case.manual_status == code else 'false' }}" {% if not writable %}disabled{% endif %}><span aria-hidden="true">{{ icon }}</span></button>{% endfor %}</div><button type="button" class="auto-status-button {% if not case.manual_status %}selected{% endif %}" aria-pressed="{{ 'false' if case.manual_status else 'true' }}" {% if not writable %}disabled{% endif %}>Automático pelos passos</button></div></div>
         <div class="case-meta"><span><b>Prioridade</b>{{ case.priority or 'Não informada' }}</span><span><b>Status</b><span class="status-tag status-{{ case.status }}" data-case-status="{{ case.id }}">{{ status_labels[case.status] }}</span></span><span><b>Passos</b>{{ case.steps|length }}</span></div>
-        <section class="precondition evidence-area case-evidence-area" data-upload-url="{{ url_for('upload_case_image', session_id=meta.id, case_id=case.id, scope='precondition') }}"><h3>Pré-condições</h3>{% if meta.state == 'rascunho' %}<a href="{{ url_for('bugs.new', session_id=meta.id, precondition_case=case.id) }}">Reportar bug nesta pré-condição</a>{% endif %}<div class="precondition-source"><p>{{ case.precondition or 'Sem pré-condições registradas.' }}</p><label class="precondition-notes-label">Anotações e evidências</label>{{ rich_editor(case.precondition_notes_blocks, 'Cole links, prints ou observações…') }}</div></section>
+        <section class="precondition evidence-area case-evidence-area" data-upload-url="{{ url_for('upload_case_image', session_id=meta.id, case_id=case.id, scope='precondition') }}"><h3>Pré-condições</h3><div class="precondition-source"><p>{{ case.precondition or 'Sem pré-condições registradas.' }}</p><label class="precondition-notes-label">Anotações e evidências</label>{{ rich_editor(case.precondition_notes_blocks, 'Cole links, prints ou observações…') }}</div></section>
         <div class="steps-title"><h3>Passos do teste</h3><span>{{ case.steps|length }} {{ 'etapa' if case.steps|length == 1 else 'etapas' }}</span></div>
 
         {% for step in case.steps %}
@@ -132,7 +131,6 @@
                 </div>
                 {{ rich_editor(step.actual_blocks, 'Descreva o que foi observado…') }}
               </div>
-              {% if writable %}<p class="attachment-feedback" role="alert" hidden></p>{% endif %}
               <ul class="attachment-list" aria-label="Anexos do passo" {% if not step.attachments %}hidden{% endif %}>{% for attachment in step.attachments %}{{ attachment_row(attachment, writable) }}{% endfor %}</ul>
             </div>
             {% if step.comment %}<div class="legacy-step-comment"><b>Comentário anterior deste passo</b><p>{{ step.comment }}</p></div>{% endif %}

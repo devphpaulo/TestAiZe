@@ -11,12 +11,18 @@ from pathlib import Path
 
 from PIL import Image, UnidentifiedImageError
 
+from .attachments import attachment_content_type, attachment_extension, safe_attachment_name, verified_attachment_bytes
 from .bugs_coordinator import coordinated, root_operation, StateConflict, RecoveryPending
 from .bugs_store import BugsStore
 
 log = logging.getLogger(__name__)
 RECOVERY_HANDLERS = {}
 IMAGE_TYPES = {'PNG': ('image/png', '.png'), 'JPEG': ('image/jpeg', '.jpg'), 'WEBP': ('image/webp', '.webp')}
+IMAGE_MIMES = {mime for mime, _ in IMAGE_TYPES.values()}
+IMAGE_EXTENSIONS = {'.png', '.jpeg', '.jpg', '.webp'}
+BUG_FILE_EXTENSIONS = IMAGE_EXTENSIONS | {'.pdf', '.log', '.txt', '.xml', '.json', '.xlsx', '.xls', '.csv'}
+MAX_BUG_FILE_BYTES = 10 * 1024 * 1024
+MAX_BUG_EVIDENCE = 12
 SEVERITIES = {'baixa': 'Baixa', 'media': 'Média', 'alta': 'Alta', 'bloqueador': 'Bloqueador'}
 
 
@@ -172,7 +178,10 @@ class BugsService:
                 'SELECT relative_path FROM bug_evidence WHERE relative_path IS NOT NULL')}
         for path in (self.root / 'bugs').glob('*/evidencias/*'):
             if path.is_file() and path.relative_to(self.root / 'bugs').as_posix() not in referenced:
-                path.unlink()
+                try:
+                    path.unlink(missing_ok=True)
+                except OSError:
+                    log.warning('Não foi possível remover arquivo de evidência sem referência: %s', path.name)
 
     def _bug(self, connection, bug_id):
         row = connection.execute('SELECT * FROM bugs WHERE id=?', (bug_id,)).fetchone()
@@ -228,7 +237,7 @@ class BugsService:
         return clean
 
     def _image(self, content, original_name):
-        if not content or len(content) > 10 * 1024 * 1024:
+        if not content or len(content) > MAX_BUG_FILE_BYTES:
             raise ValueError('Imagem deve ter até 10 MiB.')
         try:
             with Image.open(io.BytesIO(content)) as image:
@@ -241,7 +250,19 @@ class BugsService:
         return dict(id=uuid.uuid4().hex, mime=mime, extension=extension, size=len(content),
                     sha256=hashlib.sha256(content).hexdigest(), original_name=Path(original_name).name[:255])
 
-    def _publish_image(self, bug_id, content, metadata):
+    def _file(self, content, original_name):
+        name = safe_attachment_name(original_name)
+        extension = attachment_extension(name)
+        if extension not in BUG_FILE_EXTENSIONS:
+            raise ValueError('Formato não aceito. Use PNG, JPEG, WebP, PDF, LOG, TXT, XML, JSON, XLSX, XLS ou CSV.')
+        if not content or len(content) > MAX_BUG_FILE_BYTES:
+            raise ValueError('Cada anexo deve ter conteúdo e no máximo 10 MiB.')
+        if extension in IMAGE_EXTENSIONS:
+            return self._image(content, name)
+        return dict(id=uuid.uuid4().hex, mime=attachment_content_type(name), extension=extension,
+                    size=len(content), sha256=hashlib.sha256(content).hexdigest(), original_name=name)
+
+    def _publish_file(self, bug_id, content, metadata):
         relative = f"{bug_id}/evidencias/{metadata['id']}{metadata['extension']}"
         path = self.root / 'bugs' / relative
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -254,7 +275,7 @@ class BugsService:
         metadata['relative_path'] = relative
         return path
 
-    def _insert_image(self, connection, bug_id, metadata, kind, token=None, note=""):
+    def _insert_file(self, connection, bug_id, metadata, kind, token=None, note=""):
         from .storage import now
         connection.execute('INSERT INTO bug_evidence '
                            '(id,bug_id,kind,retest_token,relative_path,mime,size,sha256,original_name,created_at,note) '
@@ -262,13 +283,43 @@ class BugsService:
                            (metadata['id'], bug_id, kind, token, metadata['relative_path'], metadata['mime'],
                             metadata['size'], metadata['sha256'], metadata['original_name'], now(), note.strip()))
 
-    def _document(self, blocks, evidence_ids):
+    def _document(self, blocks, image_ids, has_attachments=False):
         from .storage import normalize_document
-        document, plain = normalize_document(blocks, evidence_ids)
+        document, plain = normalize_document(blocks, image_ids)
         used = {block['id'] for block in json.loads(document) if block['type'] == 'image'}
-        if not plain.strip() or not used:
-            raise ValueError('Descreva fluxo e passos e inclua ao menos uma imagem de abertura no documento.')
-        return document
+        if not plain.strip() or not (used or has_attachments):
+            raise ValueError('Descreva o fluxo e os passos e inclua ao menos uma evidência de abertura.')
+        return document, used
+
+    def _opening(self, fields, files, existing=()):
+        if len(files) > MAX_BUG_EVIDENCE:
+            raise ValueError('Limite de 12 evidências de abertura.')
+        new = {key: self._file(content, name) for key, (content, name) in files.items()}
+        items = [*existing, *new.values()]
+        image_ids = {item['id'] for item in items if item['mime'] in IMAGE_MIMES}
+        attachment_ids = {item['id'] for item in items if item['mime'] not in IMAGE_MIMES}
+        requested = fields.get('attachment_ids')
+        if requested is None:
+            selected = attachment_ids
+        else:
+            if not isinstance(requested, list) or any(not isinstance(item, str) for item in requested):
+                raise ValueError('Lista de anexos inválida.')
+            selected = {new[item]['id'] if item in new else item for item in requested}
+            if not selected <= attachment_ids:
+                raise ValueError('Anexo não pertence a este bug.')
+        blocks = fields.get('blocks')
+        if not isinstance(blocks, list):
+            raise ValueError('Documento inválido.')
+        blocks = [dict(block, id=new[block['id']]['id']) if isinstance(block, dict)
+                  and block.get('type') == 'image' and isinstance(block.get('id'), str) and block['id'] in new
+                  else block for block in blocks]
+        document, used = self._document(blocks, image_ids, bool(selected))
+        retained = used | selected
+        if any(item['id'] not in retained for item in new.values()):
+            raise ValueError('Cada arquivo enviado deve fazer parte das evidências de abertura.')
+        if len(retained) > MAX_BUG_EVIDENCE:
+            raise ValueError('Limite de 12 evidências de abertura.')
+        return document, new, retained
 
     def create(self, fields, files, session_id, origin_type='sessao', origin_case_id=None):
         from .storage import find_directory, read_session, now
@@ -281,46 +332,51 @@ class BugsService:
             if origin_type == 'precondicao' and origin_case_id not in {c['id'] for c in read_session(directory)['cases']}:
                 raise ValueError('Pré-condição não pertence à sessão.')
             clean = self._fields(fields)
-            if not files or len(files) > 12:
-                raise ValueError('Inclua de 1 a 12 imagens de abertura.')
             bug_id = uuid.uuid4().hex
-            images = {key: self._image(content, name) for key, (content, name) in files.items()}
-            blocks = fields.get('blocks')
-            if not isinstance(blocks, list):
-                raise ValueError('Documento inválido.')
-            blocks = [dict(b, id=images[b['id']]['id']) if isinstance(b, dict) and b.get('type') == 'image'
-                      and b.get('id') in images else b for b in blocks]
-            document = self._document(blocks, {m['id'] for m in images.values()})
-            if {b['id'] for b in blocks if b.get('type') == 'image'} != {m['id'] for m in images.values()}:
-                raise ValueError('Todas as imagens devem pertencer ao documento.')
+            document, new, _ = self._opening(fields, files)
             paths = []
             try:
                 with self.store.connect() as connection:
                     connection.execute('INSERT INTO bugs VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)',
                                        (bug_id, clean['title'], clean['severity'], 'aberto', origin_type, session_id,
                                         origin_case_id, document, clean['actual'], clean['expected'], None, now(), now()))
-                    for key, metadata in images.items():
-                        paths.append(self._publish_image(bug_id, files[key][0], metadata))
-                        self._insert_image(connection, bug_id, metadata, 'abertura')
+                    for key, metadata in new.items():
+                        paths.append(self._publish_file(bug_id, files[key][0], metadata))
+                        self._insert_file(connection, bug_id, metadata, 'abertura')
             except Exception:
                 for path in paths:
                     path.unlink(missing_ok=True)
                 raise
             return self.get(bug_id)
 
-    def edit(self, bug_id, fields):
-        with coordinated(self.root), self.store.connect() as connection:
-            bug = self._bug(connection, bug_id)
+    def edit(self, bug_id, fields, files=None):
+        from .storage import now
+        with coordinated(self.root):
+            bug = self.get(bug_id)
             if bug['status'] == 'finalizado':
                 raise StateConflict('Bug finalizado permite apenas consulta e exportação.')
             clean = self._fields(fields)
-            ids = {row[0] for row in connection.execute(
-                "SELECT id FROM bug_evidence WHERE bug_id=? AND kind='abertura'", (bug_id,))}
-            document = self._document(fields.get('blocks'), ids)
-            from .storage import now
-            connection.execute('UPDATE bugs SET title=?,severity=?,actual=?,expected=?,description_doc=?,updated_at=? WHERE id=?',
-                               (clean['title'], clean['severity'], clean['actual'], clean['expected'], document, now(), bug_id))
-        return self.get(bug_id)
+            opening = [item for item in bug['evidence'] if item['kind'] == 'abertura']
+            files = files or {}
+            document, new, retained = self._opening(fields, files, opening)
+            removed = [(item['id'], bug_id) for item in opening if item['id'] not in retained] if fields.get('attachment_ids') is not None else []
+            paths = []
+            try:
+                with self.store.connect() as connection:
+                    connection.execute('UPDATE bugs SET title=?,severity=?,actual=?,expected=?,description_doc=?,updated_at=? WHERE id=?',
+                                       (clean['title'], clean['severity'], clean['actual'], clean['expected'], document, now(), bug_id))
+                    for key, metadata in new.items():
+                        paths.append(self._publish_file(bug_id, files[key][0], metadata))
+                        self._insert_file(connection, bug_id, metadata, 'abertura')
+                    if removed:
+                        connection.executemany('DELETE FROM bug_evidence WHERE id=? AND bug_id=?', removed)
+            except Exception:
+                for path in paths:
+                    path.unlink(missing_ok=True)
+                raise
+            if removed:
+                self.cleanup_orphans()
+            return self.get(bug_id)
 
     def add_evidence(self, bug_id, kind, content=None, name='', note='', token=None):
         from .storage import now
@@ -333,20 +389,20 @@ class BugsService:
             if kind == 'reteste' and (bug['status'] != 'em_reteste' or not token or token != bug['current_retest_token']):
                 raise StateConflict('Reteste mudou. Recarregue o bug antes de anexar a prova.')
             if not isinstance(note, str) or len(note) > 20000 or (not content and not note.strip()):
-                raise ValueError('Inclua uma nota ou imagem válida.')
+                raise ValueError('Inclua uma nota ou um arquivo válido.')
             if kind == 'abertura' and token is not None:
-                raise ValueError('Imagem de abertura não recebe token de reteste.')
+                raise ValueError('Evidência de abertura não recebe token de reteste.')
             if kind == 'abertura' and not content:
-                raise ValueError('Evidência de abertura deve ser uma imagem.')
-            if sum(e['kind'] == kind and e['retest_token'] == token for e in bug['evidence']) >= 12:
+                raise ValueError('Evidência de abertura precisa de um arquivo.')
+            if sum(e['kind'] == kind and e['retest_token'] == token for e in bug['evidence']) >= MAX_BUG_EVIDENCE:
                 raise ValueError('Limite de 12 evidências por seção.')
-            metadata = self._image(content, name) if content else None
+            metadata = self._file(content, name) if content else None
             path = None
             try:
                 with self.store.connect() as connection:
                     if metadata:
-                        path = self._publish_image(bug_id, content, metadata)
-                        self._insert_image(connection, bug_id, metadata, kind, token, note)
+                        path = self._publish_file(bug_id, content, metadata)
+                        self._insert_file(connection, bug_id, metadata, kind, token, note)
                     else:
                         metadata = {'id': uuid.uuid4().hex}
                         connection.execute('INSERT INTO bug_evidence(id,bug_id,kind,retest_token,note,created_at) VALUES (?,?,?,?,?,?)',
@@ -361,20 +417,18 @@ class BugsService:
         with coordinated(self.root):
             evidence = next((e for e in self.get(bug_id)['evidence'] if e['id'] == evidence_id), None)
             if evidence is None or not evidence['relative_path']:
-                raise LookupError('Imagem não encontrada neste bug.')
+                raise LookupError('Arquivo não encontrado neste bug.')
             base = (self.root / 'bugs' / bug_id / 'evidencias').resolve()
-            path = (self.root / 'bugs' / evidence['relative_path']).resolve()
-            if path.parent != base or path.is_symlink():
+            path = self.root / 'bugs' / evidence['relative_path']
+            if path.resolve().parent != base or path.is_symlink():
                 raise ValueError('Caminho de evidência inválido.')
-            content = path.read_bytes()
-            if hashlib.sha256(content).hexdigest() != evidence['sha256'] or len(content) != evidence['size']:
-                raise ValueError('Evidência ausente ou corrompida.')
-            metadata = self._image(content, evidence['original_name'])
-            if metadata['mime'] != evidence['mime']:
-                raise ValueError('Tipo da evidência inconsistente.')
+            content = verified_attachment_bytes(self.root / 'bugs', evidence)
+            if evidence['mime'] in IMAGE_MIMES and self._image(content, evidence['original_name'])['mime'] != evidence['mime']:
+                raise ValueError('Tipo da imagem inconsistente.')
             return content, evidence['mime']
 
     def remove_evidence(self, bug_id, evidence_id):
+        from .storage import now
         with coordinated(self.root):
             bug = self.get(bug_id)
             if bug['status'] == 'finalizado':
@@ -382,11 +436,12 @@ class BugsService:
             evidence = next((e for e in bug['evidence'] if e['id'] == evidence_id), None)
             if evidence is None:
                 raise LookupError('Evidência não encontrada neste bug.')
-            blocks = [b for b in json.loads(bug['description_doc']) if b.get('id') != evidence_id]
-            if evidence['kind'] == 'abertura':
-                fields = {k: bug[k] for k in ('title', 'severity', 'actual', 'expected')}
-                self.edit(bug_id, dict(fields, blocks=blocks))
             with self.store.connect() as connection:
+                if evidence['kind'] == 'abertura':
+                    blocks = [b for b in json.loads(bug['description_doc']) if b.get('id') != evidence_id]
+                    opening = [item for item in bug['evidence'] if item['kind'] == 'abertura' and item['id'] != evidence_id]
+                    document, _, _ = self._opening({'blocks': blocks}, {}, opening)
+                    connection.execute('UPDATE bugs SET description_doc=?,updated_at=? WHERE id=?', (document, now(), bug_id))
                 connection.execute('DELETE FROM bug_evidence WHERE id=? AND bug_id=?', (evidence_id, bug_id))
             # Unreferenced files are collected only under the root coordinator.
             self.cleanup_orphans()

@@ -7,14 +7,23 @@ from functools import wraps
 from flask import Blueprint, current_app, jsonify, render_template, request, send_file
 
 from .bugs_coordinator import coordinated, StateConflict, RecoveryPending
+from .bugs_service import BUG_FILE_EXTENSIONS, IMAGE_MIMES, MAX_BUG_EVIDENCE, MAX_BUG_FILE_BYTES
 
 blueprint = Blueprint('bugs', __name__)
+
+
+@blueprint.before_request
+def opening_upload_limit():
+    if request.endpoint in ('bugs.create', 'bugs.edit') and request.mimetype == 'multipart/form-data':
+        request.max_content_length = MAX_BUG_EVIDENCE * MAX_BUG_FILE_BYTES + 2 * 1024 * 1024
 
 
 @blueprint.context_processor
 def presentation():
     from .bugs_service import SEVERITIES, severity_key
     return dict(bug_severities=SEVERITIES, severity_key=severity_key,
+                bug_file_accept=','.join(sorted(BUG_FILE_EXTENSIONS)), bug_image_mimes=IMAGE_MIMES,
+                bug_file_max_bytes=MAX_BUG_FILE_BYTES, bug_evidence_max=MAX_BUG_EVIDENCE,
                 bug_status_labels={'aberto': 'Aberto', 'em_reteste': 'Em reteste',
                                    'reaberto': 'Reaberto', 'finalizado': 'Finalizado'})
 
@@ -47,6 +56,17 @@ def body():
     if not isinstance(payload, dict):
         raise ValueError('Envie um objeto JSON válido.')
     return payload
+
+
+def opening_upload():
+    payload = json.loads(request.form.get('document', '{}'))
+    if not isinstance(payload, dict):
+        raise ValueError('Documento inválido.')
+    if len(request.files) > MAX_BUG_EVIDENCE or any(len(request.files.getlist(key)) != 1 for key in request.files):
+        raise ValueError('Envie até 12 arquivos com referências únicas.')
+    files = {key: (incoming.read(MAX_BUG_FILE_BYTES + 1), incoming.filename or '')
+             for key, incoming in request.files.items()}
+    return payload, files
 
 
 @blueprint.get('/bugs')
@@ -91,13 +111,7 @@ def detail(bug_id):
 @blueprint.post('/api/sessao/<session_id>/bugs')
 @api
 def create(session_id):
-    payload = json.loads(request.form.get('document', '{}'))
-    if not isinstance(payload, dict):
-        raise ValueError('Documento inválido.')
-    if any(len(request.files.getlist(key)) != 1 for key in request.files):
-        raise ValueError('Referência de upload duplicada.')
-    files = {key: (incoming.read(10 * 1024 * 1024 + 1), incoming.filename or 'imagem')
-             for key, incoming in request.files.items()}
+    payload, files = opening_upload()
     case_id = request.args.get('precondition_case', type=int)
     if 'precondition_case' in request.args and case_id is None:
         raise ValueError('Pré-condição inválida.')
@@ -114,15 +128,16 @@ def get(bug_id):
 @blueprint.post('/api/bugs/<bug_id>')
 @api
 def edit(bug_id):
-    return jsonify(bug=service().edit(bug_id, body()))
+    payload, files = (body(), {}) if request.is_json else opening_upload()
+    return jsonify(bug=service().edit(bug_id, payload, files))
 
 
 @blueprint.post('/api/bugs/<bug_id>/evidencias')
 @api
 def evidence(bug_id):
-    incoming = request.files.get('imagem')
+    incoming = request.files.get('arquivo') or request.files.get('imagem')
     item = service().add_evidence(bug_id, request.form.get('kind', 'abertura'),
-                                  incoming.read(10 * 1024 * 1024 + 1) if incoming else None,
+                                  incoming.read(MAX_BUG_FILE_BYTES + 1) if incoming else None,
                                   incoming.filename if incoming else '', request.form.get('note', ''),
                                   request.form.get('token') or None)
     return jsonify(evidence=item), 201
@@ -131,8 +146,18 @@ def evidence(bug_id):
 @blueprint.get('/bugs/<bug_id>/evidencias/<evidence_id>')
 @api
 def image(bug_id, evidence_id):
-    content, mime = service().evidence_bytes(bug_id, evidence_id)
-    return send_file(io.BytesIO(content), mimetype=mime, max_age=0)
+    bugs = service()
+    with coordinated(bugs.root):
+        content, mime = bugs.evidence_bytes(bug_id, evidence_id)
+        download = mime not in IMAGE_MIMES or request.args.get('download') == '1'
+        item = next(item for item in bugs.get(bug_id)['evidence'] if item['id'] == evidence_id) if download else None
+    response = send_file(io.BytesIO(content), mimetype='application/octet-stream' if download else mime,
+                         as_attachment=download, download_name=item['original_name'] if item else None, max_age=0)
+    response.headers['X-Content-Type-Options'] = 'nosniff'
+    if download:
+        response.headers['Content-Security-Policy'] = "sandbox; default-src 'none'"
+        response.headers['Cache-Control'] = 'private, no-store'
+    return response
 
 
 @blueprint.delete('/api/bugs/<bug_id>/evidencias/<evidence_id>')

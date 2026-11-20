@@ -54,11 +54,11 @@
       const remove = document.createElement('button');
       remove.type = 'button'; remove.className = 'button button-ghost'; remove.textContent = 'Limpar';
       remove.setAttribute('aria-label', `Limpar ${entry.key}`);
-      remove.addEventListener('click', () => update({ action: 'remove', key: entry.key }).catch((error) => { feedback.textContent = error.message; }));
+      remove.addEventListener('click', () => update({ action: 'remove', key: entry.key }).catch((error) => { TestaizeAlerts.show(error.message); }));
       row.append(title, value, secretLabel, save, remove);
       row.addEventListener('submit', (event) => {
         event.preventDefault();
-        update({ key: entry.key, secret: secret.checked, ...(changed || !entry.has_value ? { value: value.value } : {}) }).catch((error) => { feedback.textContent = error.message; });
+        update({ key: entry.key, secret: secret.checked, ...(changed || !entry.has_value ? { value: value.value } : {}) }).catch((error) => { TestaizeAlerts.show(error.message); });
       });
       if (previousRows.has(entry.key)) previousRows.get(entry.key).replaceWith(row);
       else list.append(row);
@@ -72,7 +72,7 @@
       const response = await fetch(endpoint, { cache: 'no-store' });
       if (!response.ok) throw new Error('Não foi possível abrir o Cofre.');
       render((await response.json()).entries);
-    } catch (error) { feedback.textContent = error.message; }
+    } catch (error) { TestaizeAlerts.show(error.message); }
   });
   document.querySelector('#vault-close').addEventListener('click', () => dialog.close());
   document.querySelector('#vault-add').addEventListener('submit', async (event) => {
@@ -81,7 +81,7 @@
     try {
       await update({ key: form.elements.key.value.trim(), value: form.elements.value.value, secret: form.elements.secret.checked });
       form.reset();
-    } catch (error) { feedback.textContent = error.message; }
+    } catch (error) { TestaizeAlerts.show(error.message); }
   });
   document.querySelector('#vault-add').elements.secret.addEventListener('change', (event) => {
     document.querySelector('#vault-add').elements.value.type = event.target.checked ? 'password' : 'text';

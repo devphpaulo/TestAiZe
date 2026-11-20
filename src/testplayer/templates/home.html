@@ -11,7 +11,6 @@
     <label>Buscar execução <input type="search" data-board-search placeholder="Nome ou ID da execução"></label>
     <label>Fase <select data-board-filter><option value="">Todas as fases</option>{% for phase, label in board_labels.items() %}<option value="{{ phase }}" data-tone="{{ phase }}">{{ label }}</option>{% endfor %}</select></label>
   </div>
-  <p class="session-board-feedback" data-board-feedback role="status"></p>
   <div class="session-board-grid" data-session-board data-labels='{{ board_labels|tojson }}'>
     {% for phase, label in board_labels.items() %}
     {% set items = cards|selectattr('phase', 'equalto', phase)|list %}

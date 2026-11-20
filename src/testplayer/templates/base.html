@@ -15,6 +15,7 @@
   <script defer src="{{ url_for('static', filename='document-editor.js') }}"></script>
   <script defer src="{{ url_for('static', filename='image-editor.js') }}"></script>
   <script defer src="{{ url_for('static', filename='header.js') }}"></script>
+  <script defer src="{{ url_for('static', filename='alerts.js') }}"></script>
   <script defer src="{{ url_for('static', filename='app.js') }}"></script>
   <link rel="stylesheet" href="{{ url_for('static', filename='select.css') }}">
   <script defer src="{{ url_for('static', filename='select.js') }}"></script>
@@ -44,9 +45,7 @@
   {% if automation_notice and request.endpoint == 'home' %}<div class="automation-environment-notice" role="status">{{ automation_notice }}</div>{% endif %}
   {% with messages = get_flashed_messages(with_categories=true) %}
     {% if messages %}
-      <div class="flash-stack" role="status">
-        {% for category, message in messages %}<div class="flash {{ category }}">{{ message }}</div>{% endfor %}
-      </div>
+      {% for category, message in messages %}<span data-server-alert="{{ category }}" hidden>{{ message }}</span>{% endfor %}
     {% endif %}
   {% endwith %}
   {% block content %}{% endblock %}

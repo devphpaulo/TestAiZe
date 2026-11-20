@@ -5,13 +5,11 @@
   const form = dialog.querySelector('form');
   const confirm = dialog.querySelector('[data-board-confirm]');
   const cancel = dialog.querySelector('[data-board-cancel]');
-  const error = dialog.querySelector('[data-board-error]');
   const destination = dialog.querySelector('select');
   const reason = dialog.querySelector('textarea');
   const grid = document.querySelector('[data-session-board]');
   const player = document.querySelector('[data-player]');
   const labels = JSON.parse((grid || player).dataset.labels);
-  const feedback = document.querySelector('[data-board-feedback]');
   let submitAction;
 
   function describe(title, description, button, {options, needsReason = false, dangerous = false} = {}, action) {
@@ -26,7 +24,6 @@
     reason.parentElement.hidden = !needsReason;
     reason.required = needsReason;
     reason.value = '';
-    error.hidden = true;
     confirm.textContent = button;
     confirm.classList.toggle('session-danger', dangerous);
     submitAction = action;
@@ -39,12 +36,10 @@
   form.addEventListener('submit', async event => {
     event.preventDefault();
     if (confirm.disabled) return;
-    error.hidden = true;
     cancel.disabled = confirm.disabled = true;
     try { await submitAction(); }
     catch (failure) {
-      error.textContent = failure.message;
-      error.hidden = false;
+      TestaizeAlerts.show(failure.message);
     } finally { cancel.disabled = confirm.disabled = false; }
   });
 
@@ -135,11 +130,7 @@
       const card = await getCard();
       await renderMove(card, selected || (card.phase === 'blocked' ? card.allowed[0] : ''));
     } catch (failure) {
-      if (dialog.open) {
-        error.textContent = failure.message;
-        error.hidden = false;
-      } else if (feedback) feedback.textContent = failure.message;
-      else throw failure;
+      TestaizeAlerts.show(failure.message);
     }
   }
 
@@ -190,7 +181,6 @@
     if (!button) return;
     const target = button.closest('[data-board-card]');
     const card = JSON.parse(target.dataset.card);
-    feedback.textContent = '';
     if (button.dataset.boardAction === 'move') move(target);
     if (button.dataset.boardAction === 'edit') edit(target, card.source_name);
     if (button.dataset.boardAction === 'clone') clone(target, card.source_name);

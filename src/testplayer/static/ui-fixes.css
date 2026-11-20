@@ -396,8 +396,8 @@
 .folder-card-error { min-height: 20px; margin-top: 8px; color: var(--danger); font-size: 12px; }
 .folder-card-remove { min-height: 40px; padding: 0; border: 0; background: transparent; color: var(--danger); text-align: left; }
 .folder-card-remove:hover { text-decoration: underline; }
-.folder-card-modal-actions { display: grid; grid-template-columns: 1fr 1fr; border-top: 1px solid var(--line); }
-.folder-card-modal-actions .button { min-height: 64px; justify-content: flex-start; }
+.folder-card-modal-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; padding: 16px 24px; border-top: 1px solid var(--line); }
+.folder-card-modal-actions .button { min-width: 125px; justify-content: center; }
 
 @media (max-width: 900px) {
   .folder-list-heading { display: none !important; }
@@ -413,8 +413,7 @@
   .folder-card-cell { min-height: 64px; border-top: 1px solid var(--line); border-left: 0; }
   .folder-card-modal-head,
   .folder-card-modal-body { padding-left: 16px; padding-right: 16px; }
-  .folder-card-modal-actions { grid-template-columns: 1fr; }
-  .folder-card-modal-actions .button { min-height: 52px; }
+  .folder-card-modal-actions { padding-inline: 16px; }
 }
 
 /* Compact execution surface. The same node moves into Document Picture-in-Picture. */

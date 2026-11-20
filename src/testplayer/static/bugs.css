@@ -49,6 +49,14 @@
 .bugs-ui .bug-input:disabled { cursor: default; opacity: .7; }
 .bugs-ui textarea.bug-input { min-height: 124px; resize: vertical; }
 .bugs-ui .bug-select { appearance: auto; padding-right: 28px; color-scheme: dark; }
+@supports (appearance: base-select) {
+  .bugs-ui .bug-select.app-select { appearance: base-select; display: flex; align-items: center; }
+}
+.bugs-ui .bug-file-help { font-size: 12px; }
+.bug-attachments { margin-top: 16px; }
+.bug-attachments ul { display: grid; gap: 8px; padding: 0; list-style: none; }
+.bug-attachments li { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 12px; border: 1px solid var(--bd); border-radius: 10px; }
+.bug-attachments a { min-width: 0; overflow-wrap: anywhere; color: var(--pri); text-decoration: underline; }
 :root[data-theme="light"] .bugs-ui .bug-select { color-scheme: light; }
 .bugs-ui input[type="checkbox"] { width: 16px; height: 16px; min-height: 16px; padding: 0; margin: 0; flex: none; accent-color: var(--bug-primary); border-radius: 4px; }
 .bugs-ui input[type="file"].bug-input { padding: 7px 10px; font-size: 13px; }
@@ -93,8 +101,6 @@
 .bug-linked-name a, .bug-linked-name > span { display: block; font-weight: 500; color: var(--bug-foreground); overflow-wrap: anywhere; }
 .bug-linked-name a:hover { text-decoration: underline; }
 .bug-linked-name small { display: block; font-size: 12px; margin-top: 4px; color: var(--bug-muted); }
-.bugs-ui .bug-feedback:empty { display: none; }
-.bugs-ui .bug-feedback:not(:empty) { margin: 0 0 20px; padding: 12px 14px; border: 1px solid #ef444470; border-radius: 6px; color: var(--bug-foreground); background: #ef44440a; }
 .bugs-ui .bug-link-dialog { width: min(780px, calc(100vw - 32px)); max-width: none; max-height: calc(100dvh - 48px); padding: 0; margin: auto; border: 1px solid var(--bug-border); border-radius: 12px; background: var(--bug-card); color: var(--bug-foreground); box-shadow: 0 20px 80px #0004; overflow: hidden; color-scheme: dark; }
 :root[data-theme="light"] .bugs-ui .bug-link-dialog { color-scheme: light; }
 .bug-link-dialog::backdrop { background: #0009; }

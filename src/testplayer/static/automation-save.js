@@ -60,7 +60,7 @@
       if (savedDestination) { cycleSelect.value = savedDestination.cycle; cycleChanged(); }
       document.querySelector('#save-script-error').textContent = '';
       dialog.showModal();
-    } catch (error) { document.querySelector('#automation-save-feedback').textContent = error.message; }
+    } catch (error) { TestaizeAlerts.show(error.message); }
   });
   folderSelect.addEventListener('change', folderChanged);
   cycleSelect.addEventListener('change', cycleChanged);
@@ -87,7 +87,7 @@
       dialog.close();
       const feedback = document.querySelector('#automation-save-feedback'); feedback.replaceChildren(document.createTextNode('Script salvo. '));
       const link = document.createElement('a'); link.textContent = 'Abrir script na biblioteca'; link.href = '/iniciativas/automacao/scripts/' + savedId; feedback.append(link);
-    } catch (error) { document.querySelector('#save-script-error').textContent = error.message; }
+    } catch (error) { TestaizeAlerts.show(error.message); }
     finally { submit.disabled = false; }
   });
 })();

@@ -15,8 +15,8 @@
   let heartbeat;
 
   function showStatus(message, error = false) {
-    status.textContent = message;
-    status.parentElement.dataset.error = String(error);
+    status.textContent = error ? 'Gravador indisponível' : message;
+    if (error) TestaizeAlerts.show(message);
     retry.hidden = !error;
   }
 

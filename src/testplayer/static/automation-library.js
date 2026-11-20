@@ -3,7 +3,6 @@
   if (!page) return;
   const api = '/api/iniciativas/automacao/';
   const csrf = document.querySelector('meta[name="csrf-token"]').content;
-  const feedback = document.querySelector('#automation-library-feedback');
   const dialog = document.querySelector('#automation-entity-dialog');
   let editing;
   let activeRun;
@@ -29,12 +28,12 @@
       const result = await request(editing.entityKind + (editing.entityId ? '/' + editing.entityId : ''), editing.entityId ? 'PUT' : 'POST', { name: document.querySelector('#automation-entity-name').value, folder_id: editing.folderId || page.dataset.folder });
       if (!editing.entityId && editing.entityKind === 'pastas') window.location.assign('/iniciativas/automacao/pastas/' + result.item.id);
       else window.location.reload();
-    } catch (error) { document.querySelector('#automation-entity-error').textContent = error.message; }
+    } catch (error) { TestaizeAlerts.show(error.message); }
   });
   for (const button of document.querySelectorAll('[data-delete-kind]')) button.addEventListener('click', async () => {
     if (!confirm(`Excluir ${button.dataset.deleteName}? Os scripts deste item serão removidos; o histórico de execuções será preservado.`)) return;
     try { await request(button.dataset.deleteKind + '/' + button.dataset.deleteId, 'DELETE'); window.location.assign(window.location.pathname); }
-    catch (error) { feedback.textContent = error.message; }
+    catch (error) { TestaizeAlerts.show(error.message); }
   });
   function renderRun(run) {
     activeRun = run.id;
@@ -63,15 +62,15 @@
   }
   async function loadRun(id) {
     try { renderRun((await request('execucoes/' + id)).run); }
-    catch (error) { feedback.textContent = error.message; }
+    catch (error) { TestaizeAlerts.show(error.message); }
   }
   document.querySelector('#suite-run')?.addEventListener('click', async () => {
     try { renderRun((await request('execucoes', 'POST', { folder_id: page.dataset.folder, cycle_id: page.dataset.cycle || null })).run); }
-    catch (error) { feedback.textContent = error.message; }
+    catch (error) { TestaizeAlerts.show(error.message); }
   });
   document.querySelector('#suite-cancel')?.addEventListener('click', async () => {
     try { await request('execucoes/' + activeRun + '/cancelar', 'POST', {}); loadRun(activeRun); }
-    catch (error) { feedback.textContent = error.message; }
+    catch (error) { TestaizeAlerts.show(error.message); }
   });
   for (const button of document.querySelectorAll('[data-view-run]')) button.addEventListener('click', () => loadRun(button.dataset.viewRun));
   if (page.dataset.latestRun) loadRun(page.dataset.latestRun);

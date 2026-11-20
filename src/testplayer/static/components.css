@@ -202,9 +202,48 @@
     box-shadow: none;
   }
   .app-select option { border-radius: 9px; font-size: 13px; }
-  .app-select > button { display: flex; align-items: center; min-width: 0; }
+  select.app-select { display: flex; align-items: center; }
+  .app-select > button { display: flex; align-items: center; min-width: 0; padding: 0; }
   .app-select-marker[data-tone="alta"] { --marker-color: var(--warn); }
 }
+
+.app-alerts {
+  position: fixed;
+  inset: auto max(24px, env(safe-area-inset-right)) max(24px, env(safe-area-inset-bottom)) auto;
+  z-index: 1000;
+  width: min(480px, calc(100% - 48px));
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  overflow: visible;
+  pointer-events: none;
+}
+.app-alerts:popover-open { display: grid; gap: 8px; }
+.app-alert + .app-alert { margin-top: 8px; }
+.app-alerts:popover-open .app-alert + .app-alert { margin-top: 0; }
+.app-alert {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 48px;
+  padding: 12px 16px;
+  border: 1px solid var(--bd);
+  border-radius: 16px;
+  background: var(--card);
+  color: var(--alert-color);
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 20px;
+  overflow-wrap: anywhere;
+}
+.app-alert[data-tone="error"] { --alert-color: #e7000b; }
+.app-alert[data-tone="success"] { --alert-color: #00a63e; }
+.app-alert[data-tone="warning"] { --alert-color: #ca5900; }
+:root[data-theme="dark"] .app-alert[data-tone="error"] { --alert-color: #ff6467; }
+:root[data-theme="dark"] .app-alert[data-tone="success"] { --alert-color: #05df72; }
+:root[data-theme="dark"] .app-alert[data-tone="warning"] { --alert-color: #ff8904; }
+.app-alert svg { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 
 @media (max-width: 860px) {
   @layer ui-theme {

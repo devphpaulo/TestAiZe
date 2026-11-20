@@ -12,6 +12,6 @@
       page.querySelector('.automation-heading h1').textContent = result.item.name;
       document.title = result.item.name + ' · Automação';
       feedback.textContent = 'Script salvo no ciclo selecionado.';
-    } catch (error) { feedback.textContent = error.message; }
+    } catch (error) { TestaizeAlerts.show(error.message); }
   });
 })();

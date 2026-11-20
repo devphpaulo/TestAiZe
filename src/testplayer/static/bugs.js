@@ -6,12 +6,17 @@
   const editor = document.getElementById('bug-editor');
   const form = document.getElementById('bug-form');
   const localFiles = new Map();
-  const removed = new Set();
-  const pending = new Set();
   const readonly = bug?.status === 'finalizado';
+  const imageExtensions = new Set(['.png', '.jpeg', '.jpg', '.webp']);
+  const input = document.getElementById('bug-files');
+  const acceptedExtensions = new Set(input?.accept.split(',') || []);
+  const maxFileBytes = Number(page.dataset.maxFileBytes);
+  const maxEvidence = Number(page.dataset.maxEvidence);
+  const attachmentList = document.getElementById('bug-attachment-list');
+  const attachmentSection = document.getElementById('bug-attachments');
+  const imageMimes = new Set(['image/png', 'image/jpeg', 'image/webp']);
   let insertion = null;
-  const openingImages = new Set((bug?.evidence || []).filter(item => item.kind === 'abertura').map(item => item.id));
-  const feedback = message => { document.getElementById('bug-feedback').textContent = message; };
+  const feedback = message => TestaizeAlerts.show(message);
   async function api(url, options = {}) {
     const response = await fetch(url, {...options, headers: {'X-CSRF-Token': csrf, ...options.headers}});
     const result = await response.json().catch(() => ({}));
@@ -20,6 +25,9 @@
   }
   const post = (url, payload) => api(url, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload)});
   const imageUrl = id => `/bugs/${bug.id}/evidencias/${id}`;
+  const attachments = new Map((bug?.evidence || [])
+    .filter(item => item.kind === 'abertura' && !imageMimes.has(item.mime))
+    .map(item => [item.id, {name: item.original_name, url: imageUrl(item.id)}]));
   function paragraph(text = '') {
     const node = document.createElement('p');
     node.textContent = text;
@@ -45,8 +53,7 @@
     insertion = range.cloneRange();
   }
   const images = readonly ? null : TestaizeImages.mount(editor, {
-    remove: entry => { if (!localFiles.has(entry.id)) removed.add(entry.id); insertion = null; },
-    restore: entry => { removed.delete(entry.id); },
+    remove: () => { insertion = null; },
     error: error => feedback(error.message)
   });
   function imageNode(id, src, width = 100) {
@@ -55,35 +62,59 @@
   }
   const initial = bug ? JSON.parse(bug.description_doc) : [{type: 'text', text: ''}];
   initial.forEach(block => editor.append(block.type === 'text' ? paragraph(block.text) : imageNode(block.id, imageUrl(block.id), block.width)));
-  async function addFile(file) {
-    if (readonly) return;
-    if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type) || file.size > 10 * 1024 * 1024) throw new Error('Use PNG, JPEG ou WebP com até 10 MiB.');
-    let id, src;
-    if (bug) {
-      const data = new FormData(); data.append('imagem', file); data.append('kind', 'abertura');
-      const result = await api(`/api/bugs/${bug.id}/evidencias`, {method: 'POST', body: data});
-      id = result.evidence.id; openingImages.add(id); src = imageUrl(id);
-    } else {
-      id = crypto.randomUUID(); localFiles.set(id, file); src = URL.createObjectURL(file);
+  function renderAttachments() {
+    attachmentList.replaceChildren();
+    attachmentSection.hidden = !attachments.size;
+    for (const [id, item] of attachments) {
+      const row = document.createElement('li');
+      const link = document.createElement('a');
+      link.href = item.url; link.download = item.name; link.textContent = item.name;
+      row.append(link);
+      if (!readonly) {
+        const remove = document.createElement('button');
+        remove.type = 'button'; remove.className = 'bug-button bug-button-outline';
+        remove.textContent = 'Remover'; remove.setAttribute('aria-label', `Remover ${item.name}`);
+        remove.addEventListener('click', () => {
+          if (localFiles.delete(id)) URL.revokeObjectURL(item.url);
+          attachments.delete(id);
+          renderAttachments();
+          document.getElementById('bug-file-choose').focus();
+        });
+        row.append(remove);
+      }
+      attachmentList.append(row);
     }
-    insert(imageNode(id, src));
   }
-  function upload(file) {
-    const task = addFile(file).catch(error => { feedback(error.message); throw error; });
-    pending.add(task); task.finally(() => pending.delete(task)).catch(() => {});
-    return task;
+  renderAttachments();
+  function addFiles(files) {
+    for (const file of files) {
+      try {
+        const extension = file.name.toLowerCase().match(/\.[^.]+$/)?.[0];
+        if (!acceptedExtensions.has(extension)) throw new Error(`Formato não aceito: ${file.name}.`);
+        if (!file.size || file.size > maxFileBytes) throw new Error(`${file.name}: o arquivo deve ter conteúdo e até 10 MB.`);
+        if (attachments.size + editor.querySelectorAll('.rich-image').length >= maxEvidence) throw new Error(`Limite de ${maxEvidence} evidências de abertura.`);
+        const id = crypto.randomUUID();
+        const url = URL.createObjectURL(file);
+        localFiles.set(id, file);
+        if (imageExtensions.has(extension)) insert(imageNode(id, url));
+        else {
+          attachments.set(id, {name: file.name, url});
+          renderAttachments();
+        }
+      } catch (error) { feedback(error.message); }
+    }
   }
-  document.getElementById('bug-image-choose')?.addEventListener('click', () => document.getElementById('bug-images').click());
-  document.getElementById('bug-images')?.addEventListener('change', async event => {
-    for (const file of event.target.files) { try { await upload(file); } catch (_) { break; } }
-    event.target.value = '';
+  document.getElementById('bug-file-choose')?.addEventListener('click', () => input.click());
+  input?.addEventListener('change', () => {
+    addFiles(input.files);
+    input.value = '';
   });
   editor.addEventListener('paste', async event => {
     if (readonly) return;
     event.preventDefault(); rememberSelection();
-    const files = [...event.clipboardData.items].filter(item => item.kind === 'file').map(item => item.getAsFile());
+    const files = [...event.clipboardData.items].filter(item => item.kind === 'file').map(item => item.getAsFile()).filter(Boolean);
     if (files.length) {
-      for (const file of files) { try { await upload(file); } catch (_) { break; } }
+      addFiles(files);
       return;
     }
     const text = event.clipboardData.getData('text/plain');
@@ -102,23 +133,18 @@
   });
   form.addEventListener('submit', async event => {
     event.preventDefault();
-    const button = form.querySelector('button[type="submit"]'); button.disabled = true;
+    const button = form.querySelector('button[type="submit"]');
+    if (!button || button.disabled) return;
+    button.disabled = true;
     try {
-      await Promise.all([...pending]);
       if (images) await images.flush();
       const fields = Object.fromEntries(new FormData(form)); fields.blocks = TestaizeDocument.serialize(editor);
-      const usedImages = new Set(fields.blocks.filter(block => block.type === 'image').map(block => block.id));
-      for (const id of openingImages) { if (!usedImages.has(id)) removed.add(id); else removed.delete(id); }
-      let result;
-      if (bug) {
-        result = await post(`/api/bugs/${bug.id}`, fields);
-        for (const id of removed) await api(`/api/bugs/${bug.id}/evidencias/${id}`, {method: 'DELETE'});
-      } else {
-        const data = new FormData(); data.append('document', JSON.stringify(fields));
-        for (const [id, file] of localFiles) { if (usedImages.has(id)) data.append(id, file); }
-        const origin = page.dataset.originCase ? `?precondition_case=${encodeURIComponent(page.dataset.originCase)}` : '';
-        result = await api(`/api/sessao/${page.dataset.sessionId}/bugs${origin}`, {method: 'POST', body: data});
-      }
+      fields.attachment_ids = [...attachments.keys()];
+      const used = new Set([...fields.attachment_ids, ...fields.blocks.filter(block => block.type === 'image').map(block => block.id)]);
+      const data = new FormData(); data.append('document', JSON.stringify(fields));
+      for (const id of used) { if (localFiles.has(id)) data.append(id, localFiles.get(id)); }
+      const result = await api(bug ? `/api/bugs/${bug.id}` : `/api/sessao/${page.dataset.sessionId}/bugs`, {method: 'POST', body: data});
+      TestaizeAlerts.next(bug ? 'Alterações salvas.' : 'Bug reportado.', 'success');
       window.location.href = `/bugs/${result.bug.id}?session_id=${encodeURIComponent(page.dataset.sessionId)}`;
     } catch (error) { feedback(error.message); }
     finally { button.disabled = false; }
@@ -130,11 +156,31 @@
       window.location.reload();
     } catch (error) { feedback(error.message); button.disabled = false; }
   }));
+  document.getElementById('bug-pdf-form')?.addEventListener('submit', async event => {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const button = form.querySelector('button');
+    button.disabled = true;
+    try {
+      const response = await fetch(form.action, {method: 'POST', headers: {'X-CSRF-Token': csrf}});
+      if (!response.ok) {
+        const result = await response.json().catch(() => ({}));
+        throw new Error(result.error || 'Não foi possível exportar o PDF.');
+      }
+      const url = URL.createObjectURL(await response.blob());
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `bug-${bug.id.slice(0, 8)}.pdf`;
+      link.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (error) { feedback(error.message); }
+    finally { button.disabled = false; }
+  });
   document.getElementById('bug-proof')?.addEventListener('submit', async event => {
     event.preventDefault(); const proof = event.currentTarget; const button = proof.querySelector('button'); button.disabled = true;
     try {
       const data = new FormData(proof); data.append('kind', 'reteste'); data.append('token', bug.current_retest_token);
-      if (!data.get('imagem')?.size) data.delete('imagem');
+      if (!data.get('arquivo')?.size) data.delete('arquivo');
       await api(`/api/bugs/${bug.id}/evidencias`, {method: 'POST', body: data}); window.location.reload();
     } catch (error) { feedback(error.message); button.disabled = false; }
   });
@@ -237,7 +283,7 @@
         ...refused.map(item => `${item.name}: ${item.reason}.`)
       ].filter(Boolean).join(' ');
       document.getElementById('bug-link-close').textContent = 'Concluir';
-    } catch (error) { document.getElementById('bug-link-feedback').textContent = `Erro: ${error.message}`; }
+    } catch (error) { feedback(error.message); }
     finally { linkBusy = false; updateSelection(); }
   });
 })();

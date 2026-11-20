@@ -13,13 +13,11 @@
       if (event.dataTransfer.files.length) { fileInput.files = event.dataTransfer.files; name.textContent = fileInput.files[0].name; }
     });
   }
-  document.querySelectorAll('.flash').forEach(item => setTimeout(() => item.remove(), 9000));
 
   const folderCardModal = document.getElementById('folder-card-modal');
   if (folderCardModal) {
     const form = document.getElementById('folder-card-form');
     const urlInput = document.getElementById('folder-card-url');
-    const error = document.getElementById('folder-card-error');
     const removeButton = document.getElementById('folder-card-remove');
     const saveButton = document.getElementById('folder-card-save');
     const closeButtons = [...folderCardModal.querySelectorAll('[data-folder-card-close]')];
@@ -93,7 +91,6 @@
       document.getElementById('folder-card-modal-title').textContent = existingUrl ? 'Editar card vinculado' : 'Vincular card à pasta';
       urlInput.value = existingUrl;
       urlInput.removeAttribute('aria-invalid');
-      error.textContent = '';
       removeButton.hidden = !existingUrl;
       folderCardModal.showModal();
       urlInput.focus();
@@ -103,7 +100,7 @@
       if (trigger) openFolderCard(trigger);
     });
     closeButtons.forEach(button => button.addEventListener('click', closeFolderCard));
-    urlInput.addEventListener('input', () => { urlInput.removeAttribute('aria-invalid'); error.textContent = ''; });
+    urlInput.addEventListener('input', () => urlInput.removeAttribute('aria-invalid'));
     folderCardModal.addEventListener('cancel', event => { if (busy) event.preventDefault(); });
     folderCardModal.addEventListener('click', event => {
       if (event.target !== folderCardModal) return;
@@ -116,13 +113,12 @@
       if (busy) return;
       const value = urlInput.value;
       if (!cardUrlIsValid(value)) {
-        error.textContent = 'Informe um link completo iniciado por http:// ou https://.';
+        TestaizeAlerts.show('Informe um link completo iniciado por http:// ou https://.', 'warning');
         urlInput.setAttribute('aria-invalid', 'true');
         urlInput.focus();
         return;
       }
       setFolderCardBusy(true);
-      error.textContent = '';
       try {
         const response = await fetch(folderCardModal.dataset.endpoint, {method: 'POST', headers: {'Content-Type': 'application/json', ...writeHeaders}, body: JSON.stringify({folder_path: selectedRow.dataset.folderPath, card_url: value})});
         const result = await response.json();
@@ -133,15 +129,15 @@
         renderFolderCard(selectedRow, result.card);
         returnFocus = selectedRow.querySelector('[data-folder-card-edit]');
         folderCardModal.close();
+        TestaizeAlerts.show('Vínculo salvo.', 'success');
       } catch (failure) {
-        error.textContent = failure.message;
+        TestaizeAlerts.show(failure.message);
         urlInput.setAttribute('aria-invalid', 'true');
       } finally { setFolderCardBusy(false); }
     });
     removeButton.addEventListener('click', async () => {
       if (busy) return;
       setFolderCardBusy(true);
-      error.textContent = '';
       try {
         const response = await fetch(folderCardModal.dataset.endpoint, {method: 'DELETE', headers: {'Content-Type': 'application/json', ...writeHeaders}, body: JSON.stringify({folder_path: selectedRow.dataset.folderPath})});
         const result = await response.json();
@@ -152,7 +148,8 @@
         renderFolderCard(selectedRow, null);
         returnFocus = selectedRow.querySelector('[data-folder-card-edit]');
         folderCardModal.close();
-      } catch (failure) { error.textContent = failure.message; }
+        TestaizeAlerts.show('Vínculo removido.', 'success');
+      } catch (failure) { TestaizeAlerts.show(failure.message); }
       finally { setFolderCardBusy(false); }
     });
   }
@@ -163,7 +160,6 @@
   const views = [...document.querySelectorAll('[data-case-view]')];
   const caseButtons = [...document.querySelectorAll('[data-case-button]')];
   const cards = [...document.querySelectorAll('.step-card')];
-  const saveState = document.getElementById('save-state');
   let selectedIndex = 0;
   var captureApplying = false;
   var captureSilent = false;
@@ -194,9 +190,8 @@
   function caseViewChanged() { caseViewChangeHandlers.forEach(handler => handler()); }
 
   function setSaveState(message, error = false) {
-    saveState.hidden = !error;
-    saveState.textContent = error ? message : '';
     const pipDocument = window.documentPictureInPicture?.window?.document;
+    if (error) TestaizeAlerts.show(message, 'error', pipDocument || document);
     const miniState = document.getElementById('mini-player-sync-state') || pipDocument?.getElementById('mini-player-sync-state');
     if (miniState) {
       miniState.lastChild.textContent = ` ${message}`;
@@ -459,8 +454,8 @@
     return node;
   }
   function setMiniPlayerFeedback(message, error = false) {
-    miniPlayerFeedback.textContent = message;
-    miniPlayerFeedback.classList.toggle('error', error);
+    miniPlayerFeedback.textContent = error ? '' : message;
+    if (error) TestaizeAlerts.show(message, 'error', miniPlayer.ownerDocument);
   }
   function observedTextBlocks(editor) {
     const blocks = [];
@@ -775,7 +770,6 @@
           pdfModal.close();
           form.submit();
         } catch (error) {
-          document.getElementById('pdf-selection-error').textContent = error.message;
           setSaveState(error.message, true);
         }
         finally { button.disabled = false; }
@@ -936,8 +930,7 @@
       renderSyncPreview(result);
     } catch (error) {
       if (request.signal.aborted || !syncModal.open) return;
-      document.getElementById('sync-feedback').classList.add('error');
-      document.getElementById('sync-feedback').textContent = error.message;
+      document.getElementById('sync-feedback').textContent = '';
       setSaveState(error.message, true);
     }
   }
@@ -994,8 +987,7 @@
     } catch (error) {
       syncBusy = false;
       cancel.disabled = false; confirm.textContent = 'Sincronizar evidência';
-      document.getElementById('sync-feedback').className = 'sync-feedback error';
-      document.getElementById('sync-feedback').textContent = error.message;
+      document.getElementById('sync-feedback').textContent = '';
       setSaveState(error.message, true);
       updateSyncActions(); updateSyncSelection();
     }
@@ -1514,9 +1506,8 @@
   document.querySelectorAll('[data-attachment-upload-url]').forEach(area => {
     const button = area.querySelector('.choose-step-attachment');
     const picker = area.querySelector('.step-attachment-input');
-    const feedback = area.querySelector('.attachment-feedback');
     const list = area.querySelector('.attachment-list');
-    const showAttachmentError = message => { feedback.textContent = message; feedback.hidden = false; setSaveState(message, true); };
+    const showAttachmentError = message => setSaveState(message, true);
     if (!button || !picker) return;
     button.addEventListener('click', () => picker.click());
     picker.addEventListener('change', async () => {
@@ -1535,7 +1526,6 @@
         showAttachmentError(`"${oversized.name}" excede o limite de 5 MB por arquivo.`);
         return;
       }
-      feedback.hidden = true;
       button.disabled = true;
       for (const file of files) {
         const task = (async () => {
@@ -1596,7 +1586,6 @@
         row.remove();
         list.hidden = !list.childElementCount;
         if (restoreFocus) (next?.querySelector('.remove-step-attachment') || button).focus();
-        feedback.hidden = true;
         setSaveState('Arquivo removido');
       } catch (error) { remove.disabled = false; showAttachmentError(error.message); }
     });

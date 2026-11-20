@@ -2,6 +2,7 @@ import io
 import json
 import unittest
 from test_bugs_flow import BugsFixture
+from testplayer.bugs_service import MAX_BUG_FILE_BYTES
 from testplayer.web import create_app
 
 
@@ -57,6 +58,53 @@ class BugsRoutesTests(BugsFixture, unittest.TestCase):
         invalid = self.client.post(f'/api/bugs/{bug["id"]}', headers=self.headers,
                                    json=dict(bug, severity='arbitrária', blocks=json.loads(bug['description_doc'])))
         self.assertEqual(invalid.status_code, 422)
+
+    def test_bug_attachments_replace_with_save_and_download_as_files(self):
+        from testplayer.bugs_export import render_bug_html
+
+        fields = dict(title='Bug com arquivo', severity='alta', actual='Obtido', expected='Esperado',
+                      blocks=[{'type': 'text', 'text': 'Passos'}])
+        url = f'/api/sessao/{self.sid}/bugs'
+        names = ['caso.PDF', 'execução.log', 'texto.txt', 'massa.xml', 'resposta.json', 'dados.xlsx', 'legado.xls', 'tabela.csv']
+        files = {str(index): (io.BytesIO(name.encode()), name) for index, name in enumerate(names)}
+        response = self.client.post(url, headers=self.headers, data={'document': json.dumps(fields), **files})
+        self.assertEqual(response.status_code, 201, response.data)
+        bug = response.json['bug']
+        self.assertCountEqual([item['original_name'] for item in bug['evidence']], names)
+        for item in bug['evidence']:
+            with self.client.get(f'/bugs/{bug["id"]}/evidencias/{item["id"]}') as download:
+                self.assertEqual(download.data, item['original_name'].encode())
+                self.assertEqual(download.mimetype, 'application/octet-stream')
+                self.assertTrue(download.headers['Content-Disposition'].startswith('attachment;'))
+                self.assertEqual(download.headers['X-Content-Type-Options'], 'nosniff')
+        self.assertIn('resposta.json', render_bug_html(self.service, bug['id']))
+        edit_url = f'/api/bugs/{bug["id"]}'
+        invalid = self.client.post(edit_url, headers=self.headers, json=dict(fields, attachment_ids=[]))
+        self.assertEqual(invalid.status_code, 422)
+        self.assertEqual(len(self.service.get(bug['id'])['evidence']), len(names))
+        replace = self.client.post(edit_url, headers=self.headers, data={
+            'document': json.dumps(dict(fields, attachment_ids=['novo'])),
+            'novo': (io.BytesIO(b'novo'), 'novo.log'),
+        })
+        self.assertEqual(replace.status_code, 200, replace.data)
+        self.assertEqual([item['original_name'] for item in replace.json['bug']['evidence']], ['novo.log'])
+
+    def test_bug_attachment_limit_is_per_file_and_invalid_types_are_rejected(self):
+        url = f'/api/sessao/{self.sid}/bugs'
+        document = json.dumps(dict(title='Bug', severity='alta', actual='Obtido', expected='Esperado',
+                                   blocks=[{'type': 'text', 'text': 'Passos'}]))
+        for name, data in [('setup.exe', b'arquivo'), ('excedente.log', b'x' * (MAX_BUG_FILE_BYTES + 1))]:
+            with self.subTest(name=name):
+                result = self.client.post(url, headers=self.headers,
+                                          data={'document': document, 'arquivo': (io.BytesIO(data), name)})
+                self.assertEqual(result.status_code, 422, result.data)
+        self.assertEqual(self.service.list(), [])
+        valid = self.client.post(url, headers=self.headers, data={
+            'document': document,
+            **{str(i): (io.BytesIO(b'x' * MAX_BUG_FILE_BYTES), f'{i}.log') for i in range(3)},
+        })
+        self.assertEqual(valid.status_code, 201, valid.data)
+        self.assertEqual(len(valid.json['bug']['evidence']), 3)
 
     def test_linked_names_and_statuses_are_resolved_per_execution(self):
         from testplayer import storage

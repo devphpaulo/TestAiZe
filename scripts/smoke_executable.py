@@ -52,7 +52,7 @@ def check(executable: Path) -> None:
                         assert 'Bugs por estado' in response.read().decode('utf-8')
                     for asset in (
                         'bugs.js', 'bugs.css', 'document-editor.js', 'image-editor.js', 'image-editor.css',
-                        'header.js', 'header.css', 'theme.js', 'theme.css', 'frontend/progress.js', 'frontend/progress.css',
+                        'header.js', 'header.css', 'theme.js', 'theme.css', 'alerts.js', 'frontend/progress.js', 'frontend/progress.css',
                     ):
                         with urllib.request.urlopen(origin + '/static/' + asset, timeout=2) as response:
                             assert response.status == 200 and response.read()

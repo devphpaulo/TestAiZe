@@ -169,6 +169,9 @@
 .case-board-card .session-card-footer { color: var(--muted); }
 .case-board-card:is(:hover, :focus-within) .session-card-footer { color: var(--ink); }
 .session-card-actions { gap: 4px; }
+@layer ui-theme {
+  .session-card-actions .session-icon { width: 34px !important; height: 34px !important; padding: 0 !important; line-height: 1 !important; }
+}
 .session-icon {
   display: grid;
   place-items: center;

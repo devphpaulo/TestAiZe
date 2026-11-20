@@ -6,6 +6,7 @@ from pathlib import Path
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 from .bugs_coordinator import coordinated
+from .bugs_service import IMAGE_MIMES
 from .pdf_export import render_html_to_pdf
 
 
@@ -15,7 +16,7 @@ def render_bug_html(service, bug_id):
         bug = service.get(bug_id)
         images = {}
         for item in bug['evidence']:
-            if item['relative_path']:
+            if item['relative_path'] and item['mime'] in IMAGE_MIMES:
                 content, mime = service.evidence_bytes(bug_id, item['id'])
                 images[item['id']] = f'data:{mime};base64,' + base64.b64encode(content).decode('ascii')
         blocks = json.loads(bug['description_doc'])
@@ -30,7 +31,8 @@ def render_bug_html(service, bug_id):
             link['name'] = case['name'] if case else 'Sessão/caso indisponível'
     environment = Environment(loader=FileSystemLoader(Path(__file__).parent / 'templates'),
                               autoescape=select_autoescape(['html']))
-    return environment.get_template('bug_report.html').render(bug=bug, blocks=blocks, images=images)
+    attachments = [item for item in bug['evidence'] if item['kind'] == 'abertura' and item['id'] not in images]
+    return environment.get_template('bug_report.html').render(bug=bug, blocks=blocks, images=images, attachments=attachments)
 
 
 def generate_bug_pdf(service, bug_id):
