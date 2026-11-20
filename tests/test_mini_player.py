@@ -39,7 +39,7 @@ class MiniPlayerContractTests(unittest.TestCase):
         ):
             self.assertIn(fragment, self.javascript)
         self.assertIn("applyCaseState(view, result)", self.javascript)
-        self.assertIn("updateSummary(); renderMiniPlayer();", self.javascript)
+        self.assertIn("updateSummary(view); renderMiniPlayer();", self.javascript)
         self.assertIn("expected_revision: Number(view.dataset.statusRevision", self.javascript)
 
         for selector in (

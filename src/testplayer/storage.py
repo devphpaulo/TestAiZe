@@ -607,8 +607,7 @@ def _sync_context(connection: sqlite3.Connection, directory: Path, source_step_i
     )]
     if not evidence:
         raise ValueError("O passo de origem não possui evidência persistida.")
-    for item in evidence:
-        _verified_evidence_path(directory, item)
+    evidence_paths = {item["id"]: _verified_evidence_path(directory, item) for item in evidence}
     targets = []
     for row in connection.execute(
         "SELECT s.id AS step_id,s.case_id,s.position AS step_position,s.action AS description,"
@@ -624,7 +623,7 @@ def _sync_context(connection: sqlite3.Connection, directory: Path, source_step_i
     source_blocks = display_blocks(source["actual_doc"], source["actual"], evidence)
     widths = {block["id"]: block["width"] for block in source_blocks if block["type"] == "image"}
     source.update(evidence=evidence, evidence_count=len(evidence), evidence_widths=widths)
-    return {"origin": source, "targets": targets}
+    return {"origin": source, "targets": targets, "evidence_paths": evidence_paths}
 
 
 def find_sync_targets(directory: Path, source_step_id: int) -> dict:
@@ -697,7 +696,7 @@ def sync_step_evidence(directory: Path, source_step_id: int, target_step_ids: li
                     except ValueError:
                         pass
                 for evidence_position, item in enumerate(source["evidence"]):
-                    source_path = _verified_evidence_path(directory, item)
+                    source_path = context["evidence_paths"][item["id"]]
                     image_id = uuid.uuid4().hex
                     suffix = Path(item["relative_path"]).suffix
                     relative = (Path("evidencias") / f"caso-{target['case_id']}" /
@@ -754,16 +753,16 @@ def sync_step_evidence(directory: Path, source_step_id: int, target_step_ids: li
                     )
             changed_status |= reconcile_bug_status(connection, active, target_case_ids)
             record_status_change(connection, changed_status)
+            states, _ = _case_states(connection, target_case_ids)
             connection.commit()
         except Exception:
             connection.rollback()
             for path in temporary_files + created_files:
                 path.unlink(missing_ok=True)
             raise
-    record = read_session(directory)
-    statuses = {case["id"]: case["status"] for case in record["cases"] if case["id"] in target_case_ids}
+    statuses = {case_id: state["status"] for case_id, state in states.items()}
     return {"ok": True, "synced": len(target_step_ids), "replicated_status": replicate_status,
-            "case_statuses": statuses, "case_states": {i: case_state(directory, i) for i in target_case_ids}}
+            "case_statuses": statuses, "case_states": states}
 
 
 def list_sessions(root: Path) -> list[dict]:
@@ -1201,10 +1200,36 @@ def set_case_status(directory, case_id, status, expected_revision, expected_gene
     return case_state(directory, case_id)
 
 
+def _case_states(connection, case_ids=None):
+    cases = {}
+    for row in connection.execute(
+        "SELECT c.id, c.manual_status, c.status_revision, c.execution_generation, r.status "
+        "FROM cases c LEFT JOIN steps s ON s.case_id=c.id LEFT JOIN results r ON r.step_id=s.id"
+    ):
+        case_id, manual, revision, generation, status = row
+        state, steps = cases.setdefault(case_id, ({
+            "manual_status": manual, "status_revision": revision, "execution_generation": generation,
+        }, []))
+        if status is not None:
+            steps.append(status)
+    counts = dict.fromkeys(STATUSES, 0)
+    states = {}
+    for case_id, (state, steps) in cases.items():
+        status = state["manual_status"] or aggregate(steps)
+        counts[status] += 1
+        if case_ids is None or case_id in case_ids:
+            states[case_id] = {**state, "status": status, "counts": counts}
+    return states, counts
+
+
 @session_operation
+def read_case_states(directory, case_ids=None):
+    with db(directory) as connection:
+        return _case_states(connection, case_ids)
+
+
 def case_state(directory, case_id):
-    record = read_session(directory)
-    case = next((c for c in record['cases'] if c['id'] == case_id), None)
-    if case is None:
+    states, _ = read_case_states(directory, {case_id})
+    if case_id not in states:
         raise LookupError('Caso não encontrado.')
-    return {k: case[k] for k in ('manual_status', 'status', 'status_revision', 'execution_generation')} | {'counts': record['counts']}
+    return states[case_id]

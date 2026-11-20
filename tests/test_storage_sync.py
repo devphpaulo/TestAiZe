@@ -244,6 +244,26 @@ class SyncStorageTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.get_json()["synced"], 1)
 
+    @unittest.skipUnless(create_app, f"Dependências web indisponíveis: {WEB_IMPORT_ERROR}")
+    def test_status_and_bulk_sync_reuse_summary_without_loading_documents(self):
+        app = create_app(self.root)
+        app.testing = True
+        client = app.test_client()
+        with client.session_transaction() as browser_session:
+            browser_session["csrf_token"] = "summary-test"
+        headers = {"X-CSRF-Token": "summary-test"}
+        base = f"/api/sessao/{self.session_id}/passo/11"
+        with patch("testplayer.storage._hydrate_case", side_effect=AssertionError("Unnecessary full session read")):
+            saved = client.post(base, json={"status": "aprovado", "actual": "texto da origem"},
+                                headers=headers)
+            synced = client.post(base + "/sincronizacao", headers=headers,
+                                 json={"target_step_ids": [21, 31], "replicate_status": True})
+        self.assertEqual(saved.status_code, 200)
+        self.assertEqual(synced.status_code, 200)
+        self.assertEqual(set(saved.json["case_states"]), {"1", "2", "3"})
+        self.assertEqual(synced.json["case_statuses"], {"2": "em_andamento", "3": "bloqueado"})
+        self.assertEqual(synced.json["case_states"]["3"]["counts"], read_session(self.directory)["counts"])
+
 
 if __name__ == "__main__":
     unittest.main()

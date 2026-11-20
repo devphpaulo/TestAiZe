@@ -17,6 +17,7 @@ test('late status responses cannot overwrite a newer revision or execution', () 
   vm.runInContext(source.slice(source.indexOf('  function applyCaseState('), source.indexOf('  function persistStatus(')), sandbox);
   sandbox.applyCaseState(view, {status_revision:3,execution_generation:'current',manual_status:''});
   sandbox.applyCaseState(view, {status_revision:7,execution_generation:'old',manual_status:''});
+  sandbox.applyCaseState(view, {status_revision:4,execution_generation:'current',manual_status:'bloqueado'});
   assert.equal(view.dataset.manualStatus, 'bloqueado');
   assert.equal(renders, 0);
   sandbox.applyCaseState(view, {status_revision:5,execution_generation:'current',manual_status:'reprovado'});

@@ -182,6 +182,7 @@
   const folderGroups = [...document.querySelectorAll('[data-folder-group]')];
   const search = document.getElementById('case-search');
   const viewIndexById = new Map(views.map((view, index) => [view.dataset.caseView, index]));
+  const caseButtonById = new Map(caseButtons.map(button => [button.dataset.caseButton, button]));
   const folderChoices = folderGroups.map(group => ({ name: group.dataset.folderGroup, label: group.dataset.folderLabel }));
   const cyclePicker = document.querySelector('[data-cycle-picker]');
   const cycleTrigger = document.getElementById('cycle-trigger');
@@ -405,26 +406,29 @@
     if (statuses.every(s => s === 'aprovado')) return 'aprovado';
     return 'em_andamento';
   }
-  function updateSummary() {
-    for (const card of cards) {
-      card.querySelector('[data-step-status-label]').textContent = labels[card.dataset.status];
-    }
-    views.forEach(view => {
+  function updateSummary(changedView) {
+    let progressChanged = false;
+    (changedView ? [changedView] : views).forEach(view => {
       const caseId = view.dataset.caseView;
-      const status = view.dataset.manualStatus || aggregate([...view.querySelectorAll('.step-card')].map(card => card.dataset.status));
-      const tag = document.querySelector(`[data-case-status="${caseId}"]`);
-      tag.textContent = labels[status];
-      tag.className = `status-tag status-${status}`;
-      const navTag = document.querySelector(`[data-case-tag="${caseId}"]`);
-      navTag.textContent = labels[status];
-      navTag.className = `status-tag case-nav-tag status-${status}`;
-      const reportTag = document.querySelector(`[data-report-case-tag="${caseId}"]`);
-      if (reportTag) { reportTag.textContent = labels[status]; reportTag.className = `status-tag status-${status}`; }
-      caseButtons.find(button => button.dataset.caseButton === caseId).dataset.status = status;
+      const stepStatuses = [...view.querySelectorAll('.step-card')].map(card => card.dataset.status);
+      const status = view.dataset.manualStatus || aggregate(stepStatuses);
+      const button = caseButtonById.get(caseId);
+      if (button.dataset.status !== status) {
+        const tag = view.querySelector('[data-case-status]');
+        tag.textContent = labels[status];
+        tag.className = `status-tag status-${status}`;
+        const navTag = button.querySelector('[data-case-tag]');
+        navTag.textContent = labels[status];
+        navTag.className = `status-tag case-nav-tag status-${status}`;
+        const reportTag = document.querySelector(`[data-report-case-tag="${caseId}"]`);
+        if (reportTag) { reportTag.textContent = labels[status]; reportTag.className = `status-tag status-${status}`; }
+        button.dataset.status = status;
+        progressChanged = true;
+      }
       const failureActions = view.querySelector('[data-failure-actions]');
-      if (failureActions) failureActions.classList.toggle('is-hidden', !(status === 'reprovado' && [...view.querySelectorAll('.step-card')].some(card => card.dataset.status === 'reprovado')));
+      if (failureActions) failureActions.classList.toggle('is-hidden', !(status === 'reprovado' && stepStatuses.includes('reprovado')));
     });
-    updateScopedSummary();
+    if (progressChanged) updateScopedSummary();
   }
   cards.forEach(card => {
     card.dataset.status = card.querySelector('.step-status-buttons .selected')?.dataset.value || 'nao_executado';
@@ -499,9 +503,9 @@
       input.value = plainText(serializeEditor(editor));
     }
   }
-  function renderMiniPlayer() {
+  function renderMiniPlayer(force = false) {
     const view = views[selectedIndex];
-    if (!view || !miniPlayer) return;
+    if (!view || !miniPlayer || (miniPlayer.hidden && !force)) return;
     const focused = miniPlayer.ownerDocument.activeElement;
     const focusedStep = miniPlayer.contains(focused) ? focused.closest('.mini-player-step') : null;
     const focusTarget = focusedStep ? {
@@ -649,7 +653,7 @@
     miniPlayer.querySelector('#mini-player-close').focus();
   }
   async function openMiniPlayer() {
-    renderMiniPlayer();
+    renderMiniPlayer(true);
     setMiniPlayerFeedback('');
     if (pipWindow && !pipWindow.closed) { pipWindow.focus(); return; }
     if ('documentPictureInPicture' in window) {
@@ -800,8 +804,8 @@
     return view === views[selectedIndex] && !view.classList.contains('is-hidden')
       && Boolean(button && !button.classList.contains('is-hidden'));
   }
-  function updateSyncActions() {
-    cards.forEach(card => {
+  function updateSyncActions(changedCard = null) {
+    (changedCard ? [changedCard] : cards).forEach(card => {
       const action = card.querySelector('[data-step-sync]');
       if (!action) return;
       const eligible = syncCardEligible(card);
@@ -964,6 +968,8 @@
     }
     const selected = syncTargetChecks().filter(check => check.checked).map(check => Number(check.value));
     if (!selected.length) { updateSyncSelection(); return; }
+    const source = syncSource;
+    const replicateStatus = document.getElementById('sync-replicate-status').checked;
     syncBusy = true;
     updateSyncActions();
     const confirm = document.getElementById('confirm-sync');
@@ -971,10 +977,11 @@
     confirm.disabled = true; cancel.disabled = true; confirm.textContent = 'Sincronizando…';
     document.getElementById('sync-feedback').textContent = 'Copiando evidências…';
     try {
-      const response = await fetch(syncSource.dataset.syncUrl, {
+      await flushPendingMedia();
+      for (const view of views) await flushView(view, false);
+      const response = await fetch(source.dataset.syncUrl, {
         method: 'POST', headers: { 'Content-Type': 'application/json', ...writeHeaders },
-        body: JSON.stringify({ target_step_ids: selected,
-                               replicate_status: document.getElementById('sync-replicate-status').checked })
+        body: JSON.stringify({ target_step_ids: selected, replicate_status: replicateStatus })
       });
       const result = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(result.error || 'Não foi possível sincronizar as evidências.');
@@ -1029,13 +1036,13 @@
         if (String(card.dataset.resultRevision) !== String(result.revision)) card.dataset.revisionConflict = 'true';
       }
       if (!response.ok) throw new Error(result.error || 'Falha ao salvar.');
-      Object.entries(result.case_states || {}).forEach(([id, state]) => applyCaseState(views.find(view => view.dataset.caseView === id), state));
+      Object.entries(result.case_states || {}).forEach(([id, state]) => applyCaseState(views[viewIndexById.get(id)], state));
       if (Number.isInteger(result.revision)) card.dataset.resultRevision = String(result.revision);
       card.dataset.revisionConflict = 'false';
       if (result.status_changed_at) {
         card.querySelector('[data-step-status-label]').title = `Status registrado em ${new Date(result.status_changed_at).toLocaleString('pt-BR')}`;
         card.dataset.statusSaved = 'true';
-        updateSyncActions();
+        updateSyncActions(card);
       }
       if ((versions.get(id) || 0) === version) card.dataset.statusAction = 'false';
       return version;
@@ -1079,7 +1086,8 @@
       card.dataset.status = button.dataset.value;
       card.dataset.statusAction = 'true';
       selectIcon(card.querySelector('.step-status-buttons'), button);
-      updateSummary();
+      card.querySelector('[data-step-status-label]').textContent = labels[card.dataset.status];
+      updateSummary(card.closest('.case-view'));
       queue(card);
     }));
   });
@@ -1131,7 +1139,9 @@
       setSaveState('Outra execução foi iniciada. Recarregue a página.', true);
       return;
     }
-    if (state.status_revision < Number(view.dataset.statusRevision || 0)) return;
+    const revision = Number(view.dataset.statusRevision || 0);
+    if (state.status_revision < revision ||
+        (state.status_revision === revision && state.manual_status === view.dataset.manualStatus)) return;
     view.dataset.statusRevision = String(state.status_revision);
     view.dataset.manualStatus = state.manual_status;
     const row = view.querySelector('.case-status-buttons');
@@ -1139,7 +1149,7 @@
     const automatic = view.querySelector('.auto-status-button');
     automatic.classList.toggle('selected', !state.manual_status);
     automatic.setAttribute('aria-pressed', String(!state.manual_status));
-    updateSummary(); renderMiniPlayer();
+    updateSummary(view); renderMiniPlayer();
   }
   function persistStatus(view, status) {
     const id = view.dataset.caseView;
@@ -1167,8 +1177,8 @@
     view.querySelectorAll('.case-status-buttons button').forEach(button => button.addEventListener('click', () => persistStatus(view, button.dataset.value)));
     view.querySelector('.auto-status-button').addEventListener('click', () => persistStatus(view, ''));
   });
-  async function flushView(view) {
-    await flushPendingMedia();
+  async function flushView(view, includeMedia = true) {
+    if (includeMedia) await flushPendingMedia();
     for (const card of view.querySelectorAll('.step-card')) {
       const id = card.dataset.stepId;
       if (timers.has(id) || inFlight.has(id)) await persist(card);

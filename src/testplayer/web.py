@@ -37,7 +37,7 @@ from .storage import (BOARD_LABELS, board_sessions, create_draft, db, ensure_roo
 from .bugs_service import BugsService
 from .bugs_routes import blueprint as bugs_blueprint
 from .bugs_coordinator import StateConflict, RecoveryPending, coordinated
-from .storage import set_case_status, case_state
+from .storage import set_case_status, case_state, read_case_states
 from .capture_context import CaptureBroker
 from .capture_routes import register_capture_routes
 
@@ -484,9 +484,9 @@ def create_app(root: Path) -> Flask:
                 expected_revision=raw_revision,
                 expected_generation=raw_generation or None,
             )
-            record = read_session(directory)
-            return jsonify(ok=True, counts=record["counts"], status_changed_at=changed_at, revision=revision,
-                           case_states={c["id"]: case_state(directory, c["id"]) for c in record["cases"]})
+            states, counts = read_case_states(directory)
+            return jsonify(ok=True, counts=counts, status_changed_at=changed_at, revision=revision,
+                           case_states=states)
         except RevisionConflict as exc:
             document = None
             if exc.actual_doc:
@@ -543,11 +543,7 @@ def create_app(root: Path) -> Flask:
         try:
             save_case(directory, case_id, body.get("status"), str(body.get("comment", "")),
                       comment_doc=body.get("comment_doc"), precondition_doc=body.get("precondition_doc"))
-            record = read_session(directory)
-            case = next(item for item in record["cases"] if item["id"] == case_id)
             return jsonify(ok=True, **case_state(directory, case_id))
-        except StopIteration:
-            return jsonify(error="Caso não encontrado."), 404
         except LookupError as exc:
             return jsonify(error=str(exc)), 404
         except StateConflict as exc:
