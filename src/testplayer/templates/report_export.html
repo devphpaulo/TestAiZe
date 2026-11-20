@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="color-scheme" content="light">
+  <meta name="color-scheme" content="{{ 'light' if pdf_mode else 'light dark' }}">
   <link rel="icon" type="image/svg+xml" href="{{ favicon_src }}">
   <title>TestAíZé | {{ 'Relatório de Falha' if report_kind == 'failure' else 'Relatório de Execução' }} — {{ meta.id[:8] }}</title>
   <style>{{ report_css|safe }}</style>
@@ -16,6 +16,7 @@
         <div><div class="brand-name">Test<em>AíZé</em></div><div class="brand-subtitle">Execução de Casos de Teste</div></div>
       </div>
       <div class="brand-report"><div class="brand-report-label">RELATÓRIO DE {{ 'FALHA' if report_kind == 'failure' else 'EXECUÇÃO' }}</div><div class="brand-report-id">Sessão {{ meta.id[:8] }}</div></div>
+      {% if not pdf_mode %}<button type="button" id="report-theme" aria-label="Tema escuro" title="Alternar tema"><span aria-hidden="true">◐</span></button>{% endif %}
     </header>
     <main class="content">
       <div class="heading-row">
@@ -42,6 +43,19 @@
     const cases = JSON.parse(document.getElementById('report-data').textContent);
     const printAll = {{ 'true' if print_all else 'false' }};
     const pdfMode = {{ 'true' if pdf_mode else 'false' }};
+    const themeButton = document.getElementById('report-theme');
+    if (themeButton) {
+      const systemTheme = matchMedia('(prefers-color-scheme: dark)');
+      const root = document.documentElement;
+      const dark = () => root.dataset.theme ? root.dataset.theme === 'dark' : systemTheme.matches;
+      const reflectTheme = () => themeButton.setAttribute('aria-pressed', String(dark()));
+      themeButton.addEventListener('click', () => {
+        root.dataset.theme = dark() ? 'light' : 'dark';
+        reflectTheme();
+      });
+      systemTheme.addEventListener('change', reflectTheme);
+      reflectTheme();
+    }
     const nav = document.getElementById('case-switcher');
     const detail = document.getElementById('case-detail');
     const labels = {aprovado:'Aprovado',reprovado:'Reprovado',bloqueado:'Bloqueado',em_andamento:'Em andamento',nao_executado:'Não executado'};

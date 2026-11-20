@@ -2,25 +2,27 @@
 <html lang="pt-BR">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="csrf-token" content="{{ csrf_token }}">
   <meta name="color-scheme" content="light dark">
   <title>{% block title %}TestAíZé{% endblock %}</title>
   <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
-  <script>try { document.documentElement.dataset.theme = localStorage.getItem('executor-theme') === 'light' ? 'light' : 'dark'; const accent = localStorage.getItem('testaize-accent'); document.documentElement.dataset.accent = ['roxo','verde','vermelho','amarelo'].includes(accent) ? accent : 'neutro'; } catch (_) { document.documentElement.dataset.theme = 'dark'; document.documentElement.dataset.accent = 'neutro'; }</script>
+  <script src="{{ url_for('static', filename='theme.js') }}"></script>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='carbon.css') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='ui-fixes.css') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='image-editor.css') }}">
   <script defer src="{{ url_for('static', filename='document-editor.js') }}"></script>
   <script defer src="{{ url_for('static', filename='image-editor.js') }}"></script>
-  <link rel="stylesheet" href="{{ url_for('static', filename='header.css') }}">
   <script defer src="{{ url_for('static', filename='header.js') }}"></script>
   <script defer src="{{ url_for('static', filename='app.js') }}"></script>
   <link rel="stylesheet" href="{{ url_for('static', filename='select.css') }}">
   <script defer src="{{ url_for('static', filename='select.js') }}"></script>
   {% block head %}{% endblock %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='theme.css') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='components.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='header.css') }}">
+  {% block view_style %}{% endblock %}
 </head>
 <body>
   <header class="topbar">
@@ -30,22 +32,13 @@
     </a>
     <nav class="top-links header-nav" aria-label="Navegação principal">
       {% block header_actions %}{% endblock %}
-      <label class="board-picker"><span>Quadros</span><select id="board-select" aria-label="Quadros">
-        {% if request.endpoint not in ['home', 'bugs.board', 'automation'] %}<option value="" selected disabled>Quadros</option>{% endif %}
-        <option value="{{ url_for('home') }}" data-icon="sessions" {% if request.endpoint == 'home' %}selected{% endif %}>Sessões</option>
-        <option value="{{ url_for('bugs.board') }}" data-icon="bugs" {% if request.endpoint == 'bugs.board' %}selected{% endif %}>Bugs</option>
-        <option value="{{ url_for('automation') }}" data-icon="automation" {% if request.endpoint == 'automation' %}selected{% endif %} {% if not automation_available %}disabled{% endif %}>Automação</option>
+      <label class="board-picker"><select id="board-select" aria-label="Quadros">
+        <option value="" selected disabled hidden>Quadros</option>
+        <option value="{{ url_for('home') }}" data-icon="sessions">Sessões</option>
+        <option value="{{ url_for('bugs.board') }}" data-icon="bugs">Bugs</option>
+        <option value="{{ url_for('automation') }}" data-icon="automation" {% if not automation_available %}disabled{% endif %}>Automação</option>
       </select></label>
-      <div class="appearance-picker" id="appearance-picker">
-        <button type="button" class="appearance-trigger" id="appearance-trigger" aria-label="Personalizar aparência" title="Personalizar aparência" aria-expanded="false" aria-controls="appearance-panel">
-          <svg class="appearance-mode-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M12 5a7 7 0 1 0 0 14V5Z"/><path d="M12 5a7 7 0 0 1 0 14c3-2 3-12 0-14Z" fill="currentColor" stroke="none"/><path d="M12 1v2M12 21v2M1 12h2M21 12h2M4.2 4.2l1.4 1.4M18.4 18.4l1.4 1.4M4.2 19.8l1.4-1.4M18.4 5.6l1.4-1.4"/></svg><span class="appearance-palette" aria-hidden="true"></span>
-        </button>
-        <section class="appearance-panel" id="appearance-panel" aria-label="Personalizar aparência" hidden>
-          <header><span>PERSONALIZAÇÃO</span><strong>Aparência</strong></header>
-          <div class="appearance-section"><span class="appearance-label">Tema</span><div class="appearance-themes" role="group" aria-label="Tema do aplicativo"><button type="button" data-theme-choice="light" aria-pressed="false"><span aria-hidden="true">☼</span> Claro</button><button type="button" data-theme-choice="dark" aria-pressed="false"><span aria-hidden="true">☾</span> Escuro</button></div></div>
-          <div class="appearance-section"><span class="appearance-label">Cor de destaque</span><div class="appearance-colors" role="group" aria-label="Cor de destaque">{% for code, name in [('neutro','Neutro'),('roxo','Roxo'),('verde','Verde'),('vermelho','Vermelho'),('amarelo','Amarelo')] %}<button type="button" data-accent-choice="{{ code }}" aria-label="{{ name }}" aria-pressed="false"><span class="appearance-swatch appearance-swatch-{{ code }}" aria-hidden="true"></span><span>{{ name }}</span></button>{% endfor %}</div></div>
-        </section>
-      </div>
+      <button type="button" class="appearance-trigger" id="appearance-trigger" aria-label="Tema escuro" title="Alternar tema"><span aria-hidden="true">◐</span></button>
     </nav>
   </header>
   {% if automation_notice and request.endpoint == 'home' %}<div class="automation-environment-notice" role="status">{{ automation_notice }}</div>{% endif %}

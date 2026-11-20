@@ -60,10 +60,11 @@
   background: var(--lane-surface);
   border: 1px solid var(--line);
   border-top: 2px solid var(--phase-color);
-  border-radius: 8px;
+  border-radius: 12px;
 }
-.session-lane:is([data-board-lane="todo"], [data-board-lane="doing"]) { --phase-color: var(--phase-active); }
-.session-lane[data-board-lane="blocked"] { --phase-color: var(--phase-blocked); }
+.session-lane[data-board-lane="todo"] { --phase-color: var(--phase-active); }
+.session-lane[data-board-lane="doing"] { --phase-color: var(--warn); }
+.session-lane[data-board-lane="blocked"] { --phase-color: var(--blk); }
 .session-lane[data-board-lane="review"] { --phase-color: var(--phase-review); }
 .session-lane[data-board-lane="done"] { --phase-color: var(--phase-done); }
 .session-lane.is-drop-target { outline: 2px solid var(--accent); outline-offset: -2px; }
@@ -84,7 +85,8 @@
   min-width: 24px;
   margin-left: auto;
   padding: 2px 4px;
-  border-radius: 4px;
+  border: 1px solid var(--bd);
+  border-radius: 999px;
   background: var(--meter-track);
   color: var(--muted);
   text-align: center;
@@ -119,7 +121,7 @@
   border: 0;
   border-radius: 4px;
   background: var(--meter-track);
-  color: var(--phase-color);
+  color: var(--ok);
 }
 .session-card-progress progress::-webkit-progress-bar { background: var(--meter-track); }
 .session-card-progress progress::-webkit-progress-value { border-radius: 4px; background: currentColor; }
@@ -159,7 +161,7 @@
 .session-lane[data-case-status-lane="em_andamento"] { --phase-color: var(--phase-blocked); }
 .session-lane[data-case-status-lane="aprovado"] { --phase-color: var(--phase-done); }
 .session-lane[data-case-status-lane="reprovado"] { --phase-color: var(--ui-red); }
-.session-lane[data-case-status-lane="bloqueado"] { --phase-color: var(--phase-active); }
+.session-lane[data-case-status-lane="bloqueado"] { --phase-color: var(--blk); }
 .case-board-card { position: relative; }
 .case-board-card h3 { margin: 0; font-size: .95rem; line-height: 1.4; }
 .case-board-card .session-card-name::after { content: ""; position: absolute; inset: 0; border-radius: 8px; }

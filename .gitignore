@@ -6,3 +6,4 @@ dist/
 plans/
 *.spec
 /executar.bat
+/node_modules/

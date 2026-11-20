@@ -90,12 +90,15 @@ def render_report_html(directory: Path, selected_case_ids: set[int], include_his
     static = Path(__file__).resolve().parent / "static"
     environment = Environment(loader=FileSystemLoader(templates), autoescape=select_autoescape(["html"]))
     favicon_src = "data:image/svg+xml;base64," + base64.b64encode((static / "favicon.svg").read_bytes()).decode("ascii")
+    report_css = (static / "report.css").read_text(encoding="utf-8")
+    if not pdf_mode:
+        report_css = (static / "theme.css").read_text(encoding="utf-8") + "\n" + report_css
     return environment.get_template("report_export.html").render(
         meta=session["meta"], payload=payload, case_count=len(cases),
         run_count=sum(len(case["runs"]) for case in cases), report_kind=report_kind,
         started_at=_format_time(session["meta"].get("created_at", "")),
         generated_at=_format_time(datetime.now().astimezone().isoformat()),
-        report_css=(static / "report.css").read_text(encoding="utf-8"),
+        report_css=report_css,
         logo_src=favicon_src, favicon_src=favicon_src,
         print_all=print_all, pdf_mode=pdf_mode,
     )

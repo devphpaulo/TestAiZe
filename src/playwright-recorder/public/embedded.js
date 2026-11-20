@@ -1,14 +1,14 @@
 const parameters = new URLSearchParams(location.search);
 const embedded = parameters.get('embedded') === '1';
 document.documentElement.dataset.embedded = String(embedded);
-function appearance(theme, accent) {
-  document.documentElement.dataset.theme = theme === 'light' ? 'light' : 'dark';
-  document.documentElement.dataset.accent = ['roxo', 'verde', 'vermelho', 'amarelo'].includes(accent) ? accent : 'neutro';
+function appearance(theme) {
+  document.documentElement.dataset.theme = theme === 'light' || theme === 'dark'
+    ? theme : (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
 }
-appearance(parameters.get('theme'), parameters.get('accent'));
+appearance(parameters.get('theme'));
 const parentOrigin = document.referrer ? new URL(document.referrer).origin : null;
 window.addEventListener('message', (event) => {
-  if (event.source === parent && event.origin === parentOrigin && event.data?.type === 'testaize.appearance') appearance(event.data.theme, event.data.accent);
+  if (event.source === parent && event.origin === parentOrigin && event.data?.type === 'testaize.appearance') appearance(event.data.theme);
   if (event.source === parent && event.origin === parentOrigin && event.data?.type === 'testaize.export.request') {
     parent.postMessage({ type: 'testaize.export.code', requestId: event.data.requestId, code: document.querySelector('#code').value }, parentOrigin);
   }

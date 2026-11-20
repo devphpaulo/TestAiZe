@@ -4,13 +4,13 @@ from PySide6.QtCore import QPointF, QRectF, Qt
 from PySide6.QtGui import QColor, QIcon, QPainter, QPainterPath, QPen, QPixmap
 
 
-def tool_icon(kind: str) -> QIcon:
+def tool_icon(kind: str, color: str = "#f5f5f5") -> QIcon:
     pixmap = QPixmap(48, 48)
     pixmap.fill(Qt.GlobalColor.transparent)
     painter = QPainter(pixmap)
     painter.setRenderHint(QPainter.RenderHint.Antialiasing)
     painter.scale(2, 2)
-    pen = QPen(QColor("#f5f5f5"), 1.8)
+    pen = QPen(QColor(color), 1.8)
     pen.setCapStyle(Qt.PenCapStyle.RoundCap)
     pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
     painter.setPen(pen)
@@ -24,7 +24,7 @@ def tool_icon(kind: str) -> QIcon:
         painter.drawEllipse(QRectF(4, 4, 16, 16))
     elif kind == "blur":
         painter.setPen(Qt.PenStyle.NoPen)
-        painter.setBrush(QColor("#f5f5f5"))
+        painter.setBrush(QColor(color))
         for x in (6, 12, 18):
             for y in (6, 12, 18):
                 radius = 2 if x == y == 12 else 1.25

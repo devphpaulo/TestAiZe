@@ -284,7 +284,7 @@ class SyncStorageTests(unittest.TestCase):
         player = client.get(url).get_data(as_text=True)
         self.assertRegex(player, r'data-case-button="3"[^>]+data-status="aprovado"')
         self.assertIn('data-case-status="3">Aprovado</span>', player)
-        self.assertIn('<b>Status</b><span data-case-meta-status>Aprovado</span>', player)
+        self.assertIn('<b>Status</b><span class="status-tag status-aprovado" data-case-status="1">Aprovado</span>', player)
         self.assertNotIn("<b>Status</b>Não Executado", player)
 
 

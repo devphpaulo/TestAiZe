@@ -23,6 +23,7 @@ TestAiZe é uma cópia do Zephyr Scale que roda inteira no seu computador — 10
 
 - **Executável:** Windows 10/11 com Edge ou Chrome para a geração de PDF.
 - **Código-fonte:** Python 3.12+ com `pip`.
+- **Desenvolvimento da interface:** Node.js 20+ e npm para recompilar os componentes React e Tailwind.
 
 ## Instalação
 
@@ -35,6 +36,8 @@ git clone https://github.com/devphpaulo/TestAiZe.git
 cd TestAiZe
 pip install -r requirements.txt
 ```
+
+Ao editar os componentes em `frontend/`, use `npm ci` e `npm run build:ui`. O Flask serve os arquivos compilados em `src/testplayer/static/frontend/`, que também entram no executável.
 
 ## Uso
 

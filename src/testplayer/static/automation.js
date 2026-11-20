@@ -34,7 +34,6 @@
     const iframe = document.createElement('iframe');
     const destination = new URL(url);
     destination.searchParams.set('theme', document.documentElement.dataset.theme || 'dark');
-    destination.searchParams.set('accent', document.documentElement.dataset.accent || 'neutro');
     iframe.src = destination.href;
     iframe.title = 'Gravação de testes Playwright: navegador e código';
     iframe.allow = 'clipboard-read; clipboard-write';
@@ -99,8 +98,8 @@
     // Parent-to-worker presentation message only; recorder protocol remains private.
     const iframe = shell.querySelector('iframe');
     if (iframe && url) iframe.contentWindow.postMessage({ type: 'testaize.appearance',
-      theme: document.documentElement.dataset.theme, accent: document.documentElement.dataset.accent }, new URL(url).origin);
-  }).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme', 'data-accent'] });
+      theme: document.documentElement.dataset.theme }, new URL(url).origin);
+  }).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
   window.addEventListener('message', (event) => {
     const iframe = shell.querySelector('iframe');
     if (!iframe || !url || event.source !== iframe.contentWindow || event.origin !== new URL(url).origin) return;

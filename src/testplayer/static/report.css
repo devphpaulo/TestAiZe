@@ -156,3 +156,73 @@
 .commentary .section-title{margin-bottom:6px}.commentary .rich-blocks{margin-top:3px}
 .step-data-value{white-space:pre-wrap}.empty-note{color:var(--muted);font-size:10px}
 @media print{.case-switcher{display:none}.case-page+.case-page{margin-top:0;padding-top:0;border-top:0;break-before:page}.run-group{break-inside:auto}.run-group+.run-group{break-before:page}.rich-blocks figure{break-inside:avoid}.step:has(.rich-blocks figure){break-inside:auto}.case:has(+.run-group){break-inside:avoid}}
+
+@media screen {
+  body:not(.pdf-export) {
+    --paper: var(--card);
+    --ink: var(--fg);
+    --muted: var(--mut);
+    --line: var(--bd);
+    --subtle: var(--sub);
+    --brand: var(--pri);
+    --passed: var(--ok);
+    --failed: var(--bad);
+    --blocked: var(--blk);
+    --progress: var(--warn);
+    --pending: var(--mut);
+    background: radial-gradient(900px 380px at 80% -10%, color-mix(in srgb, var(--pri) 16%, transparent), transparent), var(--bg);
+    font: 14px/1.5 Inter, system-ui, sans-serif;
+  }
+  body:not(.pdf-export) :is(.report, .stat, .result, .case, .step, .commentary, .rich-blocks figure) {
+    border: 1px solid var(--bd);
+    border-radius: 16px;
+    background: var(--card);
+    box-shadow: none;
+  }
+  body:not(.pdf-export) .brandbar { flex-wrap: wrap; gap: 12px; padding: 12px 20px; border-bottom: 1px solid var(--bd); background: var(--card); color: var(--fg); }
+  body:not(.pdf-export) .brand { margin-right: auto; }
+  body:not(.pdf-export) .brand-icon { width: 30px; height: 30px; flex-basis: 30px; padding: 0; border-radius: 9px; }
+  body:not(.pdf-export) .brand-name { font-size: 16px; font-weight: 700; }
+  body:not(.pdf-export) .brand-name em { color: inherit; }
+  body:not(.pdf-export) h1 { font-size: 30px; letter-spacing: -.03em; }
+  body:not(.pdf-export) :is(.brand-subtitle, .brand-report-id, .brand-report-label, .stat-label, .section-title, .result-name, .step-data-label, .run-label, .media-label, .preconditions strong, .footer, .attachment-list) { color: var(--mut); }
+  body:not(.pdf-export) :is(.case-id, .report-card-link) { color: var(--pri); }
+  body:not(.pdf-export) :is(.preconditions, .case-switcher) { border-radius: 12px; background: var(--sub); }
+  body:not(.pdf-export) .case-switcher { padding: 3px; border: 1px solid var(--bd); }
+  body:not(.pdf-export) :is(#report-theme, .case-switcher button, .attachment-download) {
+    min-height: 34px;
+    padding: 0 14px;
+    border: 1px solid var(--bd);
+    border-radius: 9px;
+    background: var(--card);
+    color: var(--fg);
+    font: 500 13px/1.5 Inter, system-ui, sans-serif;
+    cursor: pointer;
+  }
+  body:not(.pdf-export) :is(#report-theme, .case-switcher button, .attachment-download):hover { background: var(--sub); }
+  body:not(.pdf-export) .case-switcher button[aria-current] { border-color: transparent; background: var(--card); box-shadow: var(--selected-shadow); }
+  body:not(.pdf-export) :is(button, a):focus-visible { outline: 0; box-shadow: var(--focus-ring); }
+  body:not(.pdf-export) .pill {
+    gap: 6px;
+    padding: 2px 10px;
+    border: 1px solid color-mix(in srgb, var(--tone) 35%, transparent);
+    background: color-mix(in srgb, var(--tone) 14%, transparent);
+    color: var(--tone);
+    font-size: 12px;
+    font-weight: 600;
+  }
+  .pill::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+  .pill--passed { --tone: var(--passed); }
+  .pill--failed { --tone: var(--failed); }
+  .pill--blocked { --tone: var(--blocked); }
+  .pill--progress { --tone: var(--progress); }
+  .pill--pending { --tone: var(--pending); }
+  body:not(.pdf-export) :is(.step-label, .footer strong) { color: var(--fg); }
+  body:not(.pdf-export) :is(.case-page, .step-evidence) { border-color: var(--bd); }
+  body:not(.pdf-export) .step--failed .step-status { color: var(--bad); }
+  body:not(.pdf-export) .step--progress .step-status { color: var(--warn); }
+}
+@media screen and (max-width: 860px) {
+  body:not(.pdf-export) h1 { font-size: 24px; }
+}
+@media print { #report-theme { display: none; } }

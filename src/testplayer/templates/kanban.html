@@ -1,7 +1,8 @@
 {% extends 'base.html' %}
+{% from 'view_switcher.html' import view_switcher %}
 {% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='session-board.css') }}">{% endblock %}
 {% block title %}Kanban · TestAíZé{% endblock %}
-{% block header_actions %}<a class="view-switch active" href="{{ url_for('choose_folder', session_id=record.meta.id) }}">Modo lista</a>{% endblock %}
+{% block header_actions %}{{ view_switcher(url_for('choose_folder', session_id=record.meta.id), none, 'kanban') }}{% endblock %}
 {% block content %}
 <main class="page session-board-page case-board-page">
   <a href="{{ url_for('choose_folder', session_id=record.meta.id) }}" class="back-link">← Ciclos e pastas</a>

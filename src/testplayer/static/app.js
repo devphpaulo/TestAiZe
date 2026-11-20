@@ -236,16 +236,10 @@
     const visible = caseButtons.filter(button => !button.classList.contains('is-hidden'));
     const counts = { nao_executado: 0, em_andamento: 0, aprovado: 0, reprovado: 0, bloqueado: 0 };
     visible.forEach(button => { counts[button.dataset.status]++; });
-    const done = counts.aprovado + counts.reprovado + counts.bloqueado;
-    const percent = visible.length ? Math.round(done / visible.length * 100) : 0;
-    document.getElementById('progress-count').textContent = done;
-    document.getElementById('progress-total').textContent = `de ${visible.length} casos com resultado`;
-    for (const [status, count] of Object.entries(counts)) {
-      const segment = document.querySelector(`[data-progress-status="${status}"]`);
-      segment.style.width = `${visible.length ? count / visible.length * 100 : 0}%`;
-      segment.title = `${labels[status]}: ${count}/${visible.length} (${visible.length ? Math.round(count / visible.length * 100) : 0}%)`;
-    }
-    document.getElementById('progress-percent').textContent = `${percent}%`;
+    const progress = document.getElementById('player-progress');
+    progress.dataset.counts = JSON.stringify(counts);
+    progress.dataset.total = visible.length;
+    progress.dispatchEvent(new Event('progresschange'));
   }
   function filterCases(updateUrl = false) {
     const selectedFolders = new Set(cycleChecks.filter(check => check.checked).map(check => check.value));
@@ -315,7 +309,7 @@
   const sidebarToggle = document.getElementById('toggle-left');
   const sidebar = document.getElementById('player-cases');
   const resizeHandle = player.querySelector('[data-resize="left"]');
-  const mobileSidebar = window.matchMedia('(max-width: 760px)');
+  const mobileSidebar = window.matchMedia('(max-width: 860px)');
   function setSidebar(collapsed) {
     player.dataset.leftCollapsed = String(collapsed);
     sidebarToggle.setAttribute('aria-expanded', String(!collapsed));
@@ -353,7 +347,7 @@
     try { localStorage.setItem('executor-left-collapsed', String(collapsed)); } catch (_) {}
   });
   const minSidebarWidth = 240;
-  let preferredSidebarWidth = storedWidth > 0 && Number.isFinite(storedWidth) ? storedWidth : 320;
+  let preferredSidebarWidth = storedWidth > 0 && Number.isFinite(storedWidth) ? storedWidth : 350;
   function maxSidebarWidth() {
     return Math.max(minSidebarWidth, Math.min(720, player.clientWidth - 496));
   }
@@ -417,7 +411,6 @@
         const tag = view.querySelector('[data-case-status]');
         tag.textContent = labels[status];
         tag.className = `status-tag status-${status}`;
-        view.querySelector('[data-case-meta-status]').textContent = labels[status];
         const navTag = button.querySelector('[data-case-tag]');
         navTag.textContent = labels[status];
         navTag.className = `status-tag case-nav-tag status-${status}`;
@@ -426,6 +419,9 @@
         button.dataset.status = status;
         progressChanged = true;
       }
+      view.querySelectorAll('.case-status-buttons [data-value]').forEach(control => {
+        control.classList.toggle('is-effective', !view.dataset.manualStatus && control.dataset.value === status);
+      });
       const failureActions = view.querySelector('[data-failure-actions]');
       if (failureActions) failureActions.classList.toggle('is-hidden', !(status === 'reprovado' && stepStatuses.includes('reprovado')));
     });
@@ -631,7 +627,6 @@
   function syncMiniPlayerTheme() {
     if (!pipWindow) return;
     pipWindow.document.documentElement.dataset.theme = document.documentElement.dataset.theme;
-    pipWindow.document.documentElement.dataset.accent = document.documentElement.dataset.accent;
   }
   function focusMainPlayer() {
     const target = activeMiniStep()?.querySelector('.step-status-buttons button, [data-rich-editor]');
@@ -702,7 +697,7 @@
   });
   caseViewChangeHandlers.add(renderMiniPlayer);
   new MutationObserver(syncMiniPlayerTheme).observe(document.documentElement, {
-    attributes: true, attributeFilter: ['data-theme', 'data-accent']
+    attributes: true, attributeFilter: ['data-theme']
   });
   miniPlayerOpen.addEventListener('click', openMiniPlayer);
   document.getElementById('mini-player-close').addEventListener('click', () => closeMiniPlayer());
@@ -1507,6 +1502,14 @@
     });
   });
   const attachmentRowTemplate = document.getElementById('step-attachment-template');
+  const attachmentPreviewFormats = new Set(attachmentRowTemplate?.dataset.previewFormats.split(' '));
+  function hideBrokenAttachmentPreview(event) {
+    if (event.target.matches?.('.attachment-preview')) event.target.hidden = true;
+  }
+  player.addEventListener('error', hideBrokenAttachmentPreview, true);
+  player.querySelectorAll('.attachment-preview').forEach(image => {
+    if (image.complete && !image.naturalWidth) image.hidden = true;
+  });
   const attachmentSize = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 1 });
   document.querySelectorAll('[data-attachment-upload-url]').forEach(area => {
     const button = area.querySelector('.choose-step-attachment');
@@ -1547,6 +1550,11 @@
           const row = attachmentRowTemplate.content.firstElementChild.cloneNode(true);
           row.dataset.attachmentId = result.id;
           const extension = result.extension.replace(/^\./, '');
+          if (attachmentPreviewFormats.has(extension)) {
+            const preview = row.querySelector('.attachment-preview');
+            preview.src = result.url;
+            preview.hidden = false;
+          }
           const format = row.querySelector('.attachment-format');
           format.dataset.format = extension;
           format.textContent = extension.toUpperCase() || 'Arquivo';

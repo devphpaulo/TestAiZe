@@ -1,0 +1,6 @@
+{% macro view_switcher(cases_url, kanban_url, active) %}
+<div class="view-switcher" role="group" aria-label="Visualização da execução">
+  {% if active == 'cases' %}<span aria-current="page">Casos</span>{% else %}<a href="{{ cases_url }}">Casos</a>{% endif %}
+  {% if active == 'kanban' %}<span aria-current="page">Modo Kanban</span>{% else %}<a href="{{ kanban_url }}">Modo Kanban</a>{% endif %}
+</div>
+{% endmacro %}

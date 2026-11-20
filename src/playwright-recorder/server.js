@@ -16,6 +16,8 @@ const ASSETS = new Map([
     ["/embedded.js", { file: resolve(PUBLIC_DIR, "embedded.js"), contentType: "text/javascript; charset=utf-8" }],
     ['/carbon.css', { file: resolve(HOST_STATIC_DIR, 'carbon.css'), contentType: 'text/css; charset=utf-8' }],
     ['/ui-fixes.css', { file: resolve(HOST_STATIC_DIR, 'ui-fixes.css'), contentType: 'text/css; charset=utf-8' }],
+    ['/theme.css', { file: resolve(HOST_STATIC_DIR, 'theme.css'), contentType: 'text/css; charset=utf-8' }],
+    ['/components.css', { file: resolve(HOST_STATIC_DIR, 'components.css'), contentType: 'text/css; charset=utf-8' }],
 ]);
 export function createServer(options = {}) {
     const parentOrigin = validateParentOrigin(options.parentOrigin);

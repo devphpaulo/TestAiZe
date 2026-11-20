@@ -1,0 +1,15 @@
+{
+  "name": "testaize-frontend",
+  "private": true,
+  "scripts": {
+    "build:ui": "node frontend/build.mjs"
+  },
+  "dependencies": {
+    "react": "19.2.8",
+    "react-dom": "19.2.8"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2",
+    "tailwindcss": "4.3.0"
+  }
+}

@@ -1,0 +1,24 @@
+.player-progress-card {
+  @apply rounded-[16px] border px-[20px] py-[18px];
+  border-color: var(--bd);
+  background: var(--card);
+}
+.player-progress-overview { @apply flex items-center gap-[18px]; }
+.player-progress-percent { @apply text-[30px] tracking-[-.03em]; }
+.player-progress-result { @apply min-w-[0px] flex-1; }
+.player-progress-copy { @apply text-[13px]; color: var(--mut); }
+.player-progress-bar {
+  @apply mt-[6px] flex h-[10px] overflow-hidden rounded-full;
+  background: var(--sub);
+}
+.player-progress-bar span { background: var(--status-color); transition: width .4s; }
+.player-progress-legend {
+  @apply m-[0px] mt-[10px] flex list-none flex-wrap gap-[14px] p-[0px] text-[12px];
+  color: var(--mut);
+}
+.player-progress-legend li { @apply flex items-center gap-[6px]; }
+.player-progress-legend li::before {
+  @apply size-[8px] shrink-0 rounded-full;
+  content: "";
+  background: var(--status-color);
+}

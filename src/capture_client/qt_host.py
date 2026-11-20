@@ -44,6 +44,7 @@ from PySide6.QtWidgets import (
 
 from .bitmap import stitch_bitmaps
 from .draft import Draft
+from .theme import capture_palette
 from .geometry import (
     Monitor,
     Rect,
@@ -292,6 +293,7 @@ class ToolPanel(QWidget):
     def __init__(self, host: "CaptureHost") -> None:
         super().__init__()
         self.host = host
+        palette = capture_palette()
         self.setWindowFlags(Qt.WindowType.Tool | Qt.WindowType.WindowStaysOnTopHint | Qt.WindowType.FramelessWindowHint)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(8, 8, 8, 8)
@@ -299,7 +301,7 @@ class ToolPanel(QWidget):
         self.group.setExclusive(True)
         for index, (key, label) in enumerate(TOOLS):
             button = QPushButton()
-            button.setIcon(tool_icon(key))
+            button.setIcon(tool_icon(key, palette.text))
             button.setIconSize(QSize(24, 24))
             button.setFixedSize(36, 36)
             button.setAccessibleName(label)
@@ -312,7 +314,7 @@ class ToolPanel(QWidget):
             layout.addWidget(button)
         self.group.idClicked.connect(self._choose)
         undo = QPushButton()
-        undo.setIcon(tool_icon("undo"))
+        undo.setIcon(tool_icon("undo", palette.text))
         undo.setIconSize(QSize(24, 24))
         undo.setFixedSize(36, 36)
         undo.setAccessibleName("Desfazer")
@@ -330,8 +332,8 @@ class ToolPanel(QWidget):
             swatch.setToolTip(color)
             swatch.setAccessibleName(f"Cor {color}")
             swatch.setStyleSheet(
-                f"QPushButton {{ background:{color}; border:1px solid #888; padding:0; }} "
-                "QPushButton:checked { border:2px solid #2F6FED; }"
+                f"QPushButton {{ background:{color}; border:1px solid {palette.border}; border-radius:4px; padding:0; }} "
+                f"QPushButton:checked, QPushButton:focus {{ border:2px solid {palette.primary}; }}"
             )
             swatch.setProperty("color", color)
             if color == host.color:
@@ -340,14 +342,7 @@ class ToolPanel(QWidget):
             colors.addWidget(swatch, index // 2, index % 2)
         self.color_group.idClicked.connect(self._color)
         layout.addLayout(colors)
-        self.setStyleSheet(
-            "QWidget { background:#161616; color:#f5f5f5; } "
-            "QPushButton { background:#2a2a2a; color:#f5f5f5; border:1px solid #444; padding:0; } "
-            "QPushButton:hover { background:#393939; } "
-            "QPushButton:checked { background:#254c85; border:2px solid #78a9ff; } "
-            "QPushButton:focus { border:2px solid #f5f5f5; } "
-            "QToolTip { background:#262626; color:#f5f5f5; border:1px solid #666; padding:4px; }"
-        )
+        self.setStyleSheet(palette.stylesheet() + "QPushButton { padding: 0; }")
 
     def _choose(self, button_id: int) -> None:
         button = self.group.button(button_id)
@@ -368,8 +363,8 @@ class CaptureStepDelegate(QStyledItemDelegate):
     def initStyleOption(self, option, index) -> None:
         super().initStyleOption(option, index)
         if index.data(Qt.ItemDataRole.BackgroundRole) is not None:
-            option.palette.setColor(QPalette.ColorRole.Highlight, QColor("#216840"))
-            option.palette.setColor(QPalette.ColorRole.HighlightedText, QColor("#e6ffed"))
+            option.palette.setBrush(QPalette.ColorRole.Highlight, index.data(Qt.ItemDataRole.BackgroundRole))
+            option.palette.setBrush(QPalette.ColorRole.HighlightedText, index.data(Qt.ItemDataRole.ForegroundRole))
 
 
 class DockPanel(QWidget):
@@ -395,6 +390,7 @@ class DockPanel(QWidget):
         layout.addWidget(self.observed)
         actions = QHBoxLayout()
         self.attach = QPushButton("Anexar")
+        self.attach.setProperty("primary", True)
         self.attach.clicked.connect(host.attach)
         copy = QPushButton("Copiar")
         copy.clicked.connect(host.copy_image)
@@ -408,19 +404,20 @@ class DockPanel(QWidget):
         self.status = QLabel("Ctrl+C copia e fecha. Anexar mantém aberto. Esc sai sem confirmação.")
         self.status.setWordWrap(True)
         layout.addWidget(self.status)
-        self.setStyleSheet(
-            "QWidget { background:#161616; color:#f5f5f5; } "
-            "QPushButton { background:#2a2a2a; color:#f5f5f5; border:1px solid #444; padding:6px; } "
-            "QListWidget, QPlainTextEdit { background:#111; color:#f5f5f5; border:1px solid #333; }"
-        )
+        self.setStyleSheet(capture_palette().stylesheet())
 
     def _click_step(self, item: QListWidgetItem) -> None:
         self.host.select_step(int(item.data(Qt.ItemDataRole.UserRole)))
 
     @staticmethod
     def mark_evidence_sent(item: QListWidgetItem) -> None:
-        item.setBackground(QColor("#153c29"))
-        item.setForeground(QColor("#a8efbf"))
+        palette = capture_palette()
+        color = QColor(palette.success)
+        background = QColor(palette.card)
+        channels = zip(background.getRgbF()[:3], color.getRgbF()[:3])
+        tint = QColor.fromRgbF(*(base * .86 + accent * .14 for base, accent in channels))
+        item.setBackground(tint)
+        item.setForeground(color)
         item.setToolTip("Evidência enviada pela captura de tela")
 
 

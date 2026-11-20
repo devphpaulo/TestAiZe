@@ -1,6 +1,7 @@
 {% extends 'base.html' %}
 {% block title %}Escolher pasta · TestAíZé{% endblock %}
-{% block header_actions %}<a class="view-switch" href="{{ url_for('kanban', session_id=record.meta.id) }}">Modo Kanban</a>{% endblock %}
+{% from 'view_switcher.html' import view_switcher %}
+{% block header_actions %}{{ view_switcher(none, url_for('kanban', session_id=record.meta.id), 'cases') }}{% endblock %}
 {% block content %}
 {% set meta = record.meta %}
 {% set status_names = [('aprovado','Aprovados'),('reprovado','Reprovados'),('bloqueado','Bloqueados'),('em_andamento','Em andamento'),('nao_executado','Não executados')] %}

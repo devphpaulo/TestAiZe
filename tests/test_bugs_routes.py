@@ -24,8 +24,7 @@ class BugsRoutesTests(BugsFixture, unittest.TestCase):
             self.assertNotIn('Nesta máquina', header)
             self.assertNotIn('id="theme-toggle"', header)
             self.assertNotIn('id="accent-trigger"', header)
-            if url.startswith('/sessao/'):
-                self.assertIn('<option value="" selected disabled>Quadros</option>', header)
+            self.assertIn('<option value="" selected disabled hidden>Quadros</option>', header)
 
     def test_http_create_player_and_board(self):
         fields = dict(title='Bug <script>alert(1)</script>', severity='Bloqueador', actual='Obtido', expected='Esperado',

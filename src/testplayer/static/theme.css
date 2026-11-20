@@ -1,0 +1,88 @@
+:root, :root[data-theme] {
+  color-scheme: light;
+  --bg: #fafafa;
+  --card: #fff;
+  --fg: #0a0a0b;
+  --mut: #71717a;
+  --bd: #e4e4e7;
+  --sub: #f4f4f5;
+  --pri: #6d5dfc;
+  --ok: #16a34a;
+  --warn: #d97706;
+  --bad: #dc2626;
+  --blk: #64748b;
+
+  --canvas: var(--bg);
+  --panel: var(--card);
+  --panel-2: var(--sub);
+  --soft: var(--sub);
+  --soft-2: var(--bd);
+  --line: var(--bd);
+  --line-soft: var(--bd);
+  --ink: var(--fg);
+  --muted: var(--mut);
+  --faint: var(--mut);
+  --white: var(--card);
+  --blue: var(--pri);
+  --blue-hover: color-mix(in srgb, var(--pri) 88%, white);
+  --blue-pressed: color-mix(in srgb, var(--pri) 88%, black);
+  --accent: var(--pri);
+  --accent-hover: var(--blue-hover);
+  --accent-ink: #fff;
+  --success: var(--ok);
+  --warning: var(--warn);
+  --danger: var(--bad);
+  --ui-radius: 9px;
+  --ui-card-radius: 16px;
+  --ui-surface: var(--card);
+  --ui-subtle: var(--sub);
+  --ui-border: var(--bd);
+  --ui-red: var(--bad);
+  --ui-shadow: none;
+  --focus-ring: 0 0 0 3px color-mix(in srgb, var(--pri) 25%, transparent);
+  --primary-shadow: 0 4px 14px color-mix(in srgb, var(--pri) 40%, transparent);
+  --selected-shadow: 0 1px 3px #0000002e;
+  --select-surface: var(--card);
+  --select-hover: var(--sub);
+  --select-border: var(--bd);
+  --phase-backlog: var(--mut);
+  --phase-active: var(--pri);
+  --phase-blocked: var(--warn);
+  --phase-review: var(--blk);
+  --phase-done: var(--ok);
+
+  min-height: 100%;
+  padding-block: env(safe-area-inset-top, 0px) env(safe-area-inset-bottom, 0px);
+  background: var(--bg);
+  font-family: Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #09090b;
+  --card: #111114;
+  --fg: #fafafa;
+  --mut: #a1a1aa;
+  --bd: #27272a;
+  --sub: #18181b;
+  --pri: #8b7dff;
+  --ok: #4ade80;
+  --warn: #fbbf24;
+  --bad: #f87171;
+  --blk: #94a3b8;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    color-scheme: dark;
+    --bg: #09090b;
+    --card: #111114;
+    --fg: #fafafa;
+    --mut: #a1a1aa;
+    --bd: #27272a;
+    --sub: #18181b;
+    --pri: #8b7dff;
+    --ok: #4ade80;
+    --warn: #fbbf24;
+    --bad: #f87171;
+    --blk: #94a3b8;
+  }
+}

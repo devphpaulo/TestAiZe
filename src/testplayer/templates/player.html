@@ -1,26 +1,36 @@
 {% extends 'base.html' %}
 {% from 'ui_icons.html' import icon %}
+{% from 'view_switcher.html' import view_switcher %}
 {% block head %}
 {% include 'session_board_assets.html' %}
+{% endblock %}
+{% block view_style %}
 <link rel="stylesheet" href="{{ url_for('static', filename='player.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='frontend/progress.css') }}">
+<script defer src="{{ url_for('static', filename='frontend/progress.js') }}"></script>
 {% endblock %}
 {% block title %}Execução · TestAíZé{% endblock %}
-{% block header_actions %}<a class="view-switch" href="{{ url_for('kanban', session_id=record.meta.id) }}">Modo Kanban</a><button type="button" class="mini-player-open" id="mini-player-open" aria-haspopup="dialog" aria-controls="mini-player"><span aria-hidden="true">▣</span> Mini Player</button>{% endblock %}
+{% block header_actions %}
+{{ view_switcher(none, url_for('kanban', session_id=record.meta.id), 'cases') }}
+<button type="button" class="mini-player-open" id="mini-player-open" aria-haspopup="dialog" aria-controls="mini-player"><span aria-hidden="true">▭</span> Mini Player</button>
+{% endblock %}
 {% block content %}
 {% set meta = record.meta %}
+{% set attachment_preview_formats = ['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp', 'avif'] %}
 {% macro rich_editor(blocks, placeholder, editable=true) %}
-<div class="rich-editor {% if not editable or not writable %}rich-editor-readonly{% endif %}" {% if editable and writable %}data-rich-editor contenteditable="true" role="textbox" aria-multiline="true" aria-label="{{ placeholder }}"{% endif %}>{%- for block in blocks -%}{%- if block.type == 'text' -%}<p class="rich-paragraph" data-rich-text>{{ block.text }}</p>{%- elif block.type == 'image' -%}<figure class="rich-image" contenteditable="false" data-evidence-id="{{ block.id }}" data-width="{{ block.width }}" style="width:{{ block.width }}%" {% if writable and editable %}data-delete-url="{{ url_for('delete_image', session_id=meta.id, evidence_id=block.id) }}"{% endif %}><img src="{{ url_for('view_image', session_id=meta.id, evidence_id=block.id) }}" alt="{{ block.item.original_name }}" loading="lazy" decoding="async" draggable="false"></figure>{%- endif -%}{%- endfor -%}</div>
+<div class="rich-editor {% if not editable or not writable %}rich-editor-readonly{% endif %}" {% if editable and writable %}data-rich-editor contenteditable="true" role="textbox" aria-multiline="true" aria-label="{{ placeholder }}" data-placeholder="{{ placeholder }}"{% endif %}>{%- for block in blocks -%}{%- if block.type == 'text' -%}<p class="rich-paragraph" data-rich-text>{{ block.text }}</p>{%- elif block.type == 'image' -%}<figure class="rich-image" contenteditable="false" data-evidence-id="{{ block.id }}" data-width="{{ block.width }}" style="width:{{ block.width }}%" {% if writable and editable %}data-delete-url="{{ url_for('delete_image', session_id=meta.id, evidence_id=block.id) }}"{% endif %}><img src="{{ url_for('view_image', session_id=meta.id, evidence_id=block.id) }}" alt="{{ block.item.original_name }}" loading="lazy" decoding="async" draggable="false"></figure>{%- endif -%}{%- endfor -%}</div>
 {% endmacro %}
 {% macro attachment_row(file=none, removable=false) %}
 {% set name = file.original_name if file else '' %}
 {% set format = (file.extension if file else '')|default('', true)|trim('.')|lower %}
 <li class="step-attachment-item attachment-row" {% if file %}data-attachment-id="{{ file.id }}"{% endif %}>
+  {% if not file or format in attachment_preview_formats %}<img class="attachment-preview" alt="" loading="lazy" decoding="async" {% if file %}src="{{ url_for('download_step_attachment', session_id=meta.id, file_id=file.id) }}"{% else %}hidden{% endif %}>{% endif %}
   <span class="attachment-format" data-format="{{ format }}">{{ format|upper or 'Arquivo' }}</span>
   <span class="attachment-filename" title="{{ name }}">{{ name }}</span>
   <small class="attachment-size">{% if file %}{% if file.size < 1024 %}{{ file.size }} B{% elif file.size < 1048576 %}{{ (file.size / 1024)|round(1)|string|replace('.', ',')|replace(',0', '') }} KB{% else %}{{ (file.size / 1048576)|round(1)|string|replace('.', ',')|replace(',0', '') }} MB{% endif %}{% endif %}</small>
   <span class="attachment-tools">
     <a class="step-tool download-step-attachment" {% if file %}href="{{ url_for('download_step_attachment', session_id=meta.id, file_id=file.id) }}" download="{{ name }}"{% endif %} aria-label="Baixar {{ name }}" title="Baixar arquivo">{{ icon('export') }}</a>
-    {% if removable %}<button type="button" class="step-tool remove-step-attachment" {% if file %}data-delete-url="{{ url_for('delete_step_attachment', session_id=meta.id, file_id=file.id) }}"{% endif %} aria-label="Excluir {{ name }}" title="Excluir arquivo">{{ icon('trash') }}</button>{% endif %}
+    {% if removable %}<button type="button" class="step-tool remove-step-attachment" {% if file %}data-delete-url="{{ url_for('delete_step_attachment', session_id=meta.id, file_id=file.id) }}"{% endif %} aria-label="Excluir {{ name }}" title="Excluir arquivo">{{ icon('close') }}</button>{% endif %}
   </span>
 </li>
 {% endmacro %}
@@ -48,16 +58,18 @@
           <div class="cycle-picker-foot"><span id="cycle-count"></span><button type="button" id="cycle-done">Concluir</button></div>
         </div>
       </div>
-      <label class="search-wrap">{{ icon('search') }}<input id="case-search" type="search" placeholder="Buscar caso ou pasta" aria-label="Buscar caso ou pasta"></label>
+      <label class="search-wrap">{{ icon('search') }}<input id="case-search" type="search" placeholder="Buscar caso ou pasta…" aria-label="Buscar caso ou pasta"></label>
     </div>
     <nav class="case-nav" aria-label="Selecionar caso">
       {% for group in folder_groups %}
-      <div class="case-folder-group" data-folder-group="{{ group.name }}" data-folder-label="{{ group.label }}">{{ icon('folder') }}<span class="case-folder-title" title="{{ group.name or group.label }}">{{ group.label }}</span><span class="case-folder-count">{{ group.total }}</span></div>
+      <div class="case-folder-group" data-folder-group="{{ group.name }}" data-folder-label="{{ group.label }}"><span class="case-folder-marker" aria-hidden="true">▸</span><span class="case-folder-title" title="{{ group.name or group.label }}">{{ group.label }}</span><span class="case-folder-count">{{ group.total }}</span></div>
       {% for case in group.cases %}
         <button type="button" class="case-nav-item" data-case-button="{{ case.id }}" data-folder="{{ group.name }}" data-status="{{ case.status }}" data-search="{{ (case.name ~ ' ' ~ case.folder)|lower }}">
-          <span class="case-nav-number">{{ '%02d'|format(case.position) }}</span>
-          <span class="case-nav-content"><strong title="{{ case.name }}">{{ case.name }}</strong><small>{{ case.steps|length }} passos · {{ case.priority or 'Sem prioridade' }}</small></span>
-          <span class="status-tag status-{{ case.status }} case-nav-tag" data-case-tag="{{ case.id }}">{{ status_labels[case.status] }}</span>
+          <strong class="case-nav-title">{{ '%02d'|format(case.position) }} · {{ case.name }}</strong>
+          <span class="case-nav-meta">
+            <small>{{ case.steps|length }} passos · {{ case.priority or 'Sem prioridade' }}</small>
+            <span class="status-tag status-{{ case.status }} case-nav-tag" data-case-tag="{{ case.id }}">{{ status_labels[case.status] }}</span>
+          </span>
         </button>
       {% endfor %}
       {% endfor %}
@@ -87,21 +99,22 @@
     <p id="save-state" class="player-save-error" role="alert" hidden></p>
 
     <div class="player-content">
-      <div class="progress-strip"><div><strong id="progress-count">{{ record.counts.aprovado + record.counts.reprovado + record.counts.bloqueado }}</strong><span id="progress-total">de {{ record.cases|length }} casos com resultado</span></div><div class="progress-track" id="progress-track" aria-label="Distribuição de casos por status">{% for status in ['aprovado','reprovado','bloqueado','em_andamento','nao_executado'] %}<i class="progress-segment segment-{{ status }}" data-progress-status="{{ status }}"></i>{% endfor %}</div><span id="progress-percent">{{ ((record.counts.aprovado + record.counts.reprovado + record.counts.bloqueado) / (record.cases|length or 1) * 100)|round|int }}%</span></div>
+      <div id="player-progress" data-counts="{{ record.counts|tojson|forceescape }}" data-total="{{ record.cases|length }}"></div>
 
       {% for case in record.cases %}
       <section class="case-view {% if not loop.first %}is-hidden{% endif %}" data-case-view="{{ case.id }}" data-execution-generation="{{ case.execution_generation }}" data-manual-status="{{ case.manual_status }}" data-status-revision="{{ case.status_revision }}" data-case-save-url="{{ url_for('case_result', session_id=meta.id, case_id=case.id) }}">
-        <div class="case-heading"><div><div class="case-kicker">CASO {{ '%02d'|format(loop.index) }} <span>·</span> {{ case.sheet }}</div><h2>{{ case.name }}</h2><p>{{ case.folder or 'Sem pasta' }}</p>{% if case.folder_card_url %}<div class="readonly-card-row"><a href="{{ case.folder_card_url }}" target="_blank" rel="noopener noreferrer" title="{{ case.folder_card_url }}" aria-label="Abrir {{ case.folder_card_label }} no {{ case.folder_card_provider }} em nova aba">{{ case.folder_card_provider }} · {{ case.folder_card_label }} ↗</a><span>somente consulta</span></div>{% endif %}</div><div class="case-status-actions"><span class="status-tag status-{{ case.status }}" data-case-status="{{ case.id }}">{{ status_labels[case.status] }}</span><span class="case-status-label">STATUS DO CASO</span><div class="status-button-row case-status-buttons" role="group" aria-label="Status do caso {{ loop.index }}">{% for code, label, icon in [('nao_executado','Não executado','○'),('em_andamento','Em andamento','◐'),('bloqueado','Bloqueado','⊘'),('reprovado','Reprovado','×'),('aprovado','Aprovado','✓')] %}<button type="button" class="status-icon-button status-choice-{{ code }} {% if case.manual_status == code %}selected{% endif %}" data-value="{{ code }}" aria-label="{{ label }}" title="{{ label }}" aria-pressed="{{ 'true' if case.manual_status == code else 'false' }}" {% if not writable %}disabled{% endif %}><span aria-hidden="true">{{ icon }}</span></button>{% endfor %}</div><button type="button" class="auto-status-button {% if not case.manual_status %}selected{% endif %}" aria-pressed="{{ 'false' if case.manual_status else 'true' }}" {% if not writable %}disabled{% endif %}>Automático pelos passos</button></div></div>
-        <div class="case-meta"><span><b>Prioridade</b>{{ case.priority or 'Não informada' }}</span><span><b>Status</b><span data-case-meta-status>{{ status_labels[case.status] }}</span></span><span><b>Passos</b>{{ case.steps|length }}</span></div>
-        <section class="precondition evidence-area case-evidence-area" data-upload-url="{{ url_for('upload_case_image', session_id=meta.id, case_id=case.id, scope='precondition') }}"><h3>Pré-condições</h3>{% if meta.state == 'rascunho' %}<a href="{{ url_for('bugs.new', session_id=meta.id, precondition_case=case.id) }}">Reportar bug nesta pré-condição</a>{% endif %}<div class="precondition-source"><p>{{ case.precondition or 'Sem pré-condições na planilha.' }}</p><label class="precondition-notes-label">Anotações e evidências</label>{{ rich_editor(case.precondition_notes_blocks, 'Anotações e evidências nas pré-condições') }}{% if writable %}<div class="observed-actions"><span>Escreva ou cole imagens nesta área.</span></div>{% endif %}</div></section>
+        <div class="case-kicker">CASO {{ '%02d'|format(case.position) }} <span>·</span> {{ case.sheet }}</div>
+        <div class="case-heading"><div><h2>{{ case.name }}</h2><p>{{ case.folder or 'Sem pasta' }}</p>{% if case.folder_card_url %}<div class="readonly-card-row"><a href="{{ case.folder_card_url }}" target="_blank" rel="noopener noreferrer" title="{{ case.folder_card_url }}" aria-label="Abrir {{ case.folder_card_label }} no {{ case.folder_card_provider }} em nova aba">{{ case.folder_card_provider }} · {{ case.folder_card_label }} ↗</a><span>somente consulta</span></div>{% endif %}</div><div class="case-status-actions"><span class="case-status-label">STATUS DO CASO</span><div class="status-button-row case-status-buttons" role="group" aria-label="Status do caso {{ loop.index }}">{% for code, label, icon in [('nao_executado','Não executado','○'),('em_andamento','Em andamento','◐'),('bloqueado','Bloqueado','⊘'),('reprovado','Reprovado','×'),('aprovado','Aprovado','✓')] %}<button type="button" class="status-icon-button status-choice-{{ code }} {% if case.manual_status == code %}selected{% endif %}" data-value="{{ code }}" aria-label="{{ label }}" title="{{ label }}" aria-pressed="{{ 'true' if case.manual_status == code else 'false' }}" {% if not writable %}disabled{% endif %}><span aria-hidden="true">{{ icon }}</span></button>{% endfor %}</div><button type="button" class="auto-status-button {% if not case.manual_status %}selected{% endif %}" aria-pressed="{{ 'false' if case.manual_status else 'true' }}" {% if not writable %}disabled{% endif %}>Automático pelos passos</button></div></div>
+        <div class="case-meta"><span><b>Prioridade</b>{{ case.priority or 'Não informada' }}</span><span><b>Status</b><span class="status-tag status-{{ case.status }}" data-case-status="{{ case.id }}">{{ status_labels[case.status] }}</span></span><span><b>Passos</b>{{ case.steps|length }}</span></div>
+        <section class="precondition evidence-area case-evidence-area" data-upload-url="{{ url_for('upload_case_image', session_id=meta.id, case_id=case.id, scope='precondition') }}"><h3>Pré-condições</h3>{% if meta.state == 'rascunho' %}<a href="{{ url_for('bugs.new', session_id=meta.id, precondition_case=case.id) }}">Reportar bug nesta pré-condição</a>{% endif %}<div class="precondition-source"><p>{{ case.precondition or 'Sem pré-condições registradas.' }}</p><label class="precondition-notes-label">Anotações e evidências</label>{{ rich_editor(case.precondition_notes_blocks, 'Cole links, prints ou observações…') }}</div></section>
         <div class="steps-title"><h3>Passos do teste</h3><span>{{ case.steps|length }} {{ 'etapa' if case.steps|length == 1 else 'etapas' }}</span></div>
 
         {% for step in case.steps %}
         <article class="step-card" data-step-id="{{ step.id }}" data-case-id="{{ case.id }}" data-result-revision="{{ step.revision or 0 }}" data-status="{{ step.status }}" data-status-saved="{{ 'true' if step.status_changed_at else 'false' }}" data-sync-url="{{ url_for('sync_preview', session_id=meta.id, step_id=step.id) }}" data-save-url="{{ url_for('result', session_id=meta.id, step_id=step.id) }}">
-          <div class="step-card-head"><span class="step-number">{{ '%02d'|format(step.position) }}</span><div class="step-action"><span>Passo {{ step.position }}</span><h4>{{ step.action }}</h4></div><div class="step-status-wrap"><span class="step-status-badge" data-step-status-label {% if step.status_changed_at %}title="Status registrado em {{ step.status_changed_at[:19].replace('T', ' ') }}"{% endif %}>{{ status_labels[step.status] }}</span><div class="status-button-row step-status-buttons" role="group" aria-label="Status do passo {{ step.position }}">{% for code, label, icon in [('nao_executado','Não executado','○'),('em_andamento','Em andamento','◐'),('bloqueado','Bloqueado','⊘'),('reprovado','Reprovado','×'),('aprovado','Aprovado','✓')] %}<button type="button" class="status-icon-button status-choice-{{ code }} {% if step.status == code %}selected{% endif %}" data-value="{{ code }}" aria-label="{{ label }}" title="{{ label }}" aria-pressed="{{ 'true' if step.status == code else 'false' }}" {% if not writable %}disabled{% endif %}><span aria-hidden="true">{{ icon }}</span></button>{% endfor %}</div></div></div>
+          <div class="step-card-head"><span class="step-number" aria-hidden="true"><span>{{ '%02d'|format(step.position) }}</span></span><div class="step-action"><span>Passo {{ step.position }}</span><h4{% if not step.action %} data-placeholder="Nome do passo"{% endif %}>{{ step.action }}</h4></div><div class="step-status-wrap"><span class="step-status-badge" data-step-status-label {% if step.status_changed_at %}title="Status registrado em {{ step.status_changed_at[:19].replace('T', ' ') }}"{% endif %}>{{ status_labels[step.status] }}</span><div class="status-button-row step-status-buttons" role="group" aria-label="Status do passo {{ step.position }}">{% for code, label, icon in [('nao_executado','Não executado','○'),('em_andamento','Em andamento','◐'),('bloqueado','Bloqueado','⊘'),('reprovado','Reprovado','×'),('aprovado','Aprovado','✓')] %}<button type="button" class="status-icon-button status-choice-{{ code }} {% if step.status == code %}selected{% endif %}" data-value="{{ code }}" aria-label="{{ label }}" title="{{ label }}" aria-pressed="{{ 'true' if step.status == code else 'false' }}" {% if not writable %}disabled{% endif %}><span aria-hidden="true">{{ icon }}</span></button>{% endfor %}</div></div></div>
           <div class="step-reference">
-            <div><strong>Dados de teste</strong><p>{{ step.test_data }}</p></div>
-            <div><strong>Resultado esperado</strong><p>{{ step.expected }}</p></div>
+            <div><strong>Dados de teste</strong><p>{{ step.test_data or 'Sem dados informados' }}</p></div>
+            <div><strong>Resultado esperado</strong><p>{{ step.expected or 'Sem resultado esperado' }}</p></div>
           </div>
           <div class="step-execution">
             <div class="observed-section" data-attachment-upload-url="{{ url_for('upload_step_attachment', session_id=meta.id, step_id=step.id) }}" data-max-files="5" data-max-bytes="5242880">
@@ -109,17 +122,15 @@
                 <div class="observed-heading"><strong>Resultado observado</strong>{% if writable %}
                   <div class="observed-tools" role="group" aria-label="Ações do passo">
                     <span class="step-tool-wrap">
-                      <button type="button" class="step-tool step-sync-action" data-step-sync aria-label="Sincronizar evidência deste passo" {% if not step.action|trim or not step.evidence or not step.status_changed_at %}disabled{% endif %}>{{ icon('sync') }}</button>
-                      <span class="step-tool-label" aria-hidden="true">Sincronizar evidência</span>
+                      <button type="button" class="step-tool step-sync-action" data-step-sync aria-label="Sincronizar evidência deste passo" {% if not step.action|trim or not step.evidence or not step.status_changed_at %}disabled{% endif %}>{{ icon('sync') }} Sincronizar</button>
                     </span>
                     <span class="step-tool-wrap">
-                      <button type="button" class="step-tool choose-step-attachment" aria-label="Anexar arquivos">{{ icon('attach') }}</button>
-                      <span class="step-tool-label" aria-hidden="true">Anexar arquivos</span>
+                      <button type="button" class="step-tool choose-step-attachment" aria-label="Anexar arquivos">{{ icon('attach') }} Anexar</button>
                     </span>
                     <input type="file" class="step-attachment-input" multiple hidden>
                   </div>{% endif %}
                 </div>
-                {{ rich_editor(step.actual_blocks, 'Resultado observado') }}
+                {{ rich_editor(step.actual_blocks, 'Descreva o que foi observado…') }}
               </div>
               {% if writable %}<p class="attachment-feedback" role="alert" hidden></p>{% endif %}
               <ul class="attachment-list" aria-label="Anexos do passo" {% if not step.attachments %}hidden{% endif %}>{% for attachment in step.attachments %}{{ attachment_row(attachment, writable) }}{% endfor %}</ul>
@@ -211,7 +222,7 @@
 <dialog id="sync-modal" class="player-dialog" aria-labelledby="sync-modal-title" aria-describedby="sync-source-label">
   <div class="player-dialog-layout">
     <header class="player-dialog-head">
-      <div><h2 id="sync-modal-title">Sincronizar evidência</h2><p id="sync-source-label">Carregando passo de origem…</p></div>
+      <div><h2 id="sync-modal-title">Sincronizar evidências</h2><p id="sync-source-label">Carregando passo de origem…</p></div>
       <button type="button" class="player-dialog-close" id="close-sync-modal" aria-label="Fechar" autofocus>{{ icon('close') }}</button>
     </header>
     <div class="player-dialog-body">
@@ -235,6 +246,6 @@
 </dialog>
 {% endif %}
 {% include 'session_board_dialog.html' %}
-{% if writable %}<template id="step-attachment-template">{{ attachment_row(removable=true) }}</template>{% endif %}
+{% if writable %}<template id="step-attachment-template" data-preview-formats="{{ attachment_preview_formats|join(' ') }}">{{ attachment_row(removable=true) }}</template>{% endif %}
 {% endblock %}
 

@@ -30,6 +30,7 @@ from .hotkey import (
     try_unregister,
     valid_hotkey,
 )
+from .theme import capture_palette
 
 WH_KEYBOARD_LL = 13
 WM_KEYDOWN = 0x0100
@@ -138,22 +139,14 @@ class HotkeyDialog(QDialog):
         cancel = QPushButton("Cancelar")
         cancel.clicked.connect(self.reject)
         self.save_button = QPushButton("Salvar atalho")
+        self.save_button.setProperty("primary", True)
         self.save_button.setDefault(True)
         self.save_button.setEnabled(False)
         self.save_button.clicked.connect(self._save)
         actions.addWidget(cancel)
         actions.addWidget(self.save_button)
         layout.addLayout(actions)
-        self.setStyleSheet(
-            "QDialog { background:#161616; color:#f5f5f5; }"
-            "QLabel { color:#f5f5f5; }"
-            "QLabel#muted { color:#bdbdbd; }"
-            "QFrame#currentBox { background:#111; border:1px solid #333; border-radius:8px; padding:8px; }"
-            "QLineEdit { background:#111; color:#f5f5f5; border:1px solid #555; border-radius:6px; padding:8px 10px; font-size:16px; }"
-            "QPushButton { background:#2a2a2a; color:#f5f5f5; border:1px solid #444; border-radius:6px; padding:8px 16px; }"
-            "QPushButton:disabled { color:#777; }"
-            "QPushButton:default { background:#2F6FED; border-color:#2F6FED; }"
-        )
+        self.setStyleSheet(capture_palette().stylesheet() + "QPushButton { padding: 8px 16px; }")
         self._captured.connect(self._apply_capture, Qt.ConnectionType.QueuedConnection)
         self._cancel_requested.connect(self.reject, Qt.ConnectionType.QueuedConnection)
         self._install_hook()

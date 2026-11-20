@@ -1,0 +1,82 @@
+/*! tailwindcss v4.3.0 | MIT License | https://tailwindcss.com */
+@layer properties;
+.player-progress-card {
+  border-radius: 16px;
+  border-style: var(--tw-border-style);
+  border-width: 1px;
+  padding-inline: 20px;
+  padding-block: 18px;
+  border-color: var(--bd);
+  background: var(--card);
+}
+.player-progress-overview {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+.player-progress-percent {
+  font-size: 30px;
+  --tw-tracking: -.03em;
+  letter-spacing: -.03em;
+}
+.player-progress-result {
+  min-width: 0px;
+  flex: 1;
+}
+.player-progress-copy {
+  font-size: 13px;
+  color: var(--mut);
+}
+.player-progress-bar {
+  margin-top: 6px;
+  display: flex;
+  height: 10px;
+  overflow: hidden;
+  border-radius: calc(infinity * 1px);
+  background: var(--sub);
+}
+.player-progress-bar span {
+  background: var(--status-color);
+  transition: width .4s;
+}
+.player-progress-legend {
+  margin: 0px;
+  margin-top: 10px;
+  display: flex;
+  list-style-type: none;
+  flex-wrap: wrap;
+  gap: 14px;
+  padding: 0px;
+  font-size: 12px;
+  color: var(--mut);
+}
+.player-progress-legend li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.player-progress-legend li::before {
+  width: 8px;
+  height: 8px;
+  flex-shrink: 0;
+  border-radius: calc(infinity * 1px);
+  content: "";
+  background: var(--status-color);
+}
+@property --tw-border-style {
+  syntax: "*";
+  inherits: false;
+  initial-value: solid;
+}
+@property --tw-tracking {
+  syntax: "*";
+  inherits: false;
+}
+@layer properties {
+  @supports ((-webkit-hyphens: none) and (not (margin-trim: inline))) or ((-moz-orient: inline) and (not (color:rgb(from red r g b)))) {
+    *, ::before, ::after, ::backdrop {
+      --tw-border-style: solid;
+      --tw-tracking: initial;
+    }
+  }
+}
